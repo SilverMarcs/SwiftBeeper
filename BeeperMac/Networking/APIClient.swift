@@ -2,6 +2,7 @@ import Foundation
 
 private enum API {
     static let baseURL = URL(string: "http://localhost:23373")!
+    static let webSocketURL = URL(string: "ws://localhost:23373/v1/ws")!
 }
 
 enum APIClient {
@@ -14,6 +15,12 @@ enum APIClient {
             throw APIError.invalidResponse
         }
         return try await get(url: url, accessToken: accessToken)
+    }
+
+    static func makeWebSocketTask(accessToken: String) -> URLSessionWebSocketTask {
+        var request = URLRequest(url: API.webSocketURL)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        return URLSession.shared.webSocketTask(with: request)
     }
 
     private static func get<Response: Decodable>(path: String, accessToken: String) async throws -> Response {

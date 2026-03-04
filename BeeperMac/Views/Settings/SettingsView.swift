@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("beeperAccessToken") private var accessToken = ""
+    @AppStorage("beeperUserID") private var currentUserID = ""
 
     var body: some View {
         Form {
@@ -17,6 +18,15 @@ struct SettingsView: View {
                     accessToken = ""
                 }
                 .disabled(accessToken.isEmpty)
+            }
+
+            Section("Chat Rendering") {
+                TextField("Your sender ID (optional)", text: $currentUserID)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("Set this to your sender ID so your messages are shown on the right side.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

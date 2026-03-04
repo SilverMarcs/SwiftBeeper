@@ -8,10 +8,35 @@ struct ListMessagesOutput: Decodable {
     let items: [Message]
 }
 
+struct ChatParticipant: Identifiable, Decodable {
+    let id: String
+    let username: String?
+    let fullName: String?
+    let imgURL: String?
+    let isSelf: Bool?
+
+    var displayName: String {
+        if let fullName, fullName.isEmpty == false {
+            return fullName
+        }
+        if let username, username.isEmpty == false {
+            return username
+        }
+        return id
+    }
+}
+
+struct ChatParticipants: Decodable {
+    let items: [ChatParticipant]
+    let hasMore: Bool?
+    let total: Int?
+}
+
 struct Chat: Identifiable, Decodable {
     let id: String
     let title: String
     let unreadCount: Int
+    let participants: ChatParticipants?
     let preview: Message?
 
     var displayTitle: String {
@@ -20,6 +45,14 @@ struct Chat: Identifiable, Decodable {
 
     var previewText: String? {
         preview?.displayText
+    }
+
+    var otherParticipant: ChatParticipant? {
+        participants?.items.first(where: { $0.isSelf != true })
+    }
+
+    func participant(with id: String) -> ChatParticipant? {
+        participants?.items.first(where: { $0.id == id })
     }
 }
 
@@ -31,6 +64,7 @@ struct Message: Identifiable, Decodable {
     let timestamp: Date
     let sortKey: String
     let text: String?
+    let isSender: Bool?
 
     var senderDisplayName: String {
         if let senderName, senderName.isEmpty == false {

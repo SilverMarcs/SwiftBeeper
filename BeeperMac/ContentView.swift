@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @AppStorage("beeperAccessToken") private var accessToken = ""
+    @AppStorage("beeperUserID") private var currentUserID = ""
     @State private var store = ChatStore()
 
     var body: some View {
@@ -26,6 +27,7 @@ struct ContentView: View {
                 accessToken: accessToken,
                 selectedChat: store.selectedChat,
                 messages: selectedMessages,
+                currentUserID: currentUserID,
                 isLoadingMessages: store.isLoadingMessages,
                 messagesError: store.messagesError
             )
@@ -47,7 +49,7 @@ struct ContentView: View {
             }
         }
         .task(id: accessToken) {
-            await store.loadChats(accessToken: accessToken)
+            await store.updateAccessToken(accessToken)
         }
         .onChange(of: store.selectedChatID) { _, newChatID in
             guard let newChatID else {

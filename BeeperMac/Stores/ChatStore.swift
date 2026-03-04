@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 
-@MainActor
 @Observable
 final class ChatStore {
     private(set) var chats: [Chat] = []
@@ -11,6 +10,13 @@ final class ChatStore {
     private(set) var chatsError: String?
     private(set) var messagesError: String?
     var selectedChatID: String?
+    private var webSocketTask: URLSessionWebSocketTask?
+    private var webSocketListenerTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private var scheduledChatsRefreshTask: Task<Void, Never>?
+    private var scheduledMessagesRefreshTasks: [String: Task<Void, Never>] = [:]
+    private var realtimeConnectionID = UUID()
+    private var currentAccessToken = ""
 
     var selectedChat: Chat? {
         guard let selectedChatID else {
@@ -21,6 +27,27 @@ final class ChatStore {
 
     func messages(for chatID: String) -> [Message] {
         messagesByChatID[chatID] ?? []
+    }
+
+    func updateAccessToken(_ accessToken: String) async {
+        if accessToken == currentAccessToken {
+            return
+        }
+
+        currentAccessToken = accessToken
+
+        if accessToken.isEmpty {
+            stopRealtime()
+            chats = []
+            messagesByChatID = [:]
+            selectedChatID = nil
+            chatsError = nil
+            messagesError = nil
+            return
+        }
+
+        await loadChats(accessToken: accessToken)
+        startRealtime(accessToken: accessToken)
     }
 
     func loadChats(accessToken: String) async {
@@ -76,4 +103,206 @@ final class ChatStore {
             messagesError = error.localizedDescription
         }
     }
+
+    private func startRealtime(accessToken: String) {
+        stopRealtime()
+        realtimeConnectionID = UUID()
+
+        let webSocketTask = APIClient.makeWebSocketTask(accessToken: accessToken)
+        self.webSocketTask = webSocketTask
+        webSocketTask.resume()
+
+        let connectionID = realtimeConnectionID
+        webSocketListenerTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.listenForEvents(connectionID: connectionID, accessToken: accessToken)
+        }
+    }
+
+    private func stopRealtime() {
+        webSocketListenerTask?.cancel()
+        reconnectTask?.cancel()
+        scheduledChatsRefreshTask?.cancel()
+
+        for task in scheduledMessagesRefreshTasks.values {
+            task.cancel()
+        }
+        scheduledMessagesRefreshTasks = [:]
+
+        webSocketListenerTask = nil
+        reconnectTask = nil
+        scheduledChatsRefreshTask = nil
+
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+    }
+
+    private func listenForEvents(connectionID: UUID, accessToken: String) async {
+        while Task.isCancelled == false {
+            guard let webSocketTask else {
+                return
+            }
+
+            do {
+                let message = try await webSocketTask.receive()
+
+                switch message {
+                case .string(let text):
+                    await handleWebSocketPayload(text.data(using: .utf8), accessToken: accessToken)
+                case .data(let data):
+                    await handleWebSocketPayload(data, accessToken: accessToken)
+                @unknown default:
+                    break
+                }
+            } catch {
+                guard Task.isCancelled == false else {
+                    return
+                }
+
+                scheduleReconnect(connectionID: connectionID, accessToken: accessToken)
+                return
+            }
+        }
+    }
+
+    private func handleWebSocketPayload(_ data: Data?, accessToken: String) async {
+        guard
+            let data,
+            let envelope = try? JSONDecoder().decode(WebSocketEnvelope.self, from: data)
+        else {
+            return
+        }
+
+        switch envelope.type {
+        case "ready":
+            await sendSubscriptionsAllChats()
+        case "subscriptions.updated":
+            break
+        case "error":
+            if let message = envelope.message {
+                messagesError = "Realtime error: \(message)"
+            }
+        case "chat.upserted", "chat.deleted":
+            scheduleChatsRefresh(accessToken: accessToken)
+        case "message.upserted", "message.deleted":
+            scheduleChatsRefresh(accessToken: accessToken)
+
+            guard let chatID = envelope.chatID else {
+                return
+            }
+
+            let shouldRefreshMessages = selectedChatID == chatID || messagesByChatID[chatID] != nil
+            if shouldRefreshMessages {
+                scheduleMessagesRefresh(chatID: chatID, accessToken: accessToken)
+            }
+        default:
+            break
+        }
+    }
+
+    private func sendSubscriptionsAllChats() async {
+        guard let webSocketTask else {
+            return
+        }
+
+        let command = SubscriptionsSetCommand(
+            requestID: "subscriptions-\(UUID().uuidString)",
+            chatIDs: ["*"]
+        )
+
+        do {
+            let payload = try JSONEncoder().encode(command)
+            try await webSocketTask.send(.data(payload))
+        } catch {
+            messagesError = "Could not set realtime subscriptions: \(error.localizedDescription)"
+        }
+    }
+
+    private func scheduleReconnect(connectionID: UUID, accessToken: String) {
+        guard connectionID == realtimeConnectionID else {
+            return
+        }
+
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            self.messagesError = "Realtime disconnected. Retrying…"
+
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            guard Task.isCancelled == false, self.realtimeConnectionID == connectionID else {
+                return
+            }
+
+            self.startRealtime(accessToken: accessToken)
+        }
+    }
+
+    private func scheduleChatsRefresh(accessToken: String) {
+        scheduledChatsRefreshTask?.cancel()
+        scheduledChatsRefreshTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return
+            }
+
+            guard Task.isCancelled == false else {
+                return
+            }
+
+            await self.loadChats(accessToken: accessToken)
+        }
+    }
+
+    private func scheduleMessagesRefresh(chatID: String, accessToken: String) {
+        scheduledMessagesRefreshTasks[chatID]?.cancel()
+        scheduledMessagesRefreshTasks[chatID] = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            defer {
+                self.scheduledMessagesRefreshTasks[chatID] = nil
+            }
+
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return
+            }
+
+            guard Task.isCancelled == false else {
+                return
+            }
+
+            await self.loadMessages(for: chatID, accessToken: accessToken)
+        }
+    }
+}
+
+private struct WebSocketEnvelope: Decodable {
+    let type: String
+    let requestID: String?
+    let chatID: String?
+    let message: String?
+}
+
+private struct SubscriptionsSetCommand: Encodable {
+    let type = "subscriptions.set"
+    let requestID: String
+    let chatIDs: [String]
 }

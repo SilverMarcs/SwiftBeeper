@@ -78,3 +78,133 @@ If SwiftData is configured to use CloudKit:
 ## PR instructions
 
 - If installed, make sure SwiftLint returns no warnings or errors before committing.
+
+
+For this project, HTTP Rest specs:
+
+http://localhost:23373/v1/spec
+
+Websocket Specs:
+
+---
+title: WebSocket (Experimental) - Beeper Developer Docs
+description: Experimental live event stream for Beeper Desktop API
+lastUpdated: 2026-02-23T00:29:17.000Z
+---
+
+This WebSocket interface is experimental and may change between desktop releases. We would love to hear your feedback on [X](https://x.com/beeper) or <help@beeper.com>.
+
+Beeper Desktop API exposes a live WebSocket endpoint at:
+
+```
+ws://localhost:23373/v1/ws
+```
+
+Use the same token as HTTP requests:
+
+```
+Authorization: Bearer <your_token>
+```
+
+## Subscription model
+
+Use a single command, `subscriptions.set`, to fully replace current subscriptions.
+
+- `chatIDs: ["*"]` subscribes to all chats.
+- `chatIDs: ["!tdvY9_XjNZ6F5P8DzBxDiqBwla0:ba_aBcD1234EfGhIjKlMnOpQrStUvWxYz.local-ai.localhost", "!tdvY9_XjNZ6F5P8DzBxDiqBwla0:ba_ZxYwVuTsRqPoNmLkJiHgFeDcBa9876.local-whatsapp.localhost"]` subscribes to specific chats.
+- `chatIDs: []` pauses events.
+- `"*"` cannot be mixed with specific chat IDs.
+
+### Set all chats
+
+```
+{
+  "type": "subscriptions.set",
+  "requestID": "r1",
+  "chatIDs": ["*"]
+}
+```
+
+### Set specific chats
+
+```
+{
+  "type": "subscriptions.set",
+  "requestID": "r2",
+  "chatIDs": ["!tdvY9_XjNZ6F5P8DzBxDiqBwla0:ba_aBcD1234EfGhIjKlMnOpQrStUvWxYz.local-ai.localhost", "!tdvY9_XjNZ6F5P8DzBxDiqBwla0:ba_ZxYwVuTsRqPoNmLkJiHgFeDcBa9876.local-whatsapp.localhost"]
+}
+```
+
+## Control messages
+
+### `ready`
+
+```
+{
+  "type": "ready",
+  "version": 1,
+  "chatIDs": []
+}
+```
+
+### `subscriptions.updated`
+
+```
+{
+  "type": "subscriptions.updated",
+  "requestID": "r2",
+  "chatIDs": ["!tdvY9_XjNZ6F5P8DzBxDiqBwla0:ba_aBcD1234EfGhIjKlMnOpQrStUvWxYz.local-ai.localhost", "!tdvY9_XjNZ6F5P8DzBxDiqBwla0:ba_ZxYwVuTsRqPoNmLkJiHgFeDcBa9876.local-whatsapp.localhost"]
+}
+```
+
+### `error`
+
+```
+{
+  "type": "error",
+  "requestID": "r2",
+  "code": "INVALID_PAYLOAD",
+  "message": "chatIDs cannot combine '*' with specific IDs"
+}
+```
+
+## Domain events
+
+All live domain events use the same flat shape:
+
+```
+{
+  "type": "message.upserted",
+  "seq": 42,
+  "ts": 1739320000000,
+  "chatID": "chat_a",
+  "ids": ["m1", "m2"],
+  "entries": [{ "id": "m1", "reactions": [] }],
+}
+```
+
+Field meanings:
+
+- `type`: domain event name.
+- `seq`: monotonic per-connection sequence number.
+- `ts`: server timestamp in milliseconds.
+- `chatID`: canonical chat identifier.
+- `ids`: changed entity IDs.
+- `entries`: optional best-effort full payload objects for `message.upserted` events.
+
+Mutation types are normalized so both `upsert` and `update` sync mutations are delivered as `<resource>.upserted` events. Deletion mutations are delivered as `<resource>.deleted`.
+
+`message.upserted` events are hydrated from the local message endpoint before emission. This means:
+
+- `entries` will usually include a full message payload (including attachments when available).
+- If the message is not yet retrievable, the event is skipped.
+- `message.deleted` and `chat.deleted` are emitted as IDs-only payloads (no `entries`).
+
+## Event names
+
+Current event names:
+
+- `chat.upserted`
+- `chat.deleted`
+- `message.upserted`
+- `message.deleted`
