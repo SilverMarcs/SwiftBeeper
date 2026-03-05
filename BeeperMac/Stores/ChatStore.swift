@@ -52,6 +52,10 @@ final class ChatStore {
         startRealtime(accessToken: accessToken)
     }
 
+    func loadChats() async {
+        await loadChats(accessToken: currentAccessToken)
+    }
+
     func loadChats(accessToken: String) async {
         guard !accessToken.isEmpty else {
             chats = []
@@ -81,12 +85,20 @@ final class ChatStore {
         }
     }
 
+    func loadMessagesIfNeeded(for chatID: String) async {
+        await loadMessagesIfNeeded(for: chatID, accessToken: currentAccessToken)
+    }
+
     func loadMessagesIfNeeded(for chatID: String, accessToken: String) async {
         if messagesByChatID[chatID] != nil {
             return
         }
 
         await loadMessages(for: chatID, accessToken: accessToken)
+    }
+
+    func loadMessages(for chatID: String) async {
+        await loadMessages(for: chatID, accessToken: currentAccessToken)
     }
 
     func loadMessages(for chatID: String, accessToken: String) async {
@@ -104,6 +116,10 @@ final class ChatStore {
         } catch {
             messagesError = error.localizedDescription
         }
+    }
+
+    func sendTextMessage(_ text: String, to chatID: String) async -> Bool {
+        await sendTextMessage(text, to: chatID, accessToken: currentAccessToken)
     }
 
     func sendTextMessage(_ text: String, to chatID: String, accessToken: String) async -> Bool {

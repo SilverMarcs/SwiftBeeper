@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 struct ProfileAvatarView: View {
-    @AppStorage("beeperAccessToken") private var accessToken = ""
+    @Environment(SessionStore.self) private var sessionStore
 
     let name: String
     let imageURLString: String?
@@ -31,7 +31,7 @@ struct ProfileAvatarView: View {
     }
 
     private var imageRequestKey: String {
-        "\(imageURLString ?? "none")|\(accessToken)"
+        "\(imageURLString ?? "none")|\(sessionStore.accessToken)"
     }
 
     private func loadImage() async {
@@ -78,7 +78,7 @@ struct ProfileAvatarView: View {
             }
 
             var request = URLRequest(url: proxyURL)
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("Bearer \(sessionStore.accessToken)", forHTTPHeaderField: "Authorization")
             return request
         }
 
@@ -130,4 +130,5 @@ struct ProfileAvatarView: View {
 
 #Preview {
     ProfileAvatarView(name: "Alice Wonder", imageURLString: nil, dimension: 36)
+        .environment(SessionStore())
 }

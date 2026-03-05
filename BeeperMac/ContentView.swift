@@ -8,40 +8,24 @@
 import SwiftUI
 
 struct ContentView: View {
-    @AppStorage("beeperAccessToken") private var accessToken = ""
-    @AppStorage("beeperUserID") private var currentUserID = ""
-    @State private var store = ChatStore()
+    @Environment(SessionStore.self) private var sessionStore
+    @Environment(ChatStore.self) private var chatStore
 
     var body: some View {
         NavigationSplitView {
-            ChatSidebarView(
-                accessToken: accessToken,
-                chats: store.chats,
-                chatsError: store.chatsError,
-                isLoadingChats: store.isLoadingChats,
-                selectedChatID: $store.selectedChatID
-            )
+            ChatSidebarView()
             .navigationSplitViewColumnWidth(min: 280, ideal: 340)
         } detail: {
-            ChatDetailView(
-                accessToken: accessToken,
-                selectedChat: store.selectedChat,
-                messages: selectedMessages,
-                currentUserID: currentUserID,
-                isLoadingMessages: store.isLoadingMessages,
-                isSendingMessage: store.isSendingMessage,
-                messagesError: store.messagesError,
-                sendMessage: sendCurrentChatMessage
-            )
+            ChatDetailView()
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button("Reload Chats") {
                     Task {
-                        await store.loadChats(accessToken: accessToken)
+                        await chatStore.loadChats()
                     }
                 }
-                .disabled(accessToken.isEmpty)
+                .disabled(sessionStore.accessToken.isEmpty)
             }
 
             ToolbarItem(placement: .automatic) {
@@ -50,35 +34,23 @@ struct ContentView: View {
                 }
             }
         }
-        .task(id: accessToken) {
-            await store.updateAccessToken(accessToken)
+        .task(id: sessionStore.accessToken) {
+            await chatStore.updateAccessToken(sessionStore.accessToken)
         }
-        .onChange(of: store.selectedChatID) { _, newChatID in
+        .onChange(of: chatStore.selectedChatID) { _, newChatID in
             guard let newChatID else {
                 return
             }
 
             Task {
-                await store.loadMessagesIfNeeded(for: newChatID, accessToken: accessToken)
+                await chatStore.loadMessagesIfNeeded(for: newChatID)
             }
         }
-    }
-
-    private var selectedMessages: [Message] {
-        guard let selectedChatID = store.selectedChatID else {
-            return []
-        }
-        return store.messages(for: selectedChatID)
-    }
-
-    private func sendCurrentChatMessage(_ text: String) async -> Bool {
-        guard let selectedChatID = store.selectedChatID else {
-            return false
-        }
-        return await store.sendTextMessage(text, to: selectedChatID, accessToken: accessToken)
     }
 }
 
 #Preview {
     ContentView()
+        .environment(SessionStore())
+        .environment(ChatStore())
 }

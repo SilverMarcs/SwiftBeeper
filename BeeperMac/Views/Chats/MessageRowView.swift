@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct MessageRowView: View {
+    @Environment(SessionStore.self) private var sessionStore
+
     let message: Message
-    let isOutgoing: Bool
-    let senderAvatarImageURL: String?
-    let showIncomingIdentity: Bool
+    let chat: Chat
 
     var body: some View {
         HStack(alignment: .bottom) {
@@ -35,6 +35,44 @@ struct MessageRowView: View {
         }
         .padding(.vertical, 4)
     }
+
+    private var currentParticipant: ChatParticipant? {
+        if let selfParticipant = chat.participants?.items.first(where: { $0.isSelf == true }) {
+            return selfParticipant
+        }
+        if sessionStore.currentUserID.isEmpty == false {
+            return chat.participant(with: sessionStore.currentUserID)
+        }
+        return nil
+    }
+
+    private var showIncomingIdentity: Bool {
+        guard let participantCount = chat.participants?.items.count else {
+            return true
+        }
+
+        return participantCount != 2
+    }
+
+    private var senderAvatarImageURL: String? {
+        chat.participant(with: message.senderID)?.imgURL
+    }
+
+    private var isOutgoing: Bool {
+        if let isSender = message.isSender {
+            return isSender
+        }
+
+        if let currentParticipant {
+            return message.senderID == currentParticipant.id
+        }
+
+        if sessionStore.currentUserID.isEmpty == false {
+            return message.senderID == sessionStore.currentUserID
+        }
+
+        return false
+    }
 }
 
 #Preview {
@@ -48,7 +86,14 @@ struct MessageRowView: View {
             sortKey: "1",
             text: "Hello",
             isSender: false
-        ), isOutgoing: false, senderAvatarImageURL: nil, showIncomingIdentity: true)
+        ), chat: Chat(
+            id: "chat-1",
+            title: "General",
+            unreadCount: 0,
+            participants: nil,
+            preview: nil
+        ))
+        .environment(SessionStore())
 
         MessageRowView(message: Message(
             id: "msg-2",
@@ -59,7 +104,18 @@ struct MessageRowView: View {
             sortKey: "2",
             text: "Hey!",
             isSender: true
-        ), isOutgoing: true, senderAvatarImageURL: nil, showIncomingIdentity: true)
+        ), chat: Chat(
+            id: "chat-1",
+            title: "General",
+            unreadCount: 0,
+            participants: nil,
+            preview: nil
+        ))
+        .environment({
+            let store = SessionStore()
+            store.currentUserID = "@me"
+            return store
+        }())
     }
     .padding()
 }

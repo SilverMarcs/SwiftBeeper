@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("beeperAccessToken") private var accessToken = ""
-    @AppStorage("beeperUserID") private var currentUserID = ""
+    @Environment(SessionStore.self) private var sessionStore
 
     var body: some View {
+        @Bindable var sessionStore = sessionStore
+
         Form {
             Section("Beeper API") {
-                SecureField("Bearer token", text: $accessToken)
+                SecureField("Bearer token", text: $sessionStore.accessToken)
                     .textFieldStyle(.roundedBorder)
 
                 Text("Use the token for localhost:23373 API requests.")
@@ -15,13 +16,13 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
 
                 Button("Clear Token", role: .destructive) {
-                    accessToken = ""
+                    sessionStore.clearToken()
                 }
-                .disabled(accessToken.isEmpty)
+                .disabled(sessionStore.accessToken.isEmpty)
             }
 
             Section("Chat Rendering") {
-                TextField("Your sender ID (optional)", text: $currentUserID)
+                TextField("Your sender ID (optional)", text: $sessionStore.currentUserID)
                     .textFieldStyle(.roundedBorder)
 
                 Text("Set this to your sender ID so your messages are shown on the right side.")
@@ -37,4 +38,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
+        .environment(SessionStore())
 }
