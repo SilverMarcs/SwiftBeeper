@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		0865737D2F58F64E0084BD91 /* BeeperMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BeeperMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +28,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +39,7 @@
 			isa = PBXGroup;
 			children = (
 				0865737F2F58F64E0084BD91 /* BeeperMac */,
+				08A6E00E2F5975A200A2ECF4 /* Frameworks */,
 				0865737E2F58F64E0084BD91 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +50,14 @@
 				0865737D2F58F64E0084BD91 /* BeeperMac.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		08A6E00E2F5975A200A2ECF4 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				08A6E00F2F5975A200A2ECF4 /* AVKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
