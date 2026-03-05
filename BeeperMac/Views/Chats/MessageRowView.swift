@@ -26,7 +26,7 @@ struct MessageRowView: View {
                 }
 
                 if message.hasText {
-                    Text(message.displayText)
+                    Text(message.displayText.markdownAttributed)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
