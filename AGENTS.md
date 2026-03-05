@@ -53,6 +53,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and relat
 - Avoid `AnyView` unless it is absolutely required.
 - Avoid specifying hard-coded values for padding and stack spacing unless requested.
 - Avoid using UIKit colors in SwiftUI code.
+- Prefer semantic background styles such as `.background(.secondary)` or `.background(.quinary)` instead of manual opacity values like `.gray.opacity(0.15)`.
 
 
 ## SwiftData instructions

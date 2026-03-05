@@ -27,11 +27,11 @@ struct MessageRowView: View {
 
                 if message.hasText {
                     Text(message.displayText)
-                        .font(.body)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(isOutgoing ? Color.accentColor.opacity(0.20) : Color.gray.opacity(0.15))
-                        .clipShape(.rect(cornerRadius: 12))
+                        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(.background.tertiary))
+                        .clipShape(.rect(cornerRadius: 15))
                 }
             }
 

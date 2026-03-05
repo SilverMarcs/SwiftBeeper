@@ -34,7 +34,7 @@ struct AttachmentView: View {
                     .clipShape(.rect(cornerRadius: 12))
             } else if isLoading {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.15))
+                    .fill(.background.secondary)
                     .frame(width: imageFrameWidth, height: imageFrameHeight)
                     .overlay {
                         ProgressView()

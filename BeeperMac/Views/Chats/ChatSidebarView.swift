@@ -37,9 +37,10 @@ struct ChatSidebarView: View {
                     if chatStore.isSearching {
                         ProgressView()
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let results = chatStore.searchResults, results.isEmpty {
-                        ContentUnavailableView.search(text: chatStore.searchQuery)
                     }
+//                    else if let results = chatStore.searchResults, results.isEmpty {
+//                        ContentUnavailableView.search(text: chatStore.searchQuery)
+//                    }
                 }
             }
         }
