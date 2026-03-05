@@ -36,7 +36,7 @@ struct ChatDetailView: View {
                     ProgressView("Loading messages...")
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .safeAreaBar(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
                     if let messagesError {
                         HStack(spacing: 8) {
@@ -52,10 +52,16 @@ struct ChatDetailView: View {
 
                     HStack(alignment: .bottom, spacing: 8) {
                         TextField("Message", text: $draftMessage, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.plain)
                             .lineLimit(1 ... 4)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(.separator, lineWidth: 1)
+                            )
 
-                        Button("Send", systemImage: "paperplane.fill") {
+                        Button("Send", systemImage: "arrow.up") {
                             let text = draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
                             Task {
                                 let didSend = await sendMessage(text)
@@ -65,12 +71,14 @@ struct ChatDetailView: View {
                             }
                         }
                         .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.large)
+                        .labelStyle(.iconOnly)
                         .disabled(sendButtonDisabled)
                     }
                     .padding(.horizontal)
                     .padding(.top, 8)
                     .padding(.bottom, 8)
-                    .background(.bar)
                 }
             }
             .navigationTitle(selectedChat.displayTitle)
