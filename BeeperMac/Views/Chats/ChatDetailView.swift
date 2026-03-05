@@ -4,6 +4,7 @@ struct ChatDetailView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
     @Environment(MessageStore.self) private var messageStore
+    @State private var showingChatInfo = false
     private let bottomAnchorID = "bottom-id"
 
     var body: some View {
@@ -67,6 +68,17 @@ struct ChatDetailView: View {
                         }
                         .sharedBackgroundVisibility(.hidden)
                     }
+
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showingChatInfo = true
+                        } label: {
+                            Label("Chat Info", systemImage: "info")
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingChatInfo) {
+                    ChatInfoSheet(chat: selectedChat)
                 }
             }
         } else {

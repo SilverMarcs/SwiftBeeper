@@ -12,18 +12,6 @@ struct ContentView: View {
         } detail: {
             ChatDetailView()
         }
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    Task {
-                        await chatStore.loadChats()
-                    }
-                } label: {
-                    Label("Reload Chats", systemImage: "arrow.clockwise")
-                }
-                .disabled(sessionStore.accessToken.isEmpty)
-            }
-        }
         .task(id: sessionStore.accessToken) {
             await chatStore.updateAccessToken(sessionStore.accessToken)
         }
