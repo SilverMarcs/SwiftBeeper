@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct MessageRowView: View {
-    @Environment(SessionStore.self) private var sessionStore
-
     let message: Message
     let chat: Chat
 
@@ -37,13 +35,7 @@ struct MessageRowView: View {
     }
 
     private var currentParticipant: ChatParticipant? {
-        if let selfParticipant = chat.participants?.items.first(where: { $0.isSelf == true }) {
-            return selfParticipant
-        }
-        if sessionStore.currentUserID.isEmpty == false {
-            return chat.participant(with: sessionStore.currentUserID)
-        }
-        return nil
+        chat.participants?.items.first(where: { $0.isSelf == true })
     }
 
     private var showIncomingIdentity: Bool {
@@ -65,10 +57,6 @@ struct MessageRowView: View {
 
         if let currentParticipant {
             return message.senderID == currentParticipant.id
-        }
-
-        if sessionStore.currentUserID.isEmpty == false {
-            return message.senderID == sessionStore.currentUserID
         }
 
         return false
@@ -93,7 +81,6 @@ struct MessageRowView: View {
             participants: nil,
             preview: nil
         ))
-        .environment(SessionStore())
 
         MessageRowView(message: Message(
             id: "msg-2",
@@ -111,11 +98,6 @@ struct MessageRowView: View {
             participants: nil,
             preview: nil
         ))
-        .environment({
-            let store = SessionStore()
-            store.currentUserID = "@me"
-            return store
-        }())
     }
     .padding()
 }
