@@ -1,12 +1,14 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class ChatStore {
     private(set) var chats: [Chat] = []
     private(set) var messagesByChatID: [String: [Message]] = [:]
     private(set) var isLoadingChats = false
     private(set) var isLoadingMessages = false
+    private(set) var isSendingMessage = false
     private(set) var chatsError: String?
     private(set) var messagesError: String?
     var selectedChatID: String?
@@ -101,6 +103,31 @@ final class ChatStore {
             messagesByChatID[chatID] = response.items.sorted(by: { $0.sortKey < $1.sortKey })
         } catch {
             messagesError = error.localizedDescription
+        }
+    }
+
+    func sendTextMessage(_ text: String, to chatID: String, accessToken: String) async -> Bool {
+        guard accessToken.isEmpty == false else {
+            return false
+        }
+
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedText.isEmpty == false else {
+            return false
+        }
+
+        isSendingMessage = true
+        defer { isSendingMessage = false }
+
+        do {
+            _ = try await APIClient.sendMessage(chatID: chatID, text: trimmedText, accessToken: accessToken)
+            messagesError = nil
+            scheduleChatsRefresh(accessToken: accessToken)
+            scheduleMessagesRefresh(chatID: chatID, accessToken: accessToken)
+            return true
+        } catch {
+            messagesError = error.localizedDescription
+            return false
         }
     }
 

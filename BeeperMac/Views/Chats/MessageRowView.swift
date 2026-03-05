@@ -4,17 +4,18 @@ struct MessageRowView: View {
     let message: Message
     let isOutgoing: Bool
     let senderAvatarImageURL: String?
+    let showIncomingIdentity: Bool
 
     var body: some View {
         HStack(alignment: .bottom) {
             if isOutgoing {
                 Spacer(minLength: 0)
-            } else {
+            } else if showIncomingIdentity {
                 ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
             }
 
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 6) {
-                if isOutgoing == false {
+                if isOutgoing == false && showIncomingIdentity {
                     Text(message.senderDisplayName)
                         .font(.subheadline)
                         .bold()
@@ -47,7 +48,7 @@ struct MessageRowView: View {
             sortKey: "1",
             text: "Hello",
             isSender: false
-        ), isOutgoing: false, senderAvatarImageURL: nil)
+        ), isOutgoing: false, senderAvatarImageURL: nil, showIncomingIdentity: true)
 
         MessageRowView(message: Message(
             id: "msg-2",
@@ -58,7 +59,7 @@ struct MessageRowView: View {
             sortKey: "2",
             text: "Hey!",
             isSender: true
-        ), isOutgoing: true, senderAvatarImageURL: nil)
+        ), isOutgoing: true, senderAvatarImageURL: nil, showIncomingIdentity: true)
     }
     .padding()
 }

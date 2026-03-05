@@ -8,6 +8,11 @@ struct ListMessagesOutput: Decodable {
     let items: [Message]
 }
 
+struct SendMessageOutput: Decodable {
+    let chatID: String
+    let pendingMessageID: String
+}
+
 struct ChatParticipant: Identifiable, Decodable {
     let id: String
     let username: String?

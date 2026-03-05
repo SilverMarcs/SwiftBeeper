@@ -6,7 +6,11 @@ struct ChatDetailView: View {
     let messages: [Message]
     let currentUserID: String
     let isLoadingMessages: Bool
+    let isSendingMessage: Bool
     let messagesError: String?
+    let sendMessage: (String) async -> Bool
+
+    @State private var draftMessage = ""
 
     var body: some View {
         if accessToken.isEmpty {
@@ -20,7 +24,8 @@ struct ChatDetailView: View {
                 MessageRowView(
                     message: message,
                     isOutgoing: isOutgoing(message),
-                    senderAvatarImageURL: senderAvatarImageURL(for: message)
+                    senderAvatarImageURL: senderAvatarImageURL(for: message),
+                    showIncomingIdentity: showIncomingIdentity
                 )
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
@@ -31,17 +36,41 @@ struct ChatDetailView: View {
                     ProgressView("Loading messages...")
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if let messagesError {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                        Text(messagesError)
-                            .lineLimit(2)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    if let messagesError {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text(messagesError)
+                                .lineLimit(2)
+                        }
+                        .font(.footnote)
+                        .padding(8)
+                        .frame(maxWidth: .infinity)
+                        .background(.red.opacity(0.12))
                     }
-                    .font(.footnote)
-                    .padding(8)
-                    .frame(maxWidth: .infinity)
-                    .background(.red.opacity(0.12))
+
+                    HStack(alignment: .bottom, spacing: 8) {
+                        TextField("Message", text: $draftMessage, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(1 ... 4)
+
+                        Button("Send", systemImage: "paperplane.fill") {
+                            let text = draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Task {
+                                let didSend = await sendMessage(text)
+                                if didSend {
+                                    draftMessage = ""
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(sendButtonDisabled)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+                    .background(.bar)
                 }
             }
             .navigationTitle(selectedChat.displayTitle)
@@ -64,6 +93,21 @@ struct ChatDetailView: View {
         return nil
     }
 
+    private var showIncomingIdentity: Bool {
+        guard let participantCount = selectedChat?.participants?.items.count else {
+            return true
+        }
+
+        return participantCount != 2
+    }
+
+    private var sendButtonDisabled: Bool {
+        if isSendingMessage {
+            return true
+        }
+        return draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func senderAvatarImageURL(for message: Message) -> String? {
         selectedChat?.participant(with: message.senderID)?.imgURL
     }
@@ -83,5 +127,4 @@ struct ChatDetailView: View {
 
         return false
     }
-
 }

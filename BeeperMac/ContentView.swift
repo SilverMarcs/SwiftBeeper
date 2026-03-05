@@ -29,7 +29,9 @@ struct ContentView: View {
                 messages: selectedMessages,
                 currentUserID: currentUserID,
                 isLoadingMessages: store.isLoadingMessages,
-                messagesError: store.messagesError
+                isSendingMessage: store.isSendingMessage,
+                messagesError: store.messagesError,
+                sendMessage: sendCurrentChatMessage
             )
         }
         .toolbar {
@@ -67,6 +69,13 @@ struct ContentView: View {
             return []
         }
         return store.messages(for: selectedChatID)
+    }
+
+    private func sendCurrentChatMessage(_ text: String) async -> Bool {
+        guard let selectedChatID = store.selectedChatID else {
+            return false
+        }
+        return await store.sendTextMessage(text, to: selectedChatID, accessToken: accessToken)
     }
 }
 
