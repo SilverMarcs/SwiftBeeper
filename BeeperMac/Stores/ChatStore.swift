@@ -86,7 +86,7 @@ final class ChatStore {
     }
 
     func messages(for chatID: String) -> [Message] {
-        messagesByChatID[chatID] ?? []
+        (messagesByChatID[chatID] ?? []).filter { !$0.isEmptyDeleted }
     }
 
     func loadChatDetail(for chatID: String) async {

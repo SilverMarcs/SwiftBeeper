@@ -98,6 +98,7 @@ struct MessageRowView: View {
                         Label("Edit", systemImage: "pencil")
                     }
                 }
+
             }
 
             if isOutgoing == false {
@@ -122,6 +123,7 @@ struct MessageRowView: View {
     private var canEdit: Bool {
         Date().timeIntervalSince(message.timestamp) <= 15 * 60
     }
+
 
     private var isOutgoing: Bool {
         if let isSender = message.isSender {

@@ -222,6 +222,10 @@ struct Message: Identifiable, Decodable {
         return "(No text)"
     }
 
+    var isEmptyDeleted: Bool {
+        !hasText && (attachments ?? []).isEmpty
+    }
+
     var hasText: Bool {
         if let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), text.isEmpty == false {
             return true
