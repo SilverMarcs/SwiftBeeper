@@ -52,7 +52,8 @@ struct ChatRowView: View {
             timestamp: .now,
             sortKey: "1",
             text: "Hey",
-            isSender: false
+            isSender: false,
+            attachments: nil
         )
     ))
 }

@@ -10,6 +10,15 @@ enum APIClient {
         try await get(path: "/v1/chats", accessToken: accessToken)
     }
 
+    static func searchChats(query: String, accessToken: String) async throws -> SearchChatsOutput {
+        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "query", value: query)]
+        guard let url = components.url else {
+            throw APIError.invalidResponse
+        }
+        return try await get(url: url, accessToken: accessToken)
+    }
+
     static func listMessages(chatID: String, accessToken: String) async throws -> ListMessagesOutput {
         guard let url = URL(string: "/v1/chats/\(chatID)/messages", relativeTo: API.baseURL) else {
             throw APIError.invalidResponse

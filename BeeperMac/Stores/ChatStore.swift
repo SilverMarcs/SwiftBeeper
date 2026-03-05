@@ -11,6 +11,9 @@ final class ChatStore {
     private(set) var chatsError: String?
     private(set) var messagesError: String?
     var selectedChatID: String?
+    var searchQuery: String = ""
+    var searchResults: [Chat]?
+    var isSearching = false
     private var webSocketTask: URLSessionWebSocketTask?
     private var webSocketListenerTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
@@ -19,11 +22,36 @@ final class ChatStore {
     private var realtimeConnectionID = UUID()
     private var currentAccessToken = ""
 
+    var displayedChats: [Chat] {
+        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return chats
+        }
+        return searchResults ?? chats
+    }
+
     var selectedChat: Chat? {
         guard let selectedChatID else {
             return nil
         }
         return chats.first(where: { $0.id == selectedChatID })
+    }
+
+    func searchChats() async {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else {
+            searchResults = nil
+            isSearching = false
+            return
+        }
+
+        isSearching = true
+        do {
+            let response = try await APIClient.searchChats(query: trimmed, accessToken: currentAccessToken)
+            searchResults = response.items
+        } catch {
+            searchResults = []
+        }
+        isSearching = false
     }
 
     func messages(for chatID: String) -> [Message] {

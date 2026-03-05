@@ -4,6 +4,11 @@ struct ListChatsOutput: Decodable {
     let items: [Chat]
 }
 
+struct SearchChatsOutput: Decodable {
+    let items: [Chat]
+    let hasMore: Bool
+}
+
 struct ListMessagesOutput: Decodable {
     let items: [Message]
 }
@@ -61,6 +66,51 @@ struct Chat: Identifiable, Decodable {
     }
 }
 
+struct AttachmentSize: Decodable {
+    let width: Int?
+    let height: Int?
+}
+
+struct Attachment: Identifiable, Decodable {
+    var id: String? { _id ?? srcURL ?? fileName }
+
+    let type: String
+    let srcURL: String?
+    let mimeType: String?
+    let fileName: String?
+    let fileSize: Int?
+    let isGif: Bool?
+    let isSticker: Bool?
+    let isVoiceNote: Bool?
+    let duration: Double?
+    let posterImg: String?
+    let size: AttachmentSize?
+
+    private let _id: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case _id = "id"
+        case type, srcURL, mimeType, fileName, fileSize
+        case isGif, isSticker, isVoiceNote, duration, posterImg, size
+    }
+
+    var isImage: Bool { type == "img" }
+    var isVideo: Bool { type == "video" }
+    var isAudio: Bool { type == "audio" }
+
+    /// The best URL to use for loading this attachment's content.
+    var resolvedURL: String? {
+        srcURL ?? _id
+    }
+
+    var typeLabel: String {
+        if isImage { return "image" }
+        if isVideo { return "video" }
+        if isAudio { return "audio" }
+        return "file"
+    }
+}
+
 struct Message: Identifiable, Decodable {
     let id: String
     let chatID: String
@@ -70,6 +120,7 @@ struct Message: Identifiable, Decodable {
     let sortKey: String
     let text: String?
     let isSender: Bool?
+    let attachments: [Attachment]?
 
     var senderDisplayName: String {
         if let senderName, senderName.isEmpty == false {
@@ -83,7 +134,19 @@ struct Message: Identifiable, Decodable {
         if let text, text.isEmpty == false {
             return text
         }
+
+        if let attachments, let first = attachments.first {
+            return "Sent \(attachments.count > 1 ? "\(attachments.count) attachments" : "an \(first.typeLabel)")"
+        }
+
         return "(No text)"
+    }
+
+    var hasText: Bool {
+        if let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), text.isEmpty == false {
+            return true
+        }
+        return false
     }
 
     var timestampText: String {

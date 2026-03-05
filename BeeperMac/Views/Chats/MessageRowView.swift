@@ -19,12 +19,20 @@ struct MessageRowView: View {
                         .bold()
                 }
 
-                Text(message.displayText)
-                    .font(.body)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(isOutgoing ? Color.accentColor.opacity(0.20) : Color.gray.opacity(0.15))
-                    .clipShape(.rect(cornerRadius: 12))
+                if let attachments = message.attachments, attachments.isEmpty == false {
+                    ForEach(attachments) { attachment in
+                        AttachmentView(attachment: attachment, isOutgoing: isOutgoing)
+                    }
+                }
+
+                if message.hasText {
+                    Text(message.displayText)
+                        .font(.body)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(isOutgoing ? Color.accentColor.opacity(0.20) : Color.gray.opacity(0.15))
+                        .clipShape(.rect(cornerRadius: 12))
+                }
             }
 
             if isOutgoing == false {
@@ -73,7 +81,8 @@ struct MessageRowView: View {
             timestamp: .now,
             sortKey: "1",
             text: "Hello",
-            isSender: false
+            isSender: false,
+            attachments: nil
         ), chat: Chat(
             id: "chat-1",
             title: "General",
@@ -90,7 +99,8 @@ struct MessageRowView: View {
             timestamp: .now,
             sortKey: "2",
             text: "Hey!",
-            isSender: true
+            isSender: true,
+            attachments: nil
         ), chat: Chat(
             id: "chat-1",
             title: "General",

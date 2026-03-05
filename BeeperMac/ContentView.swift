@@ -20,18 +20,14 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button("Reload Chats") {
+                Button {
                     Task {
                         await chatStore.loadChats()
                     }
+                } label: {
+                    Label("Reload Chats", systemImage: "arrow.clockwise")
                 }
                 .disabled(sessionStore.accessToken.isEmpty)
-            }
-
-            ToolbarItem(placement: .automatic) {
-                SettingsLink {
-                    Label("Settings", systemImage: "gearshape")
-                }
             }
         }
         .task(id: sessionStore.accessToken) {
