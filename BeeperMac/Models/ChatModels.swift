@@ -142,6 +142,42 @@ struct Chat: Identifiable, Decodable {
     }
 }
 
+// MARK: - Upload / Attachment Input Types
+
+struct UploadAssetOutput: Decodable {
+    let uploadID: String
+    let srcURL: String?
+    let fileName: String?
+    let mimeType: String?
+    let fileSize: Int?
+    let width: Int?
+    let height: Int?
+    let duration: Double?
+    let error: String?
+}
+
+struct MessageAttachmentInput: Encodable {
+    let uploadID: String
+    let mimeType: String?
+    let fileName: String?
+    let size: AttachmentSizeInput?
+    let duration: Double?
+    let type: String?
+}
+
+struct AttachmentSizeInput: Encodable {
+    let width: Int
+    let height: Int
+}
+
+struct PendingAttachment {
+    let fileData: Data
+    let fileName: String
+    let mimeType: String
+}
+
+// MARK: - Attachment Response Types
+
 struct AttachmentSize: Decodable {
     let width: Int?
     let height: Int?

@@ -43,6 +43,8 @@ final class ChatStore {
     var isSearching = false
     var replyingToMessage: Message?
     var editingMessage: Message?
+    var pendingAttachment: PendingAttachment?
+    private(set) var uploadProgress: Double?
     private var webSocketTask: URLSessionWebSocketTask?
     private var webSocketListenerTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
@@ -293,28 +295,83 @@ final class ChatStore {
     }
 
     func sendTextMessage(_ text: String, to chatID: String, accessToken: String) async -> Bool {
-        guard accessToken.isEmpty == false else {
-            return false
-        }
+        await sendMessage(text: text, attachment: nil, to: chatID, accessToken: accessToken)
+    }
+
+    func clearPendingAttachment() {
+        pendingAttachment = nil
+        uploadProgress = nil
+    }
+
+    func sendMessage(text: String, attachment: PendingAttachment?, to chatID: String) async -> Bool {
+        await sendMessage(text: text, attachment: attachment, to: chatID, accessToken: currentAccessToken)
+    }
+
+    func sendMessage(text: String, attachment: PendingAttachment?, to chatID: String, accessToken: String) async -> Bool {
+        guard accessToken.isEmpty == false else { return false }
 
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedText.isEmpty == false else {
-            return false
-        }
+        let hasText = !trimmedText.isEmpty
+        let hasAttachment = attachment != nil
+
+        guard hasText || hasAttachment else { return false }
 
         isSendingMessage = true
-        defer { isSendingMessage = false }
+        defer {
+            isSendingMessage = false
+            uploadProgress = nil
+        }
 
         let replyToID = replyingToMessage?.id
 
         do {
+            var attachmentInput: MessageAttachmentInput?
+
+            if let attachment {
+                uploadProgress = 0
+                let uploadResult = try await APIClient.uploadAsset(
+                    fileData: attachment.fileData,
+                    fileName: attachment.fileName,
+                    mimeType: attachment.mimeType,
+                    accessToken: accessToken,
+                    onProgress: { [weak self] progress in
+                        Task { @MainActor in
+                            self?.uploadProgress = progress
+                        }
+                    }
+                )
+
+                if let error = uploadResult.error {
+                    messagesError = "Upload failed: \(error)"
+                    return false
+                }
+
+                var size: AttachmentSizeInput?
+                if let w = uploadResult.width, let h = uploadResult.height {
+                    size = AttachmentSizeInput(width: w, height: h)
+                }
+
+                let type: String? = nil
+
+                attachmentInput = MessageAttachmentInput(
+                    uploadID: uploadResult.uploadID,
+                    mimeType: attachment.mimeType,
+                    fileName: attachment.fileName,
+                    size: size,
+                    duration: uploadResult.duration,
+                    type: type
+                )
+            }
+
             _ = try await APIClient.sendMessage(
                 chatID: chatID,
-                text: trimmedText,
+                text: hasText ? trimmedText : nil,
                 replyToMessageID: replyToID,
+                attachment: attachmentInput,
                 accessToken: accessToken
             )
             replyingToMessage = nil
+            pendingAttachment = nil
             messagesError = nil
             scheduleChatsRefresh(accessToken: accessToken)
             scheduleMessagesRefresh(chatID: chatID, accessToken: accessToken)

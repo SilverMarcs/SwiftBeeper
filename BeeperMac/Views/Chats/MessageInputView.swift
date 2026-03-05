@@ -1,9 +1,14 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct MessageInputView: View {
     @Environment(ChatStore.self) private var chatStore
 
     @State private var draftMessage = ""
+    @State private var showingFilePicker = false
+    @State private var showingPhotoPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
 
     private var cannotMessage: Bool {
         chatStore.selectedChat?.cannotMessage == true
@@ -113,17 +118,39 @@ struct MessageInputView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let pending = chatStore.pendingAttachment {
+                HStack {
+                    attachmentCard(pending)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+
             HStack(alignment: .bottom) {
-                // Plus button
-                Button {
-                    // TODO: Implement attachment menu
+                // Attachment menu
+                Menu {
+                    Button {
+                        showingPhotoPicker = true
+                    } label: {
+                        Label("Photos Library", systemImage: "photo.on.rectangle.angled")
+                    }
+
+                    Button {
+                        showingFilePicker = true
+                    } label: {
+                        Label("Attach Files", systemImage: "paperclip")
+                    }
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(.secondary, .clear)
                         .font(.largeTitle).fontWeight(.semibold)
                         .glassEffect()
                 }
+                .menuStyle(.button)
                 .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
                 .offset(y: -1)
 
                 if isEditing {
@@ -178,6 +205,24 @@ struct MessageInputView: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         }
+        .fileImporter(
+            isPresented: $showingFilePicker,
+            allowedContentTypes: [.item]
+        ) { result in
+            handleFileImport(result)
+        }
+        .photosPicker(
+            isPresented: $showingPhotoPicker,
+            selection: $selectedPhotoItem,
+            matching: .any(of: [.images, .videos])
+        )
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                await handlePhotoPick(newItem)
+            }
+            selectedPhotoItem = nil
+        }
     }
 
     private var isEditing: Bool {
@@ -187,7 +232,7 @@ struct MessageInputView: View {
     private var sendButtonDisabled: Bool {
         if chatStore.isSendingMessage { return true }
         if chatStore.selectedChat == nil { return true }
-        return trimmedDraftMessage.isEmpty
+        return trimmedDraftMessage.isEmpty && chatStore.pendingAttachment == nil
     }
 
     private var trimmedDraftMessage: String {
@@ -205,9 +250,12 @@ struct MessageInputView: View {
     private func sendMessage() {
         guard let chatID = chatStore.selectedChat?.id else { return }
         let text = trimmedDraftMessage
+        let attachment = chatStore.pendingAttachment
+
+        guard !text.isEmpty || attachment != nil else { return }
 
         Task {
-            let didSend = await chatStore.sendTextMessage(text, to: chatID)
+            let didSend = await chatStore.sendMessage(text: text, attachment: attachment, to: chatID)
             if didSend {
                 draftMessage = ""
             }
@@ -223,5 +271,89 @@ struct MessageInputView: View {
                 draftMessage = ""
             }
         }
+    }
+
+    private func handleFileImport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            guard url.startAccessingSecurityScopedResource() else { return }
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            guard let data = try? Data(contentsOf: url) else { return }
+            let fileName = url.lastPathComponent
+            let mimeType = mimeTypeForURL(url)
+
+            chatStore.pendingAttachment = PendingAttachment(
+                fileData: data,
+                fileName: fileName,
+                mimeType: mimeType
+            )
+        case .failure:
+            break
+        }
+    }
+
+    private func handlePhotoPick(_ item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+
+        let mimeType: String
+        let fileName: String
+
+        if let contentType = item.supportedContentTypes.first {
+            mimeType = contentType.preferredMIMEType ?? "application/octet-stream"
+            let ext = contentType.preferredFilenameExtension ?? "bin"
+            fileName = "photo.\(ext)"
+        } else {
+            mimeType = "image/jpeg"
+            fileName = "photo.jpg"
+        }
+
+        chatStore.pendingAttachment = PendingAttachment(
+            fileData: data,
+            fileName: fileName,
+            mimeType: mimeType
+        )
+    }
+
+    private func mimeTypeForURL(_ url: URL) -> String {
+        if let utType = UTType(filenameExtension: url.pathExtension) {
+            return utType.preferredMIMEType ?? "application/octet-stream"
+        }
+        return "application/octet-stream"
+    }
+
+    private func attachmentCard(_ pending: PendingAttachment) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: attachmentIcon(for: pending.mimeType))
+                .font(.title2)
+                .foregroundStyle(.secondary)
+
+            Text(pending.fileName)
+                .font(.caption2)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .frame(width: 150, height: 50)
+        .glassEffect(in: .rect(cornerRadius: 12))
+        .overlay(alignment: .topTrailing) {
+            Button {
+                chatStore.clearPendingAttachment()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption)
+                    .foregroundStyle(.white, .secondary)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .offset(x: 4, y: -4)
+            .disabled(chatStore.isSendingMessage)
+        }
+    }
+
+    private func attachmentIcon(for mimeType: String) -> String {
+        if mimeType.hasPrefix("image/") { return "photo" }
+        if mimeType.hasPrefix("video/") { return "video" }
+        if mimeType.hasPrefix("audio/") { return "waveform" }
+        return "doc"
     }
 }

@@ -59,14 +59,14 @@ enum APIClient {
         return try await get(url: url, accessToken: accessToken)
     }
 
-    static func sendMessage(chatID: String, text: String, replyToMessageID: String? = nil, accessToken: String) async throws -> SendMessageOutput {
+    static func sendMessage(chatID: String, text: String?, replyToMessageID: String? = nil, attachment: MessageAttachmentInput? = nil, accessToken: String) async throws -> SendMessageOutput {
         guard let url = URL(string: "/v1/chats/\(chatID)/messages", relativeTo: API.baseURL) else {
             throw APIError.invalidResponse
         }
 
         return try await post(
             url: url,
-            body: SendMessageRequest(text: text, replyToMessageID: replyToMessageID),
+            body: SendMessageRequest(text: text, replyToMessageID: replyToMessageID, attachment: attachment),
             accessToken: accessToken
         )
     }
@@ -123,6 +123,50 @@ enum APIClient {
         return URLSession.shared.webSocketTask(with: request)
     }
 
+    static func uploadAsset(
+        fileData: Data,
+        fileName: String,
+        mimeType: String,
+        accessToken: String,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> UploadAssetOutput {
+        let url = API.baseURL.appending(path: "/v1/assets/upload")
+        let boundary = UUID().uuidString
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        body.appendString("--\(boundary)\r\n")
+        body.appendString("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n")
+        body.appendString("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(fileData)
+        body.appendString("\r\n--\(boundary)--\r\n")
+
+        print("[Upload] POST \(url) fileName=\(fileName) mimeType=\(mimeType) size=\(fileData.count)")
+
+        let delegate = UploadProgressDelegate(onProgress: onProgress)
+        let (data, response) = try await URLSession.shared.upload(for: request, from: body, delegate: delegate)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        print("[Upload] Response \(httpResponse.statusCode): \(String(data: data, encoding: .utf8) ?? "<binary>")")
+
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
+            throw APIError.http(statusCode: httpResponse.statusCode, details: parseErrorMessage(from: data))
+        }
+
+        do {
+            return try JSONDecoder.beeper.decode(UploadAssetOutput.self, from: data)
+        } catch {
+            throw APIError.decoding(error.localizedDescription)
+        }
+    }
+
     private static func get<Response: Decodable>(path: String, accessToken: String) async throws -> Response {
         let url = API.baseURL.appending(path: path)
         return try await get(url: url, accessToken: accessToken)
@@ -161,13 +205,19 @@ enum APIClient {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
+        let encodedBody = try JSONEncoder().encode(body)
+        request.httpBody = encodedBody
+
+        print("[POST] \(url)")
+        print("[POST] Body: \(String(data: encodedBody, encoding: .utf8) ?? "<nil>")")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
+
+        print("[POST] Response \(httpResponse.statusCode): \(String(data: data, encoding: .utf8) ?? "<binary>")")
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             throw APIError.http(statusCode: httpResponse.statusCode, details: parseErrorMessage(from: data))
@@ -268,8 +318,9 @@ private struct APIErrorPayload: Decodable {
 }
 
 private struct SendMessageRequest: Encodable {
-    let text: String
+    let text: String?
     let replyToMessageID: String?
+    let attachment: MessageAttachmentInput?
 }
 
 private struct EditMessageRequest: Encodable {
@@ -309,5 +360,32 @@ private extension JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }
+}
+
+private extension Data {
+    mutating func appendString(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
+        }
+    }
+}
+
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    let onProgress: @Sendable (Double) -> Void
+
+    init(onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        let progress = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
+        onProgress(progress)
     }
 }
