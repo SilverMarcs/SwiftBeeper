@@ -10,9 +10,22 @@ enum APIClient {
         try await get(path: "/v1/chats", accessToken: accessToken)
     }
 
-    static func searchChats(query: String, accessToken: String) async throws -> SearchChatsOutput {
+    static func listLowPriorityChatIDs(accessToken: String) async throws -> Set<String> {
         var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "query", value: query)]
+        components.queryItems = [URLQueryItem(name: "inbox", value: "low-priority")]
+        guard let url = components.url else {
+            throw APIError.invalidResponse
+        }
+        let response: SearchChatsOutput = try await get(url: url, accessToken: accessToken)
+        return Set(response.items.map(\.id))
+    }
+
+    static func searchChats(query: String? = nil, inbox: String? = nil, accessToken: String) async throws -> SearchChatsOutput {
+        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
+        var queryItems: [URLQueryItem] = []
+        if let query { queryItems.append(URLQueryItem(name: "query", value: query)) }
+        if let inbox { queryItems.append(URLQueryItem(name: "inbox", value: inbox)) }
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
         guard let url = components.url else {
             throw APIError.invalidResponse
         }

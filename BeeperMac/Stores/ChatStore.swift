@@ -1,6 +1,28 @@
 import Foundation
 import Observation
 
+enum InboxFilter: String, CaseIterable {
+    case primary
+    case lowPriority = "low-priority"
+    case archive
+
+    var label: String {
+        switch self {
+        case .primary: "Primary"
+        case .lowPriority: "Low Priority"
+        case .archive: "Archive"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .primary: "tray.full"
+        case .lowPriority: "tray"
+        case .archive: "archivebox"
+        }
+    }
+}
+
 @Observable
 final class ChatStore {
     private(set) var chats: [Chat] = []
@@ -11,6 +33,7 @@ final class ChatStore {
     private(set) var chatsError: String?
     private(set) var messagesError: String?
     var selectedChatID: String?
+    var selectedInboxFilter: InboxFilter = .primary
     var searchQuery: String = ""
     var searchResults: [Chat]?
     var isSearching = false
@@ -19,6 +42,7 @@ final class ChatStore {
     private var reconnectTask: Task<Void, Never>?
     private var scheduledChatsRefreshTask: Task<Void, Never>?
     private var scheduledMessagesRefreshTasks: [String: Task<Void, Never>] = [:]
+    private var lowPriorityChatIDs: Set<String> = []
     private var realtimeConnectionID = UUID()
     private var currentAccessToken = ""
 
@@ -97,8 +121,17 @@ final class ChatStore {
         defer { isLoadingChats = false }
 
         do {
-            let response = try await APIClient.listChats(accessToken: accessToken)
-            chats = response.items
+            if selectedInboxFilter == .primary {
+                async let chatsResponse = APIClient.listChats(accessToken: accessToken)
+                async let lowPriorityIDs = (try? APIClient.listLowPriorityChatIDs(accessToken: accessToken)) ?? []
+
+                let response = try await chatsResponse
+                lowPriorityChatIDs = await lowPriorityIDs
+                chats = response.items.filter { lowPriorityChatIDs.contains($0.id) == false }
+            } else {
+                let response = try await APIClient.searchChats(inbox: selectedInboxFilter.rawValue, accessToken: accessToken)
+                chats = response.items
+            }
             chatsError = nil
 
             if chats.contains(where: { $0.id == selectedChatID }) == false {

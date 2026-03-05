@@ -41,7 +41,7 @@ struct AttachmentView: View {
                     }
             } else {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.15))
+                    .fill(.background.secondary)
                     .frame(width: imageFrameWidth, height: imageFrameHeight)
                     .overlay {
                         Image(systemName: "photo")
@@ -165,7 +165,7 @@ struct AttachmentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(isOutgoing ? Color.accentColor.opacity(0.20) : Color.gray.opacity(0.15))
+        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(.background.tertiary))
         .clipShape(.rect(cornerRadius: 12))
     }
 

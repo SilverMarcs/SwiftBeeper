@@ -45,5 +45,29 @@ struct ChatSidebarView: View {
             }
         }
         .navigationTitle("Chats")
+        .toolbar(removing: .sidebarToggle)
+        .toolbar {
+            ToolbarSpacer()
+            
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    ForEach(InboxFilter.allCases, id: \.self) { filter in
+                        Button {
+                            chatStore.selectedInboxFilter = filter
+                        } label: {
+                            Label(filter.label, systemImage: filter.systemImage)
+                        }
+                    }
+                } label: {
+                    Label(chatStore.selectedInboxFilter.label, systemImage: "line.3.horizontal.decrease")
+                }
+                .menuIndicator(.hidden)
+            }
+        }
+        .onChange(of: chatStore.selectedInboxFilter) {
+            Task {
+                await chatStore.loadChats()
+            }
+        }
     }
 }
