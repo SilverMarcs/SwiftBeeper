@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ChatRowView: View {
+    @Environment(ChatStore.self) private var chatStore
+
     let chat: Chat
 
     var body: some View {
@@ -13,7 +15,7 @@ struct ChatRowView: View {
                     .fontWeight(chat.unreadCount > 0 ? .bold : .regular)
 
                 if let previewText = chat.previewText {
-                    Text(previewText.markdownAttributed)
+                    Text(previewText)
                         .font(.subheadline)
                         .foregroundStyle(chat.unreadCount > 0 ? .primary : .secondary)
                         .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
@@ -34,6 +36,24 @@ struct ChatRowView: View {
             }
         }
         .padding(3)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button {
+                Task {
+                    if chatStore.selectedInboxFilter == .archive {
+                        await chatStore.unarchiveChat(chat.id)
+                    } else {
+                        await chatStore.archiveChat(chat.id)
+                    }
+                }
+            } label: {
+                Label(
+                    chatStore.selectedInboxFilter == .archive ? "Unarchive" : "Archive",
+                    systemImage: chatStore.selectedInboxFilter == .archive ? "tray.and.arrow.up" : "archivebox"
+                )
+                .labelStyle(.iconOnly)
+            }
+            .tint(chatStore.selectedInboxFilter == .archive ? .blue : .orange)
+        }
     }
 
     private var avatarName: String {
@@ -69,7 +89,9 @@ struct ChatRowView: View {
                 sortKey: "2",
                 text: "Are you free tomorrow?",
                 isSender: false,
-                attachments: nil
+                attachments: nil,
+                reactions: nil,
+                linkedMessageID: nil
             )
         ))
 
@@ -87,8 +109,12 @@ struct ChatRowView: View {
             sortKey: "1",
             text: "Hey",
             isSender: false,
-            attachments: nil
+            attachments: nil,
+            reactions: nil,
+            linkedMessageID: nil
         )
         ))
     }
+    .environment(ChatStore())
+    .environment(SessionStore())
 }

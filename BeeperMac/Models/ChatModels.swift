@@ -24,6 +24,27 @@ struct SendMessageOutput: Decodable {
     let pendingMessageID: String
 }
 
+struct EditMessageOutput: Decodable {
+    let chatID: String
+    let messageID: String
+    let success: Bool
+}
+
+struct AddReactionOutput: Decodable {
+    let success: Bool
+    let chatID: String
+    let messageID: String
+    let reactionKey: String
+    let transactionID: String
+}
+
+struct RemoveReactionOutput: Decodable {
+    let success: Bool
+    let chatID: String
+    let messageID: String
+    let reactionKey: String
+}
+
 struct ChatParticipant: Identifiable, Decodable {
     let id: String
     let username: String?
@@ -117,6 +138,14 @@ struct Attachment: Identifiable, Decodable {
     }
 }
 
+struct Reaction: Codable, Identifiable, Hashable {
+    let id: String
+    let reactionKey: String
+    let imgURL: String?
+    let participantID: String
+    let emoji: Bool?
+}
+
 struct Message: Identifiable, Decodable {
     let id: String
     let chatID: String
@@ -127,6 +156,8 @@ struct Message: Identifiable, Decodable {
     let text: String?
     let isSender: Bool?
     let attachments: [Attachment]?
+    let reactions: [Reaction]?
+    let linkedMessageID: String?
 
     var senderDisplayName: String {
         if let senderName, senderName.isEmpty == false {

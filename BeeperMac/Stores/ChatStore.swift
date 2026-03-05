@@ -41,6 +41,8 @@ final class ChatStore {
     var searchQuery: String = ""
     var searchResults: [Chat]?
     var isSearching = false
+    var replyingToMessage: Message?
+    var editingMessage: Message?
     private var webSocketTask: URLSessionWebSocketTask?
     private var webSocketListenerTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
@@ -290,8 +292,16 @@ final class ChatStore {
         isSendingMessage = true
         defer { isSendingMessage = false }
 
+        let replyToID = replyingToMessage?.id
+
         do {
-            _ = try await APIClient.sendMessage(chatID: chatID, text: trimmedText, accessToken: accessToken)
+            _ = try await APIClient.sendMessage(
+                chatID: chatID,
+                text: trimmedText,
+                replyToMessageID: replyToID,
+                accessToken: accessToken
+            )
+            replyingToMessage = nil
             messagesError = nil
             scheduleChatsRefresh(accessToken: accessToken)
             scheduleMessagesRefresh(chatID: chatID, accessToken: accessToken)
@@ -299,6 +309,119 @@ final class ChatStore {
         } catch {
             messagesError = error.localizedDescription
             return false
+        }
+    }
+
+    func setReplyTo(_ message: Message?) {
+        replyingToMessage = message
+    }
+
+    func startEditing(_ message: Message) {
+        guard message.isSender == true else { return }
+        guard Date().timeIntervalSince(message.timestamp) <= 15 * 60 else { return }
+        replyingToMessage = nil
+        editingMessage = message
+    }
+
+    func cancelEditing() {
+        editingMessage = nil
+    }
+
+    func saveEdit(newText: String) async -> Bool {
+        await saveEdit(newText: newText, accessToken: currentAccessToken)
+    }
+
+    func saveEdit(newText: String, accessToken: String) async -> Bool {
+        guard let message = editingMessage else { return false }
+        guard accessToken.isEmpty == false else { return false }
+
+        let trimmedText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedText.isEmpty == false else { return false }
+
+        isSendingMessage = true
+        defer { isSendingMessage = false }
+
+        do {
+            _ = try await APIClient.editMessage(
+                chatID: message.chatID,
+                messageID: message.id,
+                text: trimmedText,
+                accessToken: accessToken
+            )
+            editingMessage = nil
+            messagesError = nil
+            scheduleMessagesRefresh(chatID: message.chatID, accessToken: accessToken)
+            scheduleChatsRefresh(accessToken: accessToken)
+            return true
+        } catch {
+            messagesError = error.localizedDescription
+            return false
+        }
+    }
+
+    func message(byID messageID: String, in chatID: String) -> Message? {
+        messagesByChatID[chatID]?.first(where: { $0.id == messageID })
+    }
+
+    // MARK: - Reactions
+
+    func addReaction(to messageID: String, in chatID: String, reactionKey: String) async {
+        await addReaction(to: messageID, in: chatID, reactionKey: reactionKey, accessToken: currentAccessToken)
+    }
+
+    func addReaction(to messageID: String, in chatID: String, reactionKey: String, accessToken: String) async {
+        guard accessToken.isEmpty == false else { return }
+
+        do {
+            _ = try await APIClient.addReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: accessToken)
+            scheduleMessagesRefresh(chatID: chatID, accessToken: accessToken)
+        } catch {
+            messagesError = error.localizedDescription
+        }
+    }
+
+    func removeReaction(from messageID: String, in chatID: String, reactionKey: String) async {
+        await removeReaction(from: messageID, in: chatID, reactionKey: reactionKey, accessToken: currentAccessToken)
+    }
+
+    func removeReaction(from messageID: String, in chatID: String, reactionKey: String, accessToken: String) async {
+        guard accessToken.isEmpty == false else { return }
+
+        do {
+            _ = try await APIClient.removeReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: accessToken)
+            scheduleMessagesRefresh(chatID: chatID, accessToken: accessToken)
+        } catch {
+            messagesError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Archive / Unarchive
+
+    func archiveChat(_ chatID: String) async {
+        guard currentAccessToken.isEmpty == false else { return }
+
+        do {
+            try await APIClient.archiveChat(chatID: chatID, archived: true, accessToken: currentAccessToken)
+            chats.removeAll { $0.id == chatID }
+            if selectedChatID == chatID {
+                selectedChatID = chats.first?.id
+            }
+        } catch {
+            chatsError = error.localizedDescription
+        }
+    }
+
+    func unarchiveChat(_ chatID: String) async {
+        guard currentAccessToken.isEmpty == false else { return }
+
+        do {
+            try await APIClient.archiveChat(chatID: chatID, archived: false, accessToken: currentAccessToken)
+            chats.removeAll { $0.id == chatID }
+            if selectedChatID == chatID {
+                selectedChatID = chats.first?.id
+            }
+        } catch {
+            chatsError = error.localizedDescription
         }
     }
 

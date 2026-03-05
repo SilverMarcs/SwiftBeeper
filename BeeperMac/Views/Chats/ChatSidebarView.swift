@@ -22,44 +22,17 @@ struct ChatSidebarView: View {
                     description: Text(chatsError)
                 )
             } else {
-                List(selection: $chatStore.selectedChatID) {
-                    ForEach(chatStore.displayedChats) { chat in
-                        ChatRowView(chat: chat)
-                            .tag(chat.id)
-                            .onAppear {
-                                if chat.id == chatStore.displayedChats.last?.id,
-                                   chatStore.hasMoreChats,
-                                   !chatStore.isLoadingMoreChats {
-                                    Task {
-                                        await chatStore.loadMoreChats()
-                                    }
-                                }
-                            }
-                    }
-
-                    if chatStore.isLoadingMoreChats {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                            Spacer()
-                        }
-                        .listRowSeparator(.hidden)
-                    }
-                }
+                chatList
                 .searchable(text: $chatStore.searchQuery, placement: .sidebar, prompt: "Search chats")
                 .task(id: chatStore.searchQuery) {
                     try? await Task.sleep(for: .milliseconds(300))
                     await chatStore.searchChats()
                 }
-                .overlay {
-                    if chatStore.isSearching {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onChange(of: chatStore.searchQuery) {
+                    if chatStore.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        chatStore.searchResults = nil
+                        chatStore.isSearching = false
                     }
-//                    else if let results = chatStore.searchResults, results.isEmpty {
-//                        ContentUnavailableView.search(text: chatStore.searchQuery)
-//                    }
                 }
             }
         }
@@ -86,6 +59,40 @@ struct ChatSidebarView: View {
         .onChange(of: chatStore.selectedInboxFilter) {
             Task {
                 await chatStore.loadChats()
+            }
+        }
+    }
+
+    private var chatList: some View {
+        List(selection: Bindable(chatStore).selectedChatID) {
+            ForEach(chatStore.displayedChats) { chat in
+                ChatRowView(chat: chat)
+                    .tag(chat.id)
+                    .onAppear {
+                        if chat.id == chatStore.displayedChats.last?.id,
+                           chatStore.hasMoreChats,
+                           !chatStore.isLoadingMoreChats {
+                            Task {
+                                await chatStore.loadMoreChats()
+                            }
+                        }
+                    }
+            }
+
+            if chatStore.isLoadingMoreChats {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.small)
+                    Spacer()
+                }
+                .listRowSeparator(.hidden)
+            }
+        }
+        .overlay {
+            if chatStore.isSearching {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }

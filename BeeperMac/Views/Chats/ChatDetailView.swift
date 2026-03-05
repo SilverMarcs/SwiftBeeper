@@ -22,6 +22,7 @@ struct ChatDetailView: View {
                             message: message,
                             chat: selectedChat
                         )
+                        .id(message.id)
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
                     }
@@ -31,6 +32,7 @@ struct ChatDetailView: View {
                         .id(bottomAnchorID)
                 }
                 .task(id: selectedChat.id) {
+                    chatStore.setReplyTo(nil)
                     await Task.yield()
                     scrollToBottom(with: proxy, animated: false)
                 }
