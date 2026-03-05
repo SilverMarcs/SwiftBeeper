@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MessageRowView: View {
-    @Environment(ChatStore.self) private var chatStore
+    @Environment(MessageStore.self) private var messageStore
 
     let message: Message
     let chat: Chat
@@ -53,9 +53,9 @@ struct MessageRowView: View {
                         onToggle: { reactionKey, isOwn in
                             Task {
                                 if isOwn {
-                                    await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: reactionKey)
+                                    await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: reactionKey)
                                 } else {
-                                    await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey)
+                                    await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey)
                                 }
                             }
                         }
@@ -68,9 +68,9 @@ struct MessageRowView: View {
                         Button {
                             Task {
                                 if hasOwnReaction(for: emoji) {
-                                    await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: emoji)
+                                    await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: emoji)
                                 } else {
-                                    await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: emoji)
+                                    await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: emoji)
                                 }
                             }
                         } label: {
@@ -86,14 +86,14 @@ struct MessageRowView: View {
                 Divider()
                 
                 Button {
-                    chatStore.setReplyTo(message)
+                    messageStore.setReplyTo(message)
                 } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                 }
 
                 if isOutgoing && canEdit {
                     Button {
-                        chatStore.startEditing(message)
+                        messageStore.startEditing(message)
                     } label: {
                         Label("Edit", systemImage: "pencil")
                     }
@@ -164,145 +164,4 @@ struct MessageRowView: View {
         guard let participantID = currentParticipant?.id else { return false }
         return message.reactions?.contains(where: { $0.reactionKey == reactionKey && $0.participantID == participantID }) == true
     }
-}
-
-struct GroupedReaction: Identifiable {
-    var id: String { reactionKey }
-    let reactionKey: String
-    var count: Int
-    var participantIDs: [String]
-}
-
-struct ReactionsBarView: View {
-    let groupedReactions: [GroupedReaction]
-    let currentParticipantID: String?
-    let onToggle: (String, Bool) -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(groupedReactions) { group in
-                let isOwn = currentParticipantID.map { id in group.participantIDs.contains(id) } ?? false
-
-                Button {
-                    onToggle(group.reactionKey, isOwn)
-                } label: {
-                    HStack(spacing: 2) {
-                        Text(group.reactionKey)
-                            .font(.caption)
-                        if group.count > 1 {
-                            Text("\(group.count)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(isOwn ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15))
-                    .clipShape(.capsule)
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(isOwn ? Color.accentColor : Color.clear, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-private struct ReplyPreviewView: View {
-    @Environment(ChatStore.self) private var chatStore
-
-    let linkedMessageID: String
-    let chatID: String
-    let isOutgoing: Bool
-
-    var body: some View {
-        let linkedMessage = chatStore.message(byID: linkedMessageID, in: chatID)
-
-        HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(Color.accentColor)
-                .frame(width: 3)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(linkedMessage?.senderDisplayName ?? "Unknown")
-                    .font(.caption)
-                    .bold()
-                    .foregroundStyle(.secondary)
-
-                Text(linkedMessage?.displayText ?? "Original message")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(isOutgoing ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
-        .clipShape(.rect(cornerRadius: 8))
-    }
-}
-
-#Preview {
-    VStack {
-        MessageRowView(message: Message(
-            id: "msg-1",
-            chatID: "chat-1",
-            senderID: "@alice",
-            senderName: "Alice",
-            timestamp: .now,
-            sortKey: "1",
-            type: nil,
-            text: "Hello",
-            isSender: false,
-            attachments: nil,
-            isUnread: nil,
-            reactions: nil,
-            linkedMessageID: nil
-        ), chat: Chat(
-            id: "chat-1",
-            title: "General",
-            unreadCount: 0,
-            participants: nil,
-            preview: nil,
-            isMuted: nil,
-            type: "group",
-            isPinned: nil,
-            isArchived: nil,
-            accountID: nil,
-            lastActivity: nil,
-            lastReadMessageSortKey: nil
-        ))
-
-        MessageRowView(message: Message(
-            id: "msg-2",
-            chatID: "chat-1",
-            senderID: "@me",
-            senderName: "Me",
-            timestamp: .now,
-            sortKey: "2",
-            type: nil,
-            text: "Hey!",
-            isSender: true,
-            attachments: nil,
-            isUnread: nil,
-            reactions: nil,
-            linkedMessageID: nil
-        ), chat: Chat(
-            id: "chat-1",
-            title: "General",
-            unreadCount: 0,
-            participants: nil,
-            preview: nil,
-            isMuted: nil,
-            type: "group",
-            isPinned: nil,
-            isArchived: nil,
-            accountID: nil,
-            lastActivity: nil,
-            lastReadMessageSortKey: nil
-        ))
-    }
-    .padding()
 }

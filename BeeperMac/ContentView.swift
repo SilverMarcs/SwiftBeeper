@@ -1,15 +1,9 @@
-//
-//  ContentView.swift
-//  BeeperMac
-//
-//  Created by Zabir Raihan on 05/03/2026.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
+    @Environment(MessageStore.self) private var messageStore
 
     var body: some View {
         NavigationSplitView {
@@ -34,19 +28,20 @@ struct ContentView: View {
             await chatStore.updateAccessToken(sessionStore.accessToken)
         }
         .onChange(of: chatStore.selectedChatID) { _, newChatID in
-            guard let newChatID else {
-                return
-            }
+            chatStore.realtimeService.selectedChatID = newChatID
+            guard let newChatID else { return }
 
             Task {
-                await chatStore.loadMessagesIfNeeded(for: newChatID)
+                await messageStore.loadMessagesIfNeeded(for: newChatID)
             }
         }
     }
 }
 
 #Preview {
+    let chatStore = ChatStore()
     ContentView()
         .environment(SessionStore())
-        .environment(ChatStore())
+        .environment(chatStore)
+        .environment(chatStore.messageStore)
 }

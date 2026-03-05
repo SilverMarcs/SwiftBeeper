@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatDetailView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
+    @Environment(MessageStore.self) private var messageStore
     private let bottomAnchorID = "bottom-id"
 
     var body: some View {
@@ -13,7 +14,7 @@ struct ChatDetailView: View {
                 description: "Add a token in Settings first."
             )
         } else if let selectedChat = chatStore.selectedChat {
-            let messages = chatStore.messages(for: selectedChat.id)
+            let messages = messageStore.messages(for: selectedChat.id)
 
             ScrollViewReader { proxy in
                 let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
@@ -34,13 +35,13 @@ struct ChatDetailView: View {
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: -2, leading: 10, bottom: -2  , trailing: 10))
                     }
-                    
+
                     Color.clear
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
                 }
                 .task(id: selectedChat.id) {
-                    chatStore.setReplyTo(nil)
+                    messageStore.setReplyTo(nil)
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
                     await Task.yield()
                     scrollToBottom(with: proxy, animated: false)
@@ -94,7 +95,6 @@ struct ChatDetailView: View {
             return messages.first(where: { $0.sortKey > lastReadSortKey })?.id
         }
 
-        // Fallback: use isUnread from individual messages
         return messages.first(where: { $0.isUnread == true })?.id
     }
 

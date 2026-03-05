@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct MessageInputView: View {
     @Environment(ChatStore.self) private var chatStore
+    @Environment(MessageStore.self) private var messageStore
 
     @State private var draftMessage = ""
     @State private var showingFilePicker = false
@@ -37,7 +38,7 @@ struct MessageInputView: View {
     private var inputView: some View {
         GlassEffectContainer {
         VStack(spacing: 0) {
-            if let messagesError = chatStore.messagesError {
+            if let messagesError = messageStore.messagesError {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                     Text(messagesError)
@@ -49,7 +50,7 @@ struct MessageInputView: View {
                 .background(.red.opacity(0.12))
             }
 
-            if let editingMessage = chatStore.editingMessage {
+            if let editingMessage = messageStore.editingMessage {
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(Color.yellow)
@@ -70,7 +71,7 @@ struct MessageInputView: View {
                     Spacer()
 
                     Button {
-                        chatStore.cancelEditing()
+                        messageStore.cancelEditing()
                         draftMessage = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -84,7 +85,7 @@ struct MessageInputView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let replyMessage = chatStore.replyingToMessage {
+            if let replyMessage = messageStore.replyingToMessage {
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(Color.accentColor)
@@ -105,7 +106,7 @@ struct MessageInputView: View {
                     Spacer()
 
                     Button {
-                        chatStore.setReplyTo(nil)
+                        messageStore.setReplyTo(nil)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -118,7 +119,7 @@ struct MessageInputView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let pending = chatStore.pendingAttachment {
+            if let pending = messageStore.pendingAttachment {
                 HStack {
                     attachmentCard(pending)
                     Spacer()
@@ -155,7 +156,7 @@ struct MessageInputView: View {
 
                 if isEditing {
                     Button {
-                        chatStore.cancelEditing()
+                        messageStore.cancelEditing()
                         draftMessage = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -179,8 +180,8 @@ struct MessageInputView: View {
                     .onSubmit {
                         handleSubmit()
                     }
-                    .onChange(of: chatStore.editingMessage?.id) { _, newValue in
-                        if let editingMessage = chatStore.editingMessage {
+                    .onChange(of: messageStore.editingMessage?.id) { _, newValue in
+                        if let editingMessage = messageStore.editingMessage {
                             draftMessage = editingMessage.text ?? ""
                         } else if newValue == nil {
                             draftMessage = ""
@@ -226,13 +227,13 @@ struct MessageInputView: View {
     }
 
     private var isEditing: Bool {
-        chatStore.editingMessage != nil
+        messageStore.editingMessage != nil
     }
 
     private var sendButtonDisabled: Bool {
-        if chatStore.isSendingMessage { return true }
+        if messageStore.isSendingMessage { return true }
         if chatStore.selectedChat == nil { return true }
-        return trimmedDraftMessage.isEmpty && chatStore.pendingAttachment == nil
+        return trimmedDraftMessage.isEmpty && messageStore.pendingAttachment == nil
     }
 
     private var trimmedDraftMessage: String {
@@ -250,14 +251,15 @@ struct MessageInputView: View {
     private func sendMessage() {
         guard let chatID = chatStore.selectedChat?.id else { return }
         let text = trimmedDraftMessage
-        let attachment = chatStore.pendingAttachment
+        let attachment = messageStore.pendingAttachment
 
         guard !text.isEmpty || attachment != nil else { return }
 
         Task {
-            let didSend = await chatStore.sendMessage(text: text, attachment: attachment, to: chatID)
+            let didSend = await messageStore.sendMessage(text: text, attachment: attachment, to: chatID)
             if didSend {
                 draftMessage = ""
+                chatStore.scheduleRefreshAfterSend(chatID: chatID)
             }
         }
     }
@@ -266,9 +268,12 @@ struct MessageInputView: View {
         let text = trimmedDraftMessage
 
         Task {
-            let didSave = await chatStore.saveEdit(newText: text)
+            let didSave = await messageStore.saveEdit(newText: text)
             if didSave {
                 draftMessage = ""
+                if let chatID = chatStore.selectedChat?.id {
+                    chatStore.scheduleRefreshAfterSend(chatID: chatID)
+                }
             }
         }
     }
@@ -283,7 +288,7 @@ struct MessageInputView: View {
             let fileName = url.lastPathComponent
             let mimeType = mimeTypeForURL(url)
 
-            chatStore.pendingAttachment = PendingAttachment(
+            messageStore.pendingAttachment = PendingAttachment(
                 fileData: data,
                 fileName: fileName,
                 mimeType: mimeType
@@ -308,7 +313,7 @@ struct MessageInputView: View {
             fileName = "photo.jpg"
         }
 
-        chatStore.pendingAttachment = PendingAttachment(
+        messageStore.pendingAttachment = PendingAttachment(
             fileData: data,
             fileName: fileName,
             mimeType: mimeType
@@ -337,7 +342,7 @@ struct MessageInputView: View {
         .glassEffect(in: .rect(cornerRadius: 12))
         .overlay(alignment: .topTrailing) {
             Button {
-                chatStore.clearPendingAttachment()
+                messageStore.clearPendingAttachment()
             } label: {
                 Image(systemName: "xmark")
                     .font(.caption)
@@ -346,7 +351,7 @@ struct MessageInputView: View {
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .offset(x: 4, y: -4)
-            .disabled(chatStore.isSendingMessage)
+            .disabled(messageStore.isSendingMessage)
         }
     }
 

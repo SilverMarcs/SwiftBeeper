@@ -1,10 +1,3 @@
-//
-//  BeeperMacApp.swift
-//  BeeperMac
-//
-//  Created by Zabir Raihan on 05/03/2026.
-//
-
 import SwiftUI
 
 @main
@@ -17,6 +10,7 @@ struct BeeperMacApp: App {
             ContentView()
                 .environment(sessionStore)
                 .environment(chatStore)
+                .environment(chatStore.messageStore)
         }
 
         #if os(macOS)

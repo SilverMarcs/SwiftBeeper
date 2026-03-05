@@ -1,0 +1,232 @@
+import Foundation
+import Observation
+
+@Observable
+final class MessageStore {
+    private(set) var messagesByChatID: [String: [Message]] = [:]
+    private(set) var hasMoreMessagesByChatID: [String: Bool] = [:]
+    private(set) var isLoadingOlderMessages = false
+    private(set) var isLoadingMessages = false
+    private(set) var isSendingMessage = false
+    var messagesError: String?
+    private(set) var uploadProgress: Double?
+    var replyingToMessage: Message?
+    var editingMessage: Message?
+    var pendingAttachment: PendingAttachment?
+
+    var currentAccessToken = ""
+
+    func messages(for chatID: String) -> [Message] {
+        (messagesByChatID[chatID] ?? []).filter { !$0.isEmptyDeleted && !$0.isReaction }
+    }
+
+    func message(byID messageID: String, in chatID: String) -> Message? {
+        messagesByChatID[chatID]?.first(where: { $0.id == messageID })
+    }
+
+    func reset() {
+        messagesByChatID = [:]
+        hasMoreMessagesByChatID = [:]
+        messagesError = nil
+        replyingToMessage = nil
+        editingMessage = nil
+        pendingAttachment = nil
+        uploadProgress = nil
+    }
+
+    // MARK: - Loading
+
+    func loadMessagesIfNeeded(for chatID: String) async {
+        if messagesByChatID[chatID] != nil { return }
+        await loadMessages(for: chatID)
+    }
+
+    func loadMessages(for chatID: String) async {
+        guard !currentAccessToken.isEmpty else { return }
+
+        isLoadingMessages = true
+        messagesError = nil
+        defer { isLoadingMessages = false }
+
+        do {
+            let response = try await APIClient.listMessages(chatID: chatID, accessToken: currentAccessToken)
+            messagesByChatID[chatID] = response.items.sorted(by: { $0.sortKey < $1.sortKey })
+            hasMoreMessagesByChatID[chatID] = response.hasMore
+        } catch {
+            messagesError = error.localizedDescription
+        }
+    }
+
+    func loadOlderMessages(for chatID: String) async {
+        guard !currentAccessToken.isEmpty else { return }
+        guard hasMoreMessagesByChatID[chatID] == true else { return }
+        guard !isLoadingOlderMessages else { return }
+
+        guard let oldestMessage = messagesByChatID[chatID]?.first else { return }
+        let cursor = oldestMessage.sortKey
+
+        isLoadingOlderMessages = true
+        defer { isLoadingOlderMessages = false }
+
+        do {
+            let response = try await APIClient.listMessages(
+                chatID: chatID,
+                cursor: cursor,
+                direction: "before",
+                accessToken: currentAccessToken
+            )
+
+            let existingMessages = messagesByChatID[chatID] ?? []
+            let existingIDs = Set(existingMessages.map(\.id))
+            let newMessages = response.items.filter { !existingIDs.contains($0.id) }
+            let merged = (newMessages + existingMessages).sorted(by: { $0.sortKey < $1.sortKey })
+            messagesByChatID[chatID] = merged
+            hasMoreMessagesByChatID[chatID] = response.hasMore
+        } catch {
+            messagesError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Sending
+
+    func clearPendingAttachment() {
+        pendingAttachment = nil
+        uploadProgress = nil
+    }
+
+    func sendMessage(text: String, attachment: PendingAttachment?, to chatID: String) async -> Bool {
+        guard !currentAccessToken.isEmpty else { return false }
+
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasText = !trimmedText.isEmpty
+        let hasAttachment = attachment != nil
+
+        guard hasText || hasAttachment else { return false }
+
+        isSendingMessage = true
+        defer {
+            isSendingMessage = false
+            uploadProgress = nil
+        }
+
+        let replyToID = replyingToMessage?.id
+
+        do {
+            var attachmentInput: MessageAttachmentInput?
+
+            if let attachment {
+                uploadProgress = 0
+                let uploadResult = try await APIClient.uploadAsset(
+                    fileData: attachment.fileData,
+                    fileName: attachment.fileName,
+                    mimeType: attachment.mimeType,
+                    accessToken: currentAccessToken,
+                    onProgress: { [weak self] progress in
+                        Task { @MainActor in
+                            self?.uploadProgress = progress
+                        }
+                    }
+                )
+
+                if let error = uploadResult.error {
+                    messagesError = "Upload failed: \(error)"
+                    return false
+                }
+
+                var size: AttachmentSizeInput?
+                if let w = uploadResult.width, let h = uploadResult.height {
+                    size = AttachmentSizeInput(width: w, height: h)
+                }
+
+                attachmentInput = MessageAttachmentInput(
+                    uploadID: uploadResult.uploadID,
+                    mimeType: attachment.mimeType,
+                    fileName: attachment.fileName,
+                    size: size,
+                    duration: uploadResult.duration,
+                    type: nil
+                )
+            }
+
+            _ = try await APIClient.sendMessage(
+                chatID: chatID,
+                text: hasText ? trimmedText : nil,
+                replyToMessageID: replyToID,
+                attachment: attachmentInput,
+                accessToken: currentAccessToken
+            )
+            replyingToMessage = nil
+            pendingAttachment = nil
+            messagesError = nil
+            return true
+        } catch {
+            messagesError = error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - Reply / Edit
+
+    func setReplyTo(_ message: Message?) {
+        replyingToMessage = message
+    }
+
+    func startEditing(_ message: Message) {
+        guard message.isSender == true else { return }
+        guard Date().timeIntervalSince(message.timestamp) <= 15 * 60 else { return }
+        replyingToMessage = nil
+        editingMessage = message
+    }
+
+    func cancelEditing() {
+        editingMessage = nil
+    }
+
+    func saveEdit(newText: String) async -> Bool {
+        guard let message = editingMessage else { return false }
+        guard !currentAccessToken.isEmpty else { return false }
+
+        let trimmedText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return false }
+
+        isSendingMessage = true
+        defer { isSendingMessage = false }
+
+        do {
+            _ = try await APIClient.editMessage(
+                chatID: message.chatID,
+                messageID: message.id,
+                text: trimmedText,
+                accessToken: currentAccessToken
+            )
+            editingMessage = nil
+            messagesError = nil
+            return true
+        } catch {
+            messagesError = error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - Reactions
+
+    func addReaction(to messageID: String, in chatID: String, reactionKey: String) async {
+        guard !currentAccessToken.isEmpty else { return }
+
+        do {
+            _ = try await APIClient.addReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: currentAccessToken)
+        } catch {
+            messagesError = error.localizedDescription
+        }
+    }
+
+    func removeReaction(from messageID: String, in chatID: String, reactionKey: String) async {
+        guard !currentAccessToken.isEmpty else { return }
+
+        do {
+            _ = try await APIClient.removeReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: currentAccessToken)
+        } catch {
+            messagesError = error.localizedDescription
+        }
+    }
+}
