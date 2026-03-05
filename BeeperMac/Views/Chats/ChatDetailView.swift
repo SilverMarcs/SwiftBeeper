@@ -20,8 +20,7 @@ struct ChatDetailView: View {
                 MessageRowView(
                     message: message,
                     isOutgoing: isOutgoing(message),
-                    senderAvatarImageURL: senderAvatarImageURL(for: message),
-                    currentUserAvatarImageURL: currentUserAvatarImageURL
+                    senderAvatarImageURL: senderAvatarImageURL(for: message)
                 )
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
@@ -53,10 +52,6 @@ struct ChatDetailView: View {
                 description: Text("Select a chat from the sidebar to view messages.")
             )
         }
-    }
-
-    private var currentUserAvatarImageURL: String? {
-        currentParticipant?.imgURL
     }
 
     private var currentParticipant: ChatParticipant? {

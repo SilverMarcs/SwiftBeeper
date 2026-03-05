@@ -4,7 +4,6 @@ struct MessageRowView: View {
     let message: Message
     let isOutgoing: Bool
     let senderAvatarImageURL: String?
-    let currentUserAvatarImageURL: String?
 
     var body: some View {
         HStack(alignment: .bottom) {
@@ -27,15 +26,9 @@ struct MessageRowView: View {
                     .padding(.vertical, 8)
                     .background(isOutgoing ? Color.accentColor.opacity(0.20) : Color.gray.opacity(0.15))
                     .clipShape(.rect(cornerRadius: 12))
-
-                Text(message.timestampText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
-            if isOutgoing {
-                ProfileAvatarView(name: "You", imageURLString: currentUserAvatarImageURL, dimension: 28)
-            } else {
+            if isOutgoing == false {
                 Spacer(minLength: 0)
             }
         }
@@ -54,7 +47,7 @@ struct MessageRowView: View {
             sortKey: "1",
             text: "Hello",
             isSender: false
-        ), isOutgoing: false, senderAvatarImageURL: nil, currentUserAvatarImageURL: nil)
+        ), isOutgoing: false, senderAvatarImageURL: nil)
 
         MessageRowView(message: Message(
             id: "msg-2",
@@ -65,7 +58,7 @@ struct MessageRowView: View {
             sortKey: "2",
             text: "Hey!",
             isSender: true
-        ), isOutgoing: true, senderAvatarImageURL: nil, currentUserAvatarImageURL: nil)
+        ), isOutgoing: true, senderAvatarImageURL: nil)
     }
     .padding()
 }
