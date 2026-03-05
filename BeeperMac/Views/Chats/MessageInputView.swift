@@ -5,7 +5,31 @@ struct MessageInputView: View {
 
     @State private var draftMessage = ""
 
+    private var cannotMessage: Bool {
+        chatStore.selectedChat?.cannotMessage == true
+    }
+
     var body: some View {
+        if cannotMessage {
+            cannotMessageView
+        } else {
+            inputView
+        }
+    }
+
+    private var cannotMessageView: some View {
+        Text("You can't message this person")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .glassEffect()
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+    }
+
+    private var inputView: some View {
         VStack(spacing: 0) {
             if let messagesError = chatStore.messagesError {
                 HStack(spacing: 8) {
@@ -93,11 +117,12 @@ struct MessageInputView: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1 ... 4)
                     .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(.separator, lineWidth: 1)
-                    )
+                    .padding(.horizontal, 10)
+                    .glassEffect()
+//                    .overlay(
+//                        RoundedRectangle(cornerRadius: 20)
+//                            .stroke(.separator, lineWidth: 1)
+//                    )
                     .onSubmit {
                         handleSubmit()
                     }

@@ -51,6 +51,7 @@ struct ChatParticipant: Identifiable, Decodable {
     let fullName: String?
     let imgURL: String?
     let isSelf: Bool?
+    let cannotMessage: Bool?
 
     var displayName: String {
         if let fullName, fullName.isEmpty == false {
@@ -97,6 +98,11 @@ struct Chat: Identifiable, Decodable {
 
     var otherParticipant: ChatParticipant? {
         participants?.items.first(where: { $0.isSelf != true })
+    }
+
+    var cannotMessage: Bool {
+        guard isSingleChat else { return false }
+        return otherParticipant?.cannotMessage == true
     }
 
     func participant(with id: String) -> ChatParticipant? {
@@ -200,6 +206,7 @@ struct Message: Identifiable, Decodable {
     let text: String?
     let isSender: Bool?
     let attachments: [Attachment]?
+    let isUnread: Bool?
     let reactions: [Reaction]?
     let linkedMessageID: String?
 

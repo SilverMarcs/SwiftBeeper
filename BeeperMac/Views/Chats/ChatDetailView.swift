@@ -16,8 +16,16 @@ struct ChatDetailView: View {
             let messages = chatStore.messages(for: selectedChat.id)
 
             ScrollViewReader { proxy in
+                let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
+
                 List {
                     ForEach(messages) { message in
+                        if message.id == firstUnreadID {
+                            UnreadDividerView()
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
+                        }
+
                         MessageRowView(
                             message: message,
                             chat: selectedChat
@@ -79,8 +87,39 @@ struct ChatDetailView: View {
         }
     }
 
+    private func firstUnreadMessageID(messages: [Message], chat: Chat) -> String? {
+        guard chat.unreadCount > 0 else { return nil }
+
+        if let lastReadSortKey = chat.lastReadMessageSortKey {
+            return messages.first(where: { $0.sortKey > lastReadSortKey })?.id
+        }
+
+        // Fallback: use isUnread from individual messages
+        return messages.first(where: { $0.isUnread == true })?.id
+    }
+
     private func oneToOneParticipant(for chat: Chat) -> ChatParticipant? {
         guard chat.isSingleChat else { return nil }
         return chat.otherParticipant
+    }
+}
+
+private struct UnreadDividerView: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            line
+            Text("New Messages")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+            line
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var line: some View {
+        Rectangle()
+            .fill(.background.quinary)
+            .frame(height: 1)
     }
 }

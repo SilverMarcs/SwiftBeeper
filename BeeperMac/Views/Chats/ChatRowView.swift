@@ -104,6 +104,7 @@ struct ChatRowView: View {
                 text: "Are you free tomorrow?",
                 isSender: false,
                 attachments: nil,
+                isUnread: nil,
                 reactions: nil,
                 linkedMessageID: nil
             ),
@@ -132,6 +133,7 @@ struct ChatRowView: View {
                 text: "Hey",
                 isSender: false,
                 attachments: nil,
+                isUnread: nil,
                 reactions: nil,
                 linkedMessageID: nil
             ),

@@ -257,6 +257,7 @@ private struct ReplyPreviewView: View {
             text: "Hello",
             isSender: false,
             attachments: nil,
+            isUnread: nil,
             reactions: nil,
             linkedMessageID: nil
         ), chat: Chat(
@@ -285,6 +286,7 @@ private struct ReplyPreviewView: View {
             text: "Hey!",
             isSender: true,
             attachments: nil,
+            isUnread: nil,
             reactions: nil,
             linkedMessageID: nil
         ), chat: Chat(
