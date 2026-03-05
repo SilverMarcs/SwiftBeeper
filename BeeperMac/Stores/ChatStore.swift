@@ -27,6 +27,10 @@ enum InboxFilter: String, CaseIterable {
 final class ChatStore {
     private(set) var chats: [Chat] = []
     private(set) var messagesByChatID: [String: [Message]] = [:]
+    private(set) var hasMoreMessagesByChatID: [String: Bool] = [:]
+    private(set) var isLoadingOlderMessages = false
+    private(set) var hasMoreChats = false
+    private(set) var isLoadingMoreChats = false
     private(set) var isLoadingChats = false
     private(set) var isLoadingMessages = false
     private(set) var isSendingMessage = false
@@ -43,6 +47,7 @@ final class ChatStore {
     private var scheduledChatsRefreshTask: Task<Void, Never>?
     private var scheduledMessagesRefreshTasks: [String: Task<Void, Never>] = [:]
     private var lowPriorityChatIDs: Set<String> = []
+    private var chatsCursor: String?
     private var realtimeConnectionID = UUID()
     private var currentAccessToken = ""
 
@@ -93,6 +98,7 @@ final class ChatStore {
             stopRealtime()
             chats = []
             messagesByChatID = [:]
+            hasMoreMessagesByChatID = [:]
             selectedChatID = nil
             chatsError = nil
             messagesError = nil
@@ -111,14 +117,21 @@ final class ChatStore {
         guard !accessToken.isEmpty else {
             chats = []
             messagesByChatID = [:]
+            hasMoreMessagesByChatID = [:]
             selectedChatID = nil
             chatsError = nil
             messagesError = nil
+            chatsCursor = nil
+            hasMoreChats = false
             return
         }
 
         isLoadingChats = true
         defer { isLoadingChats = false }
+
+        // Reset pagination state on fresh load
+        chatsCursor = nil
+        hasMoreChats = false
 
         do {
             if selectedInboxFilter == .primary {
@@ -128,9 +141,13 @@ final class ChatStore {
                 let response = try await chatsResponse
                 lowPriorityChatIDs = await lowPriorityIDs
                 chats = response.items.filter { lowPriorityChatIDs.contains($0.id) == false }
+                chatsCursor = response.oldestCursor
+                hasMoreChats = response.hasMore ?? false
             } else {
                 let response = try await APIClient.searchChats(inbox: selectedInboxFilter.rawValue, accessToken: accessToken)
                 chats = response.items
+                chatsCursor = response.oldestCursor
+                hasMoreChats = response.hasMore
             }
             chatsError = nil
 
@@ -141,7 +158,50 @@ final class ChatStore {
             chatsError = error.localizedDescription
             chats = []
             messagesByChatID = [:]
+            hasMoreMessagesByChatID = [:]
             selectedChatID = nil
+            chatsCursor = nil
+            hasMoreChats = false
+        }
+    }
+
+    func loadMoreChats() async {
+        await loadMoreChats(accessToken: currentAccessToken)
+    }
+
+    func loadMoreChats(accessToken: String) async {
+        guard !accessToken.isEmpty else { return }
+        guard hasMoreChats, let cursor = chatsCursor else { return }
+        guard !isLoadingMoreChats else { return }
+
+        isLoadingMoreChats = true
+        defer { isLoadingMoreChats = false }
+
+        do {
+            let existingIDs = Set(chats.map(\.id))
+
+            if selectedInboxFilter == .primary {
+                let response = try await APIClient.listChats(cursor: cursor, direction: "before", accessToken: accessToken)
+                let newChats = response.items.filter {
+                    !existingIDs.contains($0.id) && !lowPriorityChatIDs.contains($0.id)
+                }
+                chats.append(contentsOf: newChats)
+                chatsCursor = response.oldestCursor
+                hasMoreChats = response.hasMore ?? false
+            } else {
+                let response = try await APIClient.searchChats(
+                    inbox: selectedInboxFilter.rawValue,
+                    cursor: cursor,
+                    direction: "before",
+                    accessToken: accessToken
+                )
+                let newChats = response.items.filter { !existingIDs.contains($0.id) }
+                chats.append(contentsOf: newChats)
+                chatsCursor = response.oldestCursor
+                hasMoreChats = response.hasMore
+            }
+        } catch {
+            // Silently fail on pagination errors; the user can scroll again to retry
         }
     }
 
@@ -173,6 +233,41 @@ final class ChatStore {
         do {
             let response = try await APIClient.listMessages(chatID: chatID, accessToken: accessToken)
             messagesByChatID[chatID] = response.items.sorted(by: { $0.sortKey < $1.sortKey })
+            hasMoreMessagesByChatID[chatID] = response.hasMore
+        } catch {
+            messagesError = error.localizedDescription
+        }
+    }
+
+    func loadOlderMessages(for chatID: String) async {
+        await loadOlderMessages(for: chatID, accessToken: currentAccessToken)
+    }
+
+    func loadOlderMessages(for chatID: String, accessToken: String) async {
+        guard !accessToken.isEmpty else { return }
+        guard hasMoreMessagesByChatID[chatID] == true else { return }
+        guard !isLoadingOlderMessages else { return }
+
+        guard let oldestMessage = messagesByChatID[chatID]?.first else { return }
+        let cursor = oldestMessage.sortKey
+
+        isLoadingOlderMessages = true
+        defer { isLoadingOlderMessages = false }
+
+        do {
+            let response = try await APIClient.listMessages(
+                chatID: chatID,
+                cursor: cursor,
+                direction: "before",
+                accessToken: accessToken
+            )
+
+            let existingMessages = messagesByChatID[chatID] ?? []
+            let existingIDs = Set(existingMessages.map(\.id))
+            let newMessages = response.items.filter { !existingIDs.contains($0.id) }
+            let merged = (newMessages + existingMessages).sorted(by: { $0.sortKey < $1.sortKey })
+            messagesByChatID[chatID] = merged
+            hasMoreMessagesByChatID[chatID] = response.hasMore
         } catch {
             messagesError = error.localizedDescription
         }

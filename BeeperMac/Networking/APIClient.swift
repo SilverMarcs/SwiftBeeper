@@ -6,8 +6,16 @@ private enum API {
 }
 
 enum APIClient {
-    static func listChats(accessToken: String) async throws -> ListChatsOutput {
-        try await get(path: "/v1/chats", accessToken: accessToken)
+    static func listChats(cursor: String? = nil, direction: String? = nil, accessToken: String) async throws -> ListChatsOutput {
+        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats"), resolvingAgainstBaseURL: false)!
+        var queryItems: [URLQueryItem] = []
+        if let cursor { queryItems.append(URLQueryItem(name: "cursor", value: cursor)) }
+        if let direction { queryItems.append(URLQueryItem(name: "direction", value: direction)) }
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        guard let url = components.url else {
+            throw APIError.invalidResponse
+        }
+        return try await get(url: url, accessToken: accessToken)
     }
 
     static func listLowPriorityChatIDs(accessToken: String) async throws -> Set<String> {
@@ -20,11 +28,13 @@ enum APIClient {
         return Set(response.items.map(\.id))
     }
 
-    static func searchChats(query: String? = nil, inbox: String? = nil, accessToken: String) async throws -> SearchChatsOutput {
+    static func searchChats(query: String? = nil, inbox: String? = nil, cursor: String? = nil, direction: String? = nil, accessToken: String) async throws -> SearchChatsOutput {
         var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = []
         if let query { queryItems.append(URLQueryItem(name: "query", value: query)) }
         if let inbox { queryItems.append(URLQueryItem(name: "inbox", value: inbox)) }
+        if let cursor { queryItems.append(URLQueryItem(name: "cursor", value: cursor)) }
+        if let direction { queryItems.append(URLQueryItem(name: "direction", value: direction)) }
         components.queryItems = queryItems.isEmpty ? nil : queryItems
         guard let url = components.url else {
             throw APIError.invalidResponse
@@ -32,8 +42,13 @@ enum APIClient {
         return try await get(url: url, accessToken: accessToken)
     }
 
-    static func listMessages(chatID: String, accessToken: String) async throws -> ListMessagesOutput {
-        guard let url = URL(string: "/v1/chats/\(chatID)/messages", relativeTo: API.baseURL) else {
+    static func listMessages(chatID: String, cursor: String? = nil, direction: String? = nil, accessToken: String) async throws -> ListMessagesOutput {
+        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/\(chatID)/messages"), resolvingAgainstBaseURL: false)!
+        var queryItems: [URLQueryItem] = []
+        if let cursor { queryItems.append(URLQueryItem(name: "cursor", value: cursor)) }
+        if let direction { queryItems.append(URLQueryItem(name: "direction", value: direction)) }
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        guard let url = components.url else {
             throw APIError.invalidResponse
         }
         return try await get(url: url, accessToken: accessToken)

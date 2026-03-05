@@ -38,8 +38,7 @@ struct MessageInputView: View {
                     .disabled(sendButtonDisabled)
             }
             .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 8)
+            .padding(.vertical, 10)
         }
     }
 

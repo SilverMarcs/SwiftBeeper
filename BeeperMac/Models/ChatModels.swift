@@ -2,15 +2,21 @@ import Foundation
 
 struct ListChatsOutput: Decodable {
     let items: [Chat]
+    let hasMore: Bool?
+    let oldestCursor: String?
+    let newestCursor: String?
 }
 
 struct SearchChatsOutput: Decodable {
     let items: [Chat]
     let hasMore: Bool
+    let oldestCursor: String?
+    let newestCursor: String?
 }
 
 struct ListMessagesOutput: Decodable {
     let items: [Message]
+    let hasMore: Bool
 }
 
 struct SendMessageOutput: Decodable {

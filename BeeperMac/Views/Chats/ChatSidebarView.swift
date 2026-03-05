@@ -26,6 +26,25 @@ struct ChatSidebarView: View {
                     ForEach(chatStore.displayedChats) { chat in
                         ChatRowView(chat: chat)
                             .tag(chat.id)
+                            .onAppear {
+                                if chat.id == chatStore.displayedChats.last?.id,
+                                   chatStore.hasMoreChats,
+                                   !chatStore.isLoadingMoreChats {
+                                    Task {
+                                        await chatStore.loadMoreChats()
+                                    }
+                                }
+                            }
+                    }
+
+                    if chatStore.isLoadingMoreChats {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                            Spacer()
+                        }
+                        .listRowSeparator(.hidden)
                     }
                 }
                 .searchable(text: $chatStore.searchQuery, placement: .sidebar, prompt: "Search chats")
