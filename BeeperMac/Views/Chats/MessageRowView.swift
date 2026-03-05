@@ -7,7 +7,7 @@ struct MessageRowView: View {
     var body: some View {
         HStack(alignment: .bottom) {
             if isOutgoing {
-                Spacer(minLength: 0)
+                Spacer(minLength: 40)
             } else if showIncomingIdentity {
                 ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
             }
@@ -36,7 +36,7 @@ struct MessageRowView: View {
             }
 
             if isOutgoing == false {
-                Spacer(minLength: 0)
+                Spacer(minLength: 40)
             }
         }
         .padding(.vertical, 4)

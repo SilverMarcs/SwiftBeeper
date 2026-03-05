@@ -42,6 +42,19 @@ struct ChatDetailView: View {
                     MessageInputView()
                 }
                 .navigationTitle(selectedChat.displayTitle)
+                .toolbar {
+                    if let otherParticipant = oneToOneParticipant(for: selectedChat) {
+                        ToolbarItem(placement: .navigation) {
+                            ProfileAvatarView(
+                                name: otherParticipant.displayName,
+                                imageURLString: otherParticipant.imgURL,
+                                dimension: 28
+                            )
+                            .accessibilityLabel("\(otherParticipant.displayName) avatar")
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    }
+                }
             }
         } else {
             ContentUnavailableView(
@@ -60,5 +73,21 @@ struct ChatDetailView: View {
         } else {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
+    }
+
+    private func oneToOneParticipant(for chat: Chat) -> ChatParticipant? {
+        guard let participants = chat.participants?.items, participants.count == 2 else {
+            return nil
+        }
+
+        if let participant = participants.first(where: { $0.isSelf == false }) {
+            return participant
+        }
+
+        if let selfParticipant = participants.first(where: { $0.isSelf == true }) {
+            return participants.first(where: { $0.id != selfParticipant.id })
+        }
+
+        return participants.first
     }
 }
