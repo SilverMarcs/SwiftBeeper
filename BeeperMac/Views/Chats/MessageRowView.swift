@@ -80,6 +80,7 @@ struct MessageRowView: View {
                     }
                 } label: {
                     Label("Reactions", systemImage: "face.smiling.inverse")
+                        .labelStyle(.titleAndIcon)
                 }
                 
                 Divider()
@@ -111,11 +112,7 @@ struct MessageRowView: View {
     }
 
     private var showIncomingIdentity: Bool {
-        guard let participantCount = chat.participants?.items.count else {
-            return true
-        }
-
-        return participantCount != 2
+        !chat.isSingleChat
     }
 
     private var senderAvatarImageURL: String? {
@@ -265,7 +262,13 @@ private struct ReplyPreviewView: View {
             unreadCount: 0,
             participants: nil,
             preview: nil,
-            isMuted: nil
+            isMuted: nil,
+            type: "group",
+            isPinned: nil,
+            isArchived: nil,
+            accountID: nil,
+            lastActivity: nil,
+            lastReadMessageSortKey: nil
         ))
 
         MessageRowView(message: Message(
@@ -286,7 +289,13 @@ private struct ReplyPreviewView: View {
             unreadCount: 0,
             participants: nil,
             preview: nil,
-            isMuted: nil
+            isMuted: nil,
+            type: "group",
+            isPinned: nil,
+            isArchived: nil,
+            accountID: nil,
+            lastActivity: nil,
+            lastReadMessageSortKey: nil
         ))
     }
     .padding()

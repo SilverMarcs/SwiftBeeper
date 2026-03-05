@@ -10,29 +10,42 @@ struct ChatRowView: View {
             ProfileAvatarView(name: avatarName, imageURLString: avatarImageURL, dimension: 36)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(chat.displayTitle)
-                    .font(.headline)
-                    .fontWeight(chat.unreadCount > 0 ? .bold : .regular)
-
-                if let previewText = chat.previewText {
-                    Text(previewText)
-                        .font(.subheadline)
-                        .foregroundStyle(chat.unreadCount > 0 ? .primary : .secondary)
-                        .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
+                HStack {
+                    Text(chat.displayTitle)
+                        .font(.headline)
+                        .fontWeight(chat.unreadCount > 0 ? .bold : .regular)
                         .lineLimit(1)
+
+                    Spacer()
+
+                    if let timeText = chat.lastActivityText {
+                        Text(timeText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
 
-            Spacer()
+                HStack {
+                    if let previewText = chat.previewText {
+                        Text(previewText)
+                            .font(.subheadline)
+                            .foregroundStyle(chat.unreadCount > 0 ? .primary : .secondary)
+                            .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
+                            .lineLimit(1)
+                    }
 
-            if chat.unreadCount > 0 {
-                Text(chat.unreadCount > 99 ? "99+" : "\(chat.unreadCount)")
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(chat.isMuted == true ? Color.secondary : Color.accentColor, in: Capsule())
+                    Spacer()
+
+                    if chat.unreadCount > 0 {
+                        Text(chat.unreadCount > 99 ? "99+" : "\(chat.unreadCount)")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(chat.isMuted == true ? Color.secondary : Color.accentColor, in: Capsule())
+                    }
+                }
             }
         }
         .padding(3)
@@ -93,7 +106,13 @@ struct ChatRowView: View {
                 reactions: nil,
                 linkedMessageID: nil
             ),
-            isMuted: false
+            isMuted: false,
+            type: "single",
+            isPinned: nil,
+            isArchived: nil,
+            accountID: nil,
+            lastActivity: .now.addingTimeInterval(-3600),
+            lastReadMessageSortKey: nil
         ))
 
         ChatRowView(chat: Chat(
@@ -114,7 +133,13 @@ struct ChatRowView: View {
                 reactions: nil,
                 linkedMessageID: nil
             ),
-            isMuted: true
+            isMuted: true,
+            type: "group",
+            isPinned: true,
+            isArchived: nil,
+            accountID: nil,
+            lastActivity: .now.addingTimeInterval(-86400),
+            lastReadMessageSortKey: nil
         ))
     }
     .environment(ChatStore())

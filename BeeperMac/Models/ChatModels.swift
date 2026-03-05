@@ -76,6 +76,16 @@ struct Chat: Identifiable, Decodable {
     let participants: ChatParticipants?
     let preview: Message?
     let isMuted: Bool?
+    let type: String?
+    let isPinned: Bool?
+    let isArchived: Bool?
+    let accountID: String?
+    let lastActivity: Date?
+    let lastReadMessageSortKey: String?
+
+    // TODO: use enum or boolean
+    var isSingleChat: Bool { type == "single" }
+    var isGroupChat: Bool { type == "group" }
 
     var displayTitle: String {
         title.isEmpty ? "Untitled Chat" : title
@@ -91,6 +101,38 @@ struct Chat: Identifiable, Decodable {
 
     func participant(with id: String) -> ChatParticipant? {
         participants?.items.first(where: { $0.id == id })
+    }
+
+    /// Merge detail-endpoint data into an existing chat, preserving fields the detail response may omit (e.g. preview).
+    func merging(detail: Chat) -> Chat {
+        Chat(
+            id: id,
+            title: detail.title,
+            unreadCount: detail.unreadCount,
+            participants: detail.participants ?? participants,
+            preview: preview ?? detail.preview,
+            isMuted: detail.isMuted ?? isMuted,
+            type: detail.type ?? type,
+            isPinned: detail.isPinned ?? isPinned,
+            isArchived: detail.isArchived ?? isArchived,
+            accountID: detail.accountID ?? accountID,
+            lastActivity: detail.lastActivity ?? lastActivity,
+            lastReadMessageSortKey: detail.lastReadMessageSortKey ?? lastReadMessageSortKey
+        )
+    }
+
+    var lastActivityText: String? {
+        guard let lastActivity else { return nil }
+        let calendar = Calendar.current
+        if calendar.isDateInToday(lastActivity) {
+            return lastActivity.formatted(date: .omitted, time: .shortened)
+        } else if calendar.isDateInYesterday(lastActivity) {
+            return "Yesterday"
+        } else if let daysAgo = calendar.dateComponents([.day], from: lastActivity, to: .now).day, daysAgo < 7 {
+            return lastActivity.formatted(.dateTime.weekday(.abbreviated))
+        } else {
+            return lastActivity.formatted(date: .numeric, time: .omitted)
+        }
     }
 }
 

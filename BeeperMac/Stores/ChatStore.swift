@@ -89,6 +89,19 @@ final class ChatStore {
         messagesByChatID[chatID] ?? []
     }
 
+    func loadChatDetail(for chatID: String) async {
+        guard !currentAccessToken.isEmpty else { return }
+
+        do {
+            let detail = try await APIClient.getChat(chatID: chatID, accessToken: currentAccessToken)
+            if let index = chats.firstIndex(where: { $0.id == chatID }) {
+                chats[index] = chats[index].merging(detail: detail)
+            }
+        } catch {
+            // Non-critical; we still have list data
+        }
+    }
+
     func updateAccessToken(_ accessToken: String) async {
         if accessToken == currentAccessToken {
             return

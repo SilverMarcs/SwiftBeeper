@@ -42,6 +42,11 @@ enum APIClient {
         return try await get(url: url, accessToken: accessToken)
     }
 
+    static func getChat(chatID: String, accessToken: String) async throws -> Chat {
+        let url = API.baseURL.appending(path: "/v1/chats/\(chatID)")
+        return try await get(url: url, accessToken: accessToken)
+    }
+
     static func listMessages(chatID: String, cursor: String? = nil, direction: String? = nil, accessToken: String) async throws -> ListMessagesOutput {
         var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/\(chatID)/messages"), resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = []

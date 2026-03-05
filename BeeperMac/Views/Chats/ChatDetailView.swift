@@ -24,7 +24,7 @@ struct ChatDetailView: View {
                         )
                         .id(message.id)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+                        .listRowInsets(EdgeInsets(top: -2, leading: 10, bottom: -2  , trailing: 10))
                     }
                     
                     Color.clear
@@ -33,8 +33,10 @@ struct ChatDetailView: View {
                 }
                 .task(id: selectedChat.id) {
                     chatStore.setReplyTo(nil)
+                    async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
                     await Task.yield()
                     scrollToBottom(with: proxy, animated: false)
+                    await detail
                 }
                 .onChange(of: messages.count) {
                     scrollToBottom(with: proxy, animated: true)
@@ -78,18 +80,7 @@ struct ChatDetailView: View {
     }
 
     private func oneToOneParticipant(for chat: Chat) -> ChatParticipant? {
-        guard let participants = chat.participants?.items, participants.count == 2 else {
-            return nil
-        }
-
-        if let participant = participants.first(where: { $0.isSelf == false }) {
-            return participant
-        }
-
-        if let selfParticipant = participants.first(where: { $0.isSelf == true }) {
-            return participants.first(where: { $0.id != selfParticipant.id })
-        }
-
-        return participants.first
+        guard chat.isSingleChat else { return nil }
+        return chat.otherParticipant
     }
 }
