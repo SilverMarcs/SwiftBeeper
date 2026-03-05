@@ -75,6 +75,7 @@ struct Chat: Identifiable, Decodable {
     let unreadCount: Int
     let participants: ChatParticipants?
     let preview: Message?
+    let isMuted: Bool?
 
     var displayTitle: String {
         title.isEmpty ? "Untitled Chat" : title

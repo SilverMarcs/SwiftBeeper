@@ -79,7 +79,7 @@ struct MessageRowView: View {
                         }
                     }
                 } label: {
-                    Text("Reactions")
+                    Label("Reactions", systemImage: "face.smiling.inverse")
                 }
                 
                 Divider()
@@ -264,7 +264,8 @@ private struct ReplyPreviewView: View {
             title: "General",
             unreadCount: 0,
             participants: nil,
-            preview: nil
+            preview: nil,
+            isMuted: nil
         ))
 
         MessageRowView(message: Message(
@@ -284,7 +285,8 @@ private struct ReplyPreviewView: View {
             title: "General",
             unreadCount: 0,
             participants: nil,
-            preview: nil
+            preview: nil,
+            isMuted: nil
         ))
     }
     .padding()

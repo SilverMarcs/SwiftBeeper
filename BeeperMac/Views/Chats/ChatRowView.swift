@@ -32,7 +32,7 @@ struct ChatRowView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.accentColor, in: Capsule())
+                    .background(chat.isMuted == true ? Color.secondary : Color.accentColor, in: Capsule())
             }
         }
         .padding(3)
@@ -92,27 +92,29 @@ struct ChatRowView: View {
                 attachments: nil,
                 reactions: nil,
                 linkedMessageID: nil
-            )
+            ),
+            isMuted: false
         ))
 
         ChatRowView(chat: Chat(
             id: "chat-1",
             title: "General",
-            unreadCount: 0,
-        participants: nil,
-        preview: Message(
-            id: "message-1",
-            chatID: "chat-1",
-            senderID: "alice",
-            senderName: "Alice",
-            timestamp: .now,
-            sortKey: "1",
-            text: "Hey",
-            isSender: false,
-            attachments: nil,
-            reactions: nil,
-            linkedMessageID: nil
-        )
+            unreadCount: 5,
+            participants: nil,
+            preview: Message(
+                id: "message-1",
+                chatID: "chat-1",
+                senderID: "alice",
+                senderName: "Alice",
+                timestamp: .now,
+                sortKey: "1",
+                text: "Hey",
+                isSender: false,
+                attachments: nil,
+                reactions: nil,
+                linkedMessageID: nil
+            ),
+            isMuted: true
         ))
     }
     .environment(ChatStore())
