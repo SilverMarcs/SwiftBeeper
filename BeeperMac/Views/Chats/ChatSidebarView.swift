@@ -15,9 +15,6 @@ struct ChatSidebarView: View {
                     description: "Open Settings and add your Beeper bearer token."
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if chatStore.isLoadingChats && chatStore.chats.isEmpty {
-                ProgressView("Loading chats...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let chatsError = chatStore.chatsError, chatStore.chats.isEmpty {
                 ContentUnavailableView(
                     "Could Not Load Chats",
@@ -29,12 +26,6 @@ struct ChatSidebarView: View {
                     ForEach(chatStore.chats) { chat in
                         ChatRowView(chat: chat)
                             .tag(chat.id)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if chatStore.isLoadingChats {
-                        ProgressView()
-                            .padding(.bottom, 12)
                     }
                 }
             }
