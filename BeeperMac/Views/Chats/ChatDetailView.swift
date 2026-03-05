@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatDetailView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
+    private let bottomAnchorID = "bottom-id"
 
     var body: some View {
         if sessionStore.accessToken.isEmpty {
@@ -12,19 +13,36 @@ struct ChatDetailView: View {
                 description: "Add a token in Settings first."
             )
         } else if let selectedChat = chatStore.selectedChat {
-            List(chatStore.messages(for: selectedChat.id)) { message in
-                MessageRowView(
-                    message: message,
-                    chat: selectedChat
-                )
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+            let messages = chatStore.messages(for: selectedChat.id)
+
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(messages) { message in
+                        MessageRowView(
+                            message: message,
+                            chat: selectedChat
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+                    }
+                    
+                    Color.clear
+                        .listRowInsets(.init())
+                        .id(bottomAnchorID)
+                }
+                .task(id: selectedChat.id) {
+                    await Task.yield()
+                    scrollToBottom(with: proxy, animated: false)
+                }
+                .onChange(of: messages.count) {
+                    scrollToBottom(with: proxy, animated: true)
+                }
+                .listStyle(.plain)
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    MessageInputView()
+                }
+                .navigationTitle(selectedChat.displayTitle)
             }
-            .listStyle(.plain)
-            .safeAreaBar(edge: .bottom, spacing: 0) {
-                MessageInputView()
-            }
-            .navigationTitle(selectedChat.displayTitle)
         } else {
             ContentUnavailableView(
                 "Pick a Chat",
@@ -34,4 +52,13 @@ struct ChatDetailView: View {
         }
     }
 
+    private func scrollToBottom(with proxy: ScrollViewProxy, animated: Bool) {
+        if animated {
+            withAnimation {
+                proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
+    }
 }

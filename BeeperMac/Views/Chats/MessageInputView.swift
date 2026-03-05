@@ -29,6 +29,9 @@ struct MessageInputView: View {
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(.separator, lineWidth: 1)
                     )
+                    .onSubmit {
+                        sendMessage()
+                    }
 
                 Button("Send", systemImage: "arrow.up", action: sendMessage)
                     .buttonStyle(.borderedProminent)

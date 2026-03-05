@@ -19,6 +19,7 @@ struct ChatRowView: View {
                 }
             }
         }
+        .padding(3)
     }
 
     private var avatarName: String {
