@@ -87,6 +87,22 @@ final class MessageStore {
         }
     }
 
+    // MARK: - Direct upsert / delete (from WebSocket payloads)
+
+    func upsertMessages(_ newMessages: [Message], for chatID: String) {
+        let existing = messagesByChatID[chatID] ?? []
+        var merged = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+        for msg in newMessages {
+            merged[msg.id] = msg
+        }
+        messagesByChatID[chatID] = merged.values.sorted(by: { $0.sortKey < $1.sortKey })
+    }
+
+    func deleteMessages(ids: [String], from chatID: String) {
+        let idsToRemove = Set(ids)
+        messagesByChatID[chatID]?.removeAll { idsToRemove.contains($0.id) }
+    }
+
     // MARK: - Sending
 
     func clearPendingAttachment() {

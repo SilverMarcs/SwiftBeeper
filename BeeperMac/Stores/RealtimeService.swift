@@ -15,6 +15,11 @@ final class RealtimeService {
     @ObservationIgnored var onRefreshMessages: (@Sendable (String) async -> Void)?
     @ObservationIgnored var onRealtimeError: (@Sendable (String) -> Void)?
 
+    @ObservationIgnored var onChatsUpserted: (@Sendable ([Chat]) async -> Void)?
+    @ObservationIgnored var onChatsDeleted: (@Sendable ([String]) async -> Void)?
+    @ObservationIgnored var onMessagesUpserted: (@Sendable (String, [Message]) async -> Void)?
+    @ObservationIgnored var onMessagesDeleted: (@Sendable (String, [String]) async -> Void)?
+
     /// Which chatID is currently selected (used to decide whether to refresh messages).
     var selectedChatID: String?
     /// Which chatIDs have loaded messages (used to decide whether to refresh messages).
@@ -125,17 +130,44 @@ final class RealtimeService {
             if let message = envelope.message {
                 onRealtimeError?("Realtime error: \(message)")
             }
-        case "chat.upserted", "chat.deleted":
-            scheduleChatsRefresh()
-        case "message.upserted", "message.deleted":
+        case "chat.upserted":
+            if let chats = (try? JSONDecoder.beeper.decode(ChatEventPayload.self, from: data))?.entries, !chats.isEmpty {
+                await onChatsUpserted?(chats)
+            } else {
+                scheduleChatsRefresh()
+            }
+        case "chat.deleted":
+            if let ids = envelope.ids, !ids.isEmpty {
+                await onChatsDeleted?(ids)
+            } else {
+                scheduleChatsRefresh()
+            }
+        case "message.upserted":
+            // Chat list still needs updating for preview/unread changes
             scheduleChatsRefresh()
 
             guard let chatID = envelope.chatID else { return }
-
             let loadedIDs = loadedMessageChatIDs?() ?? []
             let shouldRefreshMessages = selectedChatID == chatID || loadedIDs.contains(chatID)
             if shouldRefreshMessages {
-                scheduleMessagesRefresh(chatID: chatID)
+                if let messages = (try? JSONDecoder.beeper.decode(MessageEventPayload.self, from: data))?.entries, !messages.isEmpty {
+                    await onMessagesUpserted?(chatID, messages)
+                } else {
+                    scheduleMessagesRefresh(chatID: chatID)
+                }
+            }
+        case "message.deleted":
+            scheduleChatsRefresh()
+
+            guard let chatID = envelope.chatID else { return }
+            let loadedIDs = loadedMessageChatIDs?() ?? []
+            let shouldRefreshMessages = selectedChatID == chatID || loadedIDs.contains(chatID)
+            if shouldRefreshMessages {
+                if let ids = envelope.ids, !ids.isEmpty {
+                    await onMessagesDeleted?(chatID, ids)
+                } else {
+                    scheduleMessagesRefresh(chatID: chatID)
+                }
             }
         default:
             break
@@ -182,6 +214,15 @@ private struct WebSocketEnvelope: Decodable {
     let requestID: String?
     let chatID: String?
     let message: String?
+    let ids: [String]?
+}
+
+private struct ChatEventPayload: Decodable {
+    let entries: [Chat]?
+}
+
+private struct MessageEventPayload: Decodable {
+    let entries: [Message]?
 }
 
 private struct SubscriptionsSetCommand: Encodable {

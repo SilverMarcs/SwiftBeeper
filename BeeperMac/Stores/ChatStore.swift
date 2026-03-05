@@ -56,6 +56,18 @@ final class ChatStore {
                 messageStore?.messagesError = error
             }
         }
+        realtimeService.onChatsUpserted = { [weak self] chats in
+            await MainActor.run { self?.upsertChats(chats) }
+        }
+        realtimeService.onChatsDeleted = { [weak self] ids in
+            await MainActor.run { self?.deleteChats(ids: ids) }
+        }
+        realtimeService.onMessagesUpserted = { [weak messageStore] chatID, messages in
+            await MainActor.run { messageStore?.upsertMessages(messages, for: chatID) }
+        }
+        realtimeService.onMessagesDeleted = { [weak messageStore] chatID, ids in
+            await MainActor.run { messageStore?.deleteMessages(ids: ids, from: chatID) }
+        }
         realtimeService.loadedMessageChatIDs = { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return [] }
@@ -207,6 +219,31 @@ final class ChatStore {
             }
         } catch {
             // Silently fail on pagination errors; the user can scroll again to retry
+        }
+    }
+
+    // MARK: - Direct upsert / delete (from WebSocket payloads)
+
+    func upsertChats(_ updatedChats: [Chat]) {
+        var current = chats
+        for chat in updatedChats {
+            if selectedInboxFilter == .primary && lowPriorityChatIDs.contains(chat.id) {
+                continue
+            }
+            if let index = current.firstIndex(where: { $0.id == chat.id }) {
+                current[index] = current[index].merging(detail: chat)
+            } else {
+                current.append(chat)
+            }
+        }
+        chats = current.sorted { ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast) }
+    }
+
+    func deleteChats(ids: [String]) {
+        let idsToRemove = Set(ids)
+        chats.removeAll { idsToRemove.contains($0.id) }
+        if let selectedChatID, idsToRemove.contains(selectedChatID) {
+            self.selectedChatID = chats.first?.id
         }
     }
 
