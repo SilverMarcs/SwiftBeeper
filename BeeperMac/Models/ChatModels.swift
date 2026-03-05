@@ -248,6 +248,11 @@ struct Message: Identifiable, Decodable {
 
     var isReaction: Bool { type == "REACTION" }
 
+    var isMembershipEvent: Bool {
+        guard let text = text?.lowercased() else { return false }
+        return text.contains("joined the chat") || text.contains("was invited to the chat")
+    }
+
     var senderDisplayName: String {
         if let senderName, senderName.isEmpty == false {
             return senderName

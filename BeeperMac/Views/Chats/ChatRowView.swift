@@ -6,7 +6,7 @@ struct ChatRowView: View {
     let chat: Chat
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
             ProfileAvatarView(name: avatarName, imageURLString: avatarImageURL, dimension: 42)
 
             VStack(alignment: .leading, spacing: 4) {
