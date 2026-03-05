@@ -6,13 +6,29 @@ struct MessageInputView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(MessageStore.self) private var messageStore
 
-    @State private var draftMessage = ""
+    @State private var draftMessagesByChatID: [String: String] = [:]
     @State private var showingFilePicker = false
     @State private var showingPhotoPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @FocusState private var isMessageFieldFocused: Bool
 
     private var cannotMessage: Bool {
         chatStore.selectedChat?.cannotMessage == true
+    }
+
+    private var selectedChatID: String? {
+        chatStore.selectedChat?.id
+    }
+
+    private var draftMessage: String {
+        get {
+            guard let selectedChatID else { return "" }
+            return draftMessagesByChatID[selectedChatID] ?? ""
+        }
+        nonmutating set {
+            guard let selectedChatID else { return }
+            draftMessagesByChatID[selectedChatID] = newValue
+        }
     }
 
     var body: some View {
@@ -171,8 +187,16 @@ struct MessageInputView: View {
                 }
 
                 // Text field with glass effect
-                TextField("Message", text: $draftMessage, axis: .vertical)
+                TextField(
+                    "Message",
+                    text: Binding(
+                        get: { draftMessage },
+                        set: { draftMessage = $0 }
+                    ),
+                    axis: .vertical
+                )
                     .textFieldStyle(.plain)
+                    .focused($isMessageFieldFocused)
                     .lineLimit(1 ... 4)
                     .padding(.horizontal, 4)
                     .padding(8)
@@ -203,6 +227,7 @@ struct MessageInputView: View {
                 .offset(y: -2)
             }
             .padding(8)
+            .padding(.horizontal, 2)
         }
         .fixedSize(horizontal: false, vertical: true)
         }
@@ -223,6 +248,12 @@ struct MessageInputView: View {
                 await handlePhotoPick(newItem)
             }
             selectedPhotoItem = nil
+        }
+        .onAppear {
+            focusMessageField()
+        }
+        .onChange(of: chatStore.selectedChat?.id) { _, _ in
+            focusMessageField()
         }
     }
 
@@ -254,27 +285,54 @@ struct MessageInputView: View {
         let attachment = messageStore.pendingAttachment
 
         guard !text.isEmpty || attachment != nil else { return }
+        let previousDraft = draftMessage
+        clearDraft(for: chatID)
 
         Task {
             let didSend = await messageStore.sendMessage(text: text, attachment: attachment, to: chatID)
             if didSend {
-                draftMessage = ""
                 chatStore.scheduleRefreshAfterSend(chatID: chatID)
+            } else if (draftMessagesByChatID[chatID] ?? "").isEmpty {
+                draftMessagesByChatID[chatID] = previousDraft
             }
         }
     }
 
     private func saveEdit() {
         let text = trimmedDraftMessage
+        let editingChatID = messageStore.editingMessage?.chatID
+        let previousDraft = draftMessage
+        if let editingChatID {
+            clearDraft(for: editingChatID)
+        }
 
         Task {
             let didSave = await messageStore.saveEdit(newText: text)
             if didSave {
-                draftMessage = ""
+                if let chatID = chatStore.selectedChat?.id {
+                    clearDraft(for: chatID)
+                }
                 if let chatID = chatStore.selectedChat?.id {
                     chatStore.scheduleRefreshAfterSend(chatID: chatID)
                 }
+            } else if
+                let editingChatID,
+                (draftMessagesByChatID[editingChatID] ?? "").isEmpty
+            {
+                draftMessagesByChatID[editingChatID] = previousDraft
             }
+        }
+    }
+
+    private func clearDraft(for chatID: String) {
+        draftMessagesByChatID[chatID] = nil
+    }
+
+    private func focusMessageField() {
+        guard !cannotMessage else { return }
+        Task { @MainActor in
+            await Task.yield()
+            isMessageFieldFocused = true
         }
     }
 

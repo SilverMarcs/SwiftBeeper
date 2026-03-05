@@ -42,7 +42,7 @@ struct ImageAttachmentView: View {
         }
         .sheet(isPresented: $showFullImage) {
             if let loadedImage {
-                FullImageSheet(image: loadedImage, fileName: attachment.fileName)
+                FullImageSheet(image: loadedImage)
             }
         }
     }
@@ -59,7 +59,6 @@ struct ImageAttachmentView: View {
 
 private struct FullImageSheet: View {
     let image: Image
-    let fileName: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
