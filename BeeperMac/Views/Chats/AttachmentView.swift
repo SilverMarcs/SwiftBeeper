@@ -29,46 +29,27 @@ struct AttachmentView: View {
             if let loadedImage {
                 loadedImage
                     .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 300, maxHeight: 300)
+                    .scaledToFill()
+                    .frame(maxWidth: 300, maxHeight: 500)
+                    .clipped()
                     .clipShape(.rect(cornerRadius: 12))
             } else if isLoading {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.background.secondary)
-                    .frame(width: imageFrameWidth, height: imageFrameHeight)
-                    .overlay {
-                        ProgressView()
-                    }
+                ProgressView()
+                    .frame(width: 150, height: 100)
+                    .background(.background.secondary)
+                    .clipShape(.rect(cornerRadius: 12))
             } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.background.secondary)
-                    .frame(width: imageFrameWidth, height: imageFrameHeight)
-                    .overlay {
-                        Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
-                            .font(.title2)
-                    }
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+                    .font(.title2)
+                    .frame(width: 150, height: 100)
+                    .background(.background.secondary)
+                    .clipShape(.rect(cornerRadius: 12))
             }
         }
         .task(id: imageRequestKey) {
             await loadImage()
         }
-    }
-
-    private var imageFrameWidth: CGFloat {
-        if let size = attachment.size, let w = size.width, w > 0 {
-            return min(300, CGFloat(w)).rounded()
-        }
-        return 200
-    }
-
-    private var imageFrameHeight: CGFloat {
-        if let size = attachment.size, let w = size.width, let h = size.height, w > 0, h > 0 {
-            let displayWidth = min(300, CGFloat(w))
-            let aspect = CGFloat(w) / CGFloat(h)
-            return (displayWidth / aspect).rounded()
-        }
-        return 150
     }
 
     private var imageRequestKey: String {
