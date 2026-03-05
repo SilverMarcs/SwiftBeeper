@@ -11,7 +11,7 @@ struct MessageRowView: View {
     var body: some View {
         HStack(alignment: .bottom) {
             if isOutgoing {
-                Spacer(minLength: 40)
+                Spacer(minLength: 100)
             } else if showIncomingIdentity {
                 ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
             }
@@ -102,7 +102,7 @@ struct MessageRowView: View {
             }
 
             if isOutgoing == false {
-                Spacer(minLength: 40)
+                Spacer(minLength: 100)
             }
         }
         .padding(.vertical, 4)
@@ -253,6 +253,7 @@ private struct ReplyPreviewView: View {
             senderName: "Alice",
             timestamp: .now,
             sortKey: "1",
+            type: nil,
             text: "Hello",
             isSender: false,
             attachments: nil,
@@ -280,6 +281,7 @@ private struct ReplyPreviewView: View {
             senderName: "Me",
             timestamp: .now,
             sortKey: "2",
+            type: nil,
             text: "Hey!",
             isSender: true,
             attachments: nil,

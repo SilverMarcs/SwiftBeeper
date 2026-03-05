@@ -196,11 +196,14 @@ struct Message: Identifiable, Decodable {
     let senderName: String?
     let timestamp: Date
     let sortKey: String
+    let type: String?
     let text: String?
     let isSender: Bool?
     let attachments: [Attachment]?
     let reactions: [Reaction]?
     let linkedMessageID: String?
+
+    var isReaction: Bool { type == "REACTION" }
 
     var senderDisplayName: String {
         if let senderName, senderName.isEmpty == false {
@@ -210,6 +213,15 @@ struct Message: Identifiable, Decodable {
     }
 
     var displayText: String {
+        if isReaction {
+            let emoji = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let name = senderDisplayName
+            if emoji.isEmpty {
+                return "Reacted to a message"
+            }
+            return "\(name) reacted \(emoji)"
+        }
+
         let text = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let text, text.isEmpty == false {
             return text
