@@ -7,12 +7,12 @@ struct ChatRowView: View {
 
     var body: some View {
         HStack {
-            ProfileAvatarView(name: avatarName, imageURLString: avatarImageURL, dimension: 36)
+            ProfileAvatarView(name: avatarName, imageURLString: avatarImageURL, dimension: 42)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(chat.displayTitle)
-                        .font(.headline)
+                        .font(.body)
                         .fontWeight(chat.unreadCount > 0 ? .bold : .regular)
                         .lineLimit(1)
 
@@ -20,7 +20,7 @@ struct ChatRowView: View {
 
                     if let timeText = chat.lastActivityText {
                         Text(timeText)
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -28,7 +28,7 @@ struct ChatRowView: View {
                 HStack {
                     if let previewText = chat.previewText {
                         Text(previewText)
-                            .font(.subheadline)
+                            .font(.body)
                             .foregroundStyle(chat.unreadCount > 0 ? .primary : .secondary)
                             .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
                             .lineLimit(1)
@@ -38,7 +38,7 @@ struct ChatRowView: View {
 
                     if chat.unreadCount > 0 {
                         Text(chat.unreadCount > 99 ? "99+" : "\(chat.unreadCount)")
-                            .font(.caption2)
+                            .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)

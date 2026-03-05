@@ -30,6 +30,7 @@ struct MessageInputView: View {
     }
 
     private var inputView: some View {
+        GlassEffectContainer {
         VStack(spacing: 0) {
             if let messagesError = chatStore.messagesError {
                 HStack(spacing: 8) {
@@ -112,17 +113,42 @@ struct MessageInputView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .bottom) {
+                // Plus button
+                Button {
+                    // TODO: Implement attachment menu
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.secondary, .clear)
+                        .font(.largeTitle).fontWeight(.semibold)
+                        .glassEffect()
+                }
+                .buttonStyle(.plain)
+                .offset(y: -1)
+
+                if isEditing {
+                    Button {
+                        chatStore.cancelEditing()
+                        draftMessage = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.largeTitle).fontWeight(.semibold)
+                            .foregroundStyle(.white.opacity(0.7), .clear)
+                            .glassEffect(.regular.tint(.red.opacity(0.6)))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+                    .offset(y: -1)
+                    .scaleEffect(0.9)
+                }
+
+                // Text field with glass effect
                 TextField("Message", text: $draftMessage, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1 ... 4)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .glassEffect()
-//                    .overlay(
-//                        RoundedRectangle(cornerRadius: 20)
-//                            .stroke(.separator, lineWidth: 1)
-//                    )
+                    .padding(.horizontal, 4)
+                    .padding(8)
+                    .glassEffect(in: .rect(cornerRadius: 16))
                     .onSubmit {
                         handleSubmit()
                     }
@@ -134,26 +160,24 @@ struct MessageInputView: View {
                         }
                     }
 
-                if isEditing {
-                    Button("Save", systemImage: "checkmark", action: handleSubmit)
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
-                        .labelStyle(.iconOnly)
-                        .disabled(sendButtonDisabled)
-                } else {
-                    Button("Send", systemImage: "arrow.up", action: handleSubmit)
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
-                        .labelStyle(.iconOnly)
-                        .disabled(sendButtonDisabled)
+                // Send/Save button
+                Button {
+                    handleSubmit()
+                } label: {
+                    Image(systemName: isEditing ? "checkmark" : "arrow.up")
+                        .font(.system(size: 15)).fontWeight(.bold)
                 }
+                .opacity(0.85)
+                .controlSize(.large)
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+//                .disabled(sendButtonDisabled)
+                .offset(y: -2)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
+            .padding(8)
         }
         .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var isEditing: Bool {
