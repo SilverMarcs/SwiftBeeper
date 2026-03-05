@@ -105,7 +105,6 @@ struct MessageRowView: View {
                 Spacer(minLength: 100)
             }
         }
-        .padding(.vertical, 4)
     }
 
     private var currentParticipant: ChatParticipant? {

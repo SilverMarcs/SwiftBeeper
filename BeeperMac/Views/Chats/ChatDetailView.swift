@@ -34,7 +34,7 @@ struct ChatDetailView: View {
                         )
                         .id(message.id)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: -2, leading: 10, bottom: -2  , trailing: 10))
+                        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2  , trailing: 10))
                     }
 
                     Color.clear
