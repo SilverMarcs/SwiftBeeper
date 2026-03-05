@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct BeeperMacApp: App {
+struct SwiftBeeperApp: App {
     @State private var sessionStore = SessionStore()
     @State private var chatStore = ChatStore()
 

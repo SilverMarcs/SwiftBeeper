@@ -7,14 +7,14 @@ struct SettingsView: View {
         @Bindable var sessionStore = sessionStore
 
         Form {
-            Section("Beeper API") {
+            Section {
                 SecureField("Bearer token", text: $sessionStore.accessToken)
-                    .textFieldStyle(.roundedBorder)
-
+            } header: {
+                Text("Beeper API")
+            } footer: {
                 Text("Use the token for localhost:23373 API requests.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
+            }
+            .sectionActions {
                 Button("Clear Token", role: .destructive) {
                     sessionStore.clearToken()
                 }

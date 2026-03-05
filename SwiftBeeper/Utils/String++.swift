@@ -1,6 +1,6 @@
 //
 //  String++.swift
-//  BeeperMac
+//  SwiftBeeper
 //
 //  Created by Zabir Raihan on 05/03/2026.
 //

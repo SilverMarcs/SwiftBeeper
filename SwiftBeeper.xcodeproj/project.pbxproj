@@ -11,14 +11,14 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0865737D2F58F64E0084BD91 /* BeeperMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BeeperMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0865737D2F58F64E0084BD91 /* SwiftBeeper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftBeeper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		0865737F2F58F64E0084BD91 /* BeeperMac */ = {
+		0865737F2F58F64E0084BD91 /* SwiftBeeper */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = BeeperMac;
+			path = SwiftBeeper;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -38,7 +38,7 @@
 		086573742F58F64E0084BD91 = {
 			isa = PBXGroup;
 			children = (
-				0865737F2F58F64E0084BD91 /* BeeperMac */,
+				0865737F2F58F64E0084BD91 /* SwiftBeeper */,
 				08A6E00E2F5975A200A2ECF4 /* Frameworks */,
 				0865737E2F58F64E0084BD91 /* Products */,
 			);
@@ -47,7 +47,7 @@
 		0865737E2F58F64E0084BD91 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				0865737D2F58F64E0084BD91 /* BeeperMac.app */,
+				0865737D2F58F64E0084BD91 /* SwiftBeeper.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -63,9 +63,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		0865737C2F58F64E0084BD91 /* BeeperMac */ = {
+		0865737C2F58F64E0084BD91 /* SwiftBeeper */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "BeeperMac" */;
+			buildConfigurationList = 086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "SwiftBeeper" */;
 			buildPhases = (
 				086573792F58F64E0084BD91 /* Sources */,
 				0865737A2F58F64E0084BD91 /* Frameworks */,
@@ -76,13 +76,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				0865737F2F58F64E0084BD91 /* BeeperMac */,
+				0865737F2F58F64E0084BD91 /* SwiftBeeper */,
 			);
-			name = BeeperMac;
+			name = SwiftBeeper;
 			packageProductDependencies = (
 			);
-			productName = BeeperMac;
-			productReference = 0865737D2F58F64E0084BD91 /* BeeperMac.app */;
+			productName = SwiftBeeper;
+			productReference = 0865737D2F58F64E0084BD91 /* SwiftBeeper.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -100,7 +100,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 086573782F58F64E0084BD91 /* Build configuration list for PBXProject "BeeperMac" */;
+			buildConfigurationList = 086573782F58F64E0084BD91 /* Build configuration list for PBXProject "SwiftBeeper" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -114,7 +114,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				0865737C2F58F64E0084BD91 /* BeeperMac */,
+				0865737C2F58F64E0084BD91 /* SwiftBeeper */,
 			);
 		};
 /* End PBXProject section */
@@ -294,7 +294,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mush.BeeperMac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mush.SwiftBeeper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -348,7 +348,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mush.BeeperMac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mush.SwiftBeeper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -367,7 +367,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		086573782F58F64E0084BD91 /* Build configuration list for PBXProject "BeeperMac" */ = {
+		086573782F58F64E0084BD91 /* Build configuration list for PBXProject "SwiftBeeper" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				086573862F58F64F0084BD91 /* Debug */,
@@ -376,7 +376,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "BeeperMac" */ = {
+		086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "SwiftBeeper" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				086573892F58F64F0084BD91 /* Debug */,

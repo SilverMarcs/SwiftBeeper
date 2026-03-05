@@ -3,7 +3,7 @@ import Security
 
 final class KeychainManager {
     static let shared = KeychainManager()
-    private let service = "com.beeper.desktop.BeeperMac"
+    private let service = "com.beeper.desktop.SwiftBeeper"
 
     private init() {}
 
