@@ -63,6 +63,12 @@ struct MessageRowView: View {
                 }
             }
             .contextMenu {
+                Section {
+                    EmptyView()
+                } header: {
+                    Text(message.timestampText)
+                }
+
                 ControlGroup {
                     ForEach(Self.commonReactions, id: \.self) { emoji in
                         Button {

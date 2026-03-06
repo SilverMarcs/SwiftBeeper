@@ -16,27 +16,33 @@ struct ChatDetailView: View {
             )
         } else if let selectedChat = chatStore.selectedChat {
             let messages = messageStore.messages(for: selectedChat.id)
+            let timelineEntries = timelineEntries(for: messages)
 
             ScrollViewReader { proxy in
                 let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
 
                 List {
-                    ForEach(messages) { message in
-                        if message.id == firstUnreadID {
+                    ForEach(timelineEntries) { entry in
+                        if entry.message.id == firstUnreadID {
                             UnreadDividerView()
-                                .transition(.opacity)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
                         }
 
+                        if entry.showsTimestamp {
+                            TimestampDividerView(timestamp: entry.message.timestamp)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 6, trailing: 10))
+                        }
+
                         MessageRowView(
-                            message: message,
+                            message: entry.message,
                             chat: selectedChat
                         )
-                        .id(message.id)
+                        .id(entry.message.id)
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button("Reply", systemImage: "arrowshape.turn.up.left") {
-                                messageStore.setReplyTo(message)
+                                messageStore.setReplyTo(entry.message)
                             }
                             .tint(.accentColor)
                             .labelStyle(.iconOnly)
@@ -123,6 +129,34 @@ struct ChatDetailView: View {
         guard chat.isSingleChat else { return nil }
         return chat.otherParticipant
     }
+
+    private func timelineEntries(for messages: [Message]) -> [TimelineEntry] {
+        var previousMessage: Message?
+
+        return messages.map { message in
+            let showsTimestamp = shouldShowTimestamp(before: message, previousMessage: previousMessage)
+            previousMessage = message
+            return TimelineEntry(message: message, showsTimestamp: showsTimestamp)
+        }
+    }
+
+    private func shouldShowTimestamp(before message: Message, previousMessage: Message?) -> Bool {
+        guard let previousMessage else { return true }
+
+        let calendar = Calendar.current
+        if calendar.isDate(message.timestamp, inSameDayAs: previousMessage.timestamp) == false {
+            return true
+        }
+
+        return message.timestamp.timeIntervalSince(previousMessage.timestamp) >= 30 * 60
+    }
+}
+
+private struct TimelineEntry: Identifiable {
+    let message: Message
+    let showsTimestamp: Bool
+
+    var id: String { message.id }
 }
 
 private struct UnreadDividerView: View {
@@ -142,5 +176,30 @@ private struct UnreadDividerView: View {
         Rectangle()
             .fill(.background.quinary)
             .frame(height: 1)
+    }
+}
+
+private struct TimestampDividerView: View {
+    let timestamp: Date
+
+    var body: some View {
+        Text(displayText)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+    }
+
+    private var displayText: String {
+        let calendar = Calendar.current
+
+        if calendar.isDateInToday(timestamp) {
+            return timestamp.formatted(date: .omitted, time: .shortened)
+        }
+
+        if calendar.isDateInYesterday(timestamp) {
+            return "Yesterday at \(timestamp.formatted(date: .omitted, time: .shortened))"
+        }
+
+        return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 }
