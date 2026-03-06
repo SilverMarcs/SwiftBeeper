@@ -24,6 +24,7 @@ struct ChatDetailView: View {
                     ForEach(messages) { message in
                         if message.id == firstUnreadID {
                             UnreadDividerView()
+                                .transition(.opacity)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
                         }
@@ -41,6 +42,7 @@ struct ChatDetailView: View {
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
                 }
+                .animation(.default, value: firstUnreadID)
                 .task(id: selectedChat.id) {
                     messageStore.setReplyTo(nil)
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
