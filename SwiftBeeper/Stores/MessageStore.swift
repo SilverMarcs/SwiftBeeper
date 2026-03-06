@@ -1,10 +1,12 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class MessageStore {
     private(set) var messagesByChatID: [String: [Message]] = [:]
     private(set) var hasMoreMessagesByChatID: [String: Bool] = [:]
+    private var latestLoadRequestIDByChatID: [String: UUID] = [:]
     private(set) var isLoadingOlderMessages = false
     private(set) var isLoadingMessages = false
     private(set) var isSendingMessage = false
@@ -44,15 +46,27 @@ final class MessageStore {
     func loadMessages(for chatID: String) async {
         guard !currentAccessToken.isEmpty else { return }
 
+        let requestID = UUID()
+        latestLoadRequestIDByChatID[chatID] = requestID
         isLoadingMessages = true
-        messagesError = nil
-        defer { isLoadingMessages = false }
+        defer {
+            if latestLoadRequestIDByChatID[chatID] == requestID {
+                isLoadingMessages = false
+            }
+        }
 
         do {
             let response = try await APIClient.listMessages(chatID: chatID, accessToken: currentAccessToken)
-            messagesByChatID[chatID] = response.items.sorted(by: { $0.sortKey < $1.sortKey })
+            guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
+
+            messagesError = nil
+            messagesByChatID[chatID] = mergedMessages(
+                existing: messagesByChatID[chatID] ?? [],
+                incoming: response.items
+            )
             hasMoreMessagesByChatID[chatID] = response.hasMore
         } catch {
+            guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
             messagesError = error.localizedDescription
         }
     }
@@ -90,17 +104,23 @@ final class MessageStore {
     // MARK: - Direct upsert / delete (from WebSocket payloads)
 
     func upsertMessages(_ newMessages: [Message], for chatID: String) {
-        let existing = messagesByChatID[chatID] ?? []
-        var merged = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
-        for msg in newMessages {
-            merged[msg.id] = msg
-        }
-        messagesByChatID[chatID] = merged.values.sorted(by: { $0.sortKey < $1.sortKey })
+        messagesByChatID[chatID] = mergedMessages(
+            existing: messagesByChatID[chatID] ?? [],
+            incoming: newMessages
+        )
     }
 
     func deleteMessages(ids: [String], from chatID: String) {
         let idsToRemove = Set(ids)
         messagesByChatID[chatID]?.removeAll { idsToRemove.contains($0.id) }
+    }
+
+    private func mergedMessages(existing: [Message], incoming: [Message]) -> [Message] {
+        var merged = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
+        for message in incoming {
+            merged[message.id] = message
+        }
+        return merged.values.sorted(by: { $0.sortKey < $1.sortKey })
     }
 
     // MARK: - Sending
