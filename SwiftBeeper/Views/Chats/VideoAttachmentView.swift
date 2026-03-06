@@ -13,8 +13,7 @@ struct VideoAttachmentView: View {
         Group {
             if let videoPlayer {
                 VideoPlayer(player: videoPlayer)
-                    .frame(minHeight: 500)
-                    .frame(width: 500)
+                    .frame(width: 500, height: 500)
                     .cornerRadius(12)
                     .onDisappear {
                         videoPlayer.replaceCurrentItem(with: nil)

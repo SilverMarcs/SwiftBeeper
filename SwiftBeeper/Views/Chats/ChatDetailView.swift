@@ -55,16 +55,19 @@ struct ChatDetailView: View {
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
                 }
-                .animation(.default, value: firstUnreadID)
                 .task(id: selectedChat.id) {
                     messageStore.setReplyTo(nil)
+                    messageStore.cancelEditing()
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
                     await Task.yield()
                     scrollToBottom(with: proxy, animated: false)
                     await detail
                 }
                 .onChange(of: messages.count) {
-                    scrollToBottom(with: proxy, animated: true)
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(50))
+                        scrollToBottom(with: proxy, animated: true)
+                    }
                 }
                 .listStyle(.plain)
                 .safeAreaBar(edge: .bottom, spacing: 0) {
@@ -96,6 +99,7 @@ struct ChatDetailView: View {
                     ChatInfoSheet(chat: selectedChat)
                 }
             }
+//            .id(selectedChat.id)
         } else {
             ContentUnavailableView(
                 "Pick a Chat",

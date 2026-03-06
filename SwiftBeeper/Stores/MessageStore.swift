@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 
-@MainActor
 @Observable
 final class MessageStore {
     private(set) var messagesByChatID: [String: [Message]] = [:]

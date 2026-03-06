@@ -70,8 +70,8 @@ final class ChatStore {
         }
         realtimeService.loadedMessageChatIDs = { [weak self] in
             MainActor.assumeIsolated {
-                guard let self else { return [] }
-                return Set(self.messageStore.messagesByChatID.keys)
+                guard let self, let id = self.selectedChatID else { return [] }
+                return [id]
             }
         }
     }
