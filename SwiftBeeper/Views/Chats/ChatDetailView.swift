@@ -34,6 +34,13 @@ struct ChatDetailView: View {
                             chat: selectedChat
                         )
                         .id(message.id)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            Button("Reply", systemImage: "arrowshape.turn.up.left") {
+                                messageStore.setReplyTo(message)
+                            }
+                            .tint(.accentColor)
+                            .labelStyle(.iconOnly)
+                        }
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2  , trailing: 10))
                     }
