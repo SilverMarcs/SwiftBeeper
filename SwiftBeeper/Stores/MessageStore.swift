@@ -17,6 +17,10 @@ final class MessageStore {
     var editingMessage: Message?
     var pendingAttachment: PendingAttachment?
 
+    var activeComposerMessage: Message? {
+        editingMessage ?? replyingToMessage
+    }
+
     var currentAccessToken = ""
 
     func messages(for chatID: String) -> [Message] {
@@ -254,6 +258,9 @@ final class MessageStore {
     // MARK: - Reply / Edit
 
     func setReplyTo(_ message: Message?) {
+        if message != nil {
+            editingMessage = nil
+        }
         replyingToMessage = message
     }
 
@@ -265,6 +272,11 @@ final class MessageStore {
     }
 
     func cancelEditing() {
+        editingMessage = nil
+    }
+
+    func cancelComposerAction() {
+        replyingToMessage = nil
         editingMessage = nil
     }
 

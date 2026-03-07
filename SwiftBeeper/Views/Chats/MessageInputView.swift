@@ -66,75 +66,6 @@ struct MessageInputView: View {
                 .background(.red.opacity(0.12))
             }
 
-            if let editingMessage = messageStore.editingMessage {
-                HStack(spacing: 8) {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.yellow)
-                        .frame(width: 3)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Editing message")
-                            .font(.caption)
-                            .bold()
-                            .foregroundStyle(.secondary)
-
-                        Text(editingMessage.displayText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
-
-                    Button {
-                        messageStore.cancelEditing()
-                        draftMessage = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.yellow.opacity(0.08))
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let replyMessage = messageStore.replyingToMessage {
-                HStack(spacing: 8) {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.accentColor)
-                        .frame(width: 3)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Replying to \(replyMessage.senderDisplayName)")
-                            .font(.caption)
-                            .bold()
-                            .foregroundStyle(.secondary)
-
-                        Text(replyMessage.displayText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
-
-                    Button {
-                        messageStore.setReplyTo(nil)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.background.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
             if let pending = messageStore.pendingAttachment {
                 HStack {
                     attachmentCard(pending)
@@ -170,10 +101,14 @@ struct MessageInputView: View {
                 .fixedSize()
                 .offset(y: -1)
 
-                if isEditing {
+                if hasActiveComposerAction {
                     Button {
-                        messageStore.cancelEditing()
-                        draftMessage = ""
+                        withAnimation {
+                            messageStore.cancelComposerAction()
+                            if isEditing {
+                                draftMessage = ""
+                            }
+                        }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.largeTitle).fontWeight(.semibold)
@@ -188,7 +123,7 @@ struct MessageInputView: View {
 
                 // Text field with glass effect
                 TextField(
-                    "Message",
+                    messageFieldPrompt,
                     text: Binding(
                         get: { draftMessage },
                         set: { draftMessage = $0 }
@@ -197,7 +132,7 @@ struct MessageInputView: View {
                 )
                     .textFieldStyle(.plain)
                     .focused($isMessageFieldFocused)
-                    .lineLimit(1 ... 4)
+                    .lineLimit(1 ... 7)
                     .padding(.horizontal, 4)
                     .padding(8)
                     .glassEffect(in: .rect(cornerRadius: 16))
@@ -255,10 +190,27 @@ struct MessageInputView: View {
         .onChange(of: chatStore.selectedChat?.id) { _, _ in
             focusMessageField()
         }
+        .onChange(of: messageStore.activeComposerMessage?.id) { _, _ in
+            focusMessageField()
+        }
     }
 
     private var isEditing: Bool {
         messageStore.editingMessage != nil
+    }
+
+    private var hasActiveComposerAction: Bool {
+        messageStore.activeComposerMessage != nil
+    }
+
+    private var messageFieldPrompt: String {
+        if isEditing {
+            return "Edit message"
+        }
+        if messageStore.replyingToMessage != nil {
+            return "Reply message"
+        }
+        return "Message"
     }
 
     private var sendButtonDisabled: Bool {

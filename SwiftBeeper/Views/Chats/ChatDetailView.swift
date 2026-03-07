@@ -18,6 +18,7 @@ struct ChatDetailView: View {
         } else if let selectedChat = chatStore.selectedChat {
             let messages = messageStore.messages(for: selectedChat.id)
             let timelineEntries = timelineEntries(for: messages)
+            let activeComposerMessageID = messageStore.activeComposerMessage?.id
 
             ScrollViewReader { proxy in
                 let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
@@ -26,12 +27,14 @@ struct ChatDetailView: View {
                     ForEach(timelineEntries) { entry in
                         if entry.message.id == firstUnreadID {
                             UnreadDividerView()
+                                .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
                         }
 
                         if entry.showsTimestamp {
                             TimestampDividerView(timestamp: entry.message.timestamp)
+                                .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 6, trailing: 10))
                         }
@@ -40,10 +43,17 @@ struct ChatDetailView: View {
                             message: entry.message,
                             chat: selectedChat
                         )
+                        .modifier(
+                            TimelineFocusEffect(
+                                isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
+                            )
+                        )
                         .id(entry.message.id)
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button("Reply", systemImage: "arrowshape.turn.up.left") {
-                                messageStore.setReplyTo(entry.message)
+                                withAnimation {
+                                    messageStore.setReplyTo(entry.message)
+                                }
                             }
                             .tint(.accentColor)
                             .labelStyle(.iconOnly)
@@ -51,7 +61,9 @@ struct ChatDetailView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             if canEditOnLeadingSwipe(entry.message, in: selectedChat) {
                                 Button("Edit", systemImage: "pencil") {
-                                    messageStore.startEditing(entry.message)
+                                    withAnimation {
+                                        messageStore.startEditing(entry.message)
+                                    }
                                 }
                                 .tint(.orange)
                                 .labelStyle(.iconOnly)
@@ -62,6 +74,7 @@ struct ChatDetailView: View {
                     }
 
                     Color.clear
+                        .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
                 }
@@ -87,8 +100,16 @@ struct ChatDetailView: View {
                         scrollToBottom(with: proxy, animated: true)
                     }
                 }
+                .onChange(of: activeComposerMessageID) { _, newValue in
+                    guard let newValue else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        proxy.scrollTo(newValue, anchor: .center)
+                    }
+                }
                 .listStyle(.plain)
+                .animation(.default, value: activeComposerMessageID)
                 .navigationTitle(selectedChat.displayTitle)
+                .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
                 .toolbar {
                     if let otherParticipant = oneToOneParticipant(for: selectedChat) {
                         ToolbarItem(placement: .navigation) {
@@ -203,6 +224,31 @@ struct ChatDetailView: View {
         }
 
         return message.timestamp.timeIntervalSince(previousMessage.timestamp) >= 30 * 60
+    }
+}
+
+private struct TimelineFocusEffect: ViewModifier {
+    let isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isFocused ? 1 : 0.35)
+            .blur(radius: isFocused ? 0 : 4)
+            .scaleEffect(isFocused ? 1 : 0.992)
+            .allowsHitTesting(isFocused)
+            .animation(.easeInOut(duration: 0.2), value: isFocused)
+    }
+}
+
+private struct NavigationBarFocusVisibilityModifier: ViewModifier {
+    let isFocusedOnComposerMessage: Bool
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.toolbarVisibility(isFocusedOnComposerMessage ? .hidden : .visible, for: .navigationBar)
+        #else
+        content
+        #endif
     }
 }
 

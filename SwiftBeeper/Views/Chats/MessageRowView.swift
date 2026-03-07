@@ -93,14 +93,18 @@ struct MessageRowView: View {
                 Divider()
                 
                 Button {
-                    messageStore.setReplyTo(message)
+                    withAnimation {
+                        messageStore.setReplyTo(message)
+                    }
                 } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                 }
 
                 if isOutgoing && canEdit {
                     Button {
-                        messageStore.startEditing(message)
+                        withAnimation {
+                            messageStore.startEditing(message)
+                        }
                     } label: {
                         Label("Edit", systemImage: "pencil")
                     }
