@@ -9,7 +9,7 @@ struct MessageRowView: View {
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        HStack(alignment: .top) {
             if isOutgoing {
                 Spacer(minLength: 100)
             } else if showIncomingIdentity {
@@ -39,10 +39,11 @@ struct MessageRowView: View {
 
                 if message.hasText {
                     Text(message.displayText.markdownAttributed)
-                        .foregroundStyle(.white)
+                        .textSelection(.enabled)
+                        .foregroundStyle(isOutgoing ? .white : .primary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(.background.tertiary))
+                        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color.secondary.opacity(0.1)))
                         .clipShape(.rect(cornerRadius: 15))
                 }
 
