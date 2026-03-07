@@ -152,9 +152,8 @@ final class RealtimeService {
             if shouldRefreshMessages {
                 if let messages = (try? JSONDecoder.beeper.decode(MessageEventPayload.self, from: data))?.entries, !messages.isEmpty {
                     await onMessagesUpserted?(chatID, messages)
-                } else {
-                    scheduleMessagesRefresh(chatID: chatID)
                 }
+                scheduleMessagesRefresh(chatID: chatID)
             }
         case "message.deleted":
             scheduleChatsRefresh()
@@ -165,9 +164,8 @@ final class RealtimeService {
             if shouldRefreshMessages {
                 if let ids = envelope.ids, !ids.isEmpty {
                     await onMessagesDeleted?(chatID, ids)
-                } else {
-                    scheduleMessagesRefresh(chatID: chatID)
                 }
+                scheduleMessagesRefresh(chatID: chatID)
             }
         default:
             break

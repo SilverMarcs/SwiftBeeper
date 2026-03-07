@@ -246,6 +246,9 @@ struct Message: Identifiable, Decodable {
     let reactions: [Reaction]?
     let linkedMessageID: String?
 
+    /// `sortKey` is the API's unique sortable message identity for timeline merging/rendering.
+    var timelineKey: String { sortKey }
+
     var isReaction: Bool { type == "REACTION" }
 
     var isMembershipEvent: Bool {

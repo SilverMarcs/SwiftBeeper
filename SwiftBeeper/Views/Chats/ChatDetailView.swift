@@ -184,7 +184,7 @@ private struct TimelineEntry: Identifiable {
     let message: Message
     let showsTimestamp: Bool
 
-    var id: String { message.id }
+    var id: String { message.timelineKey }
 }
 
 private struct UnreadDividerView: View {

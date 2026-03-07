@@ -1,8 +1,10 @@
 import Foundation
 import Observation
+import OSLog
 
 @Observable
 final class MessageStore {
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "MessageStore")
     private(set) var messagesByChatID: [String: [Message]] = [:]
     private(set) var hasMoreMessagesByChatID: [String: Bool] = [:]
     private var latestLoadRequestIDByChatID: [String: UUID] = [:]
@@ -68,11 +70,17 @@ final class MessageStore {
             guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
 
             messagesError = nil
-            messagesByChatID[chatID] = mergedMessages(
-                existing: messagesByChatID[chatID] ?? [],
-                incoming: response.items
+            let existingMessages = messagesByChatID[chatID] ?? []
+            logDuplicateServerMessageIDs(in: response.items, source: "loadMessages response", chatID: chatID)
+            let mergedMessages = mergedMessages(
+                existing: existingMessages,
+                incoming: response.items,
+                chatID: chatID,
+                source: "loadMessages"
             )
+            messagesByChatID[chatID] = mergedMessages
             hasMoreMessagesByChatID[chatID] = response.hasMore
+            logger.debug("Loaded \(response.items.count, privacy: .public) messages for chat \(chatID, privacy: .public). Existing: \(existingMessages.count, privacy: .public). Merged: \(mergedMessages.count, privacy: .public).")
         } catch {
             guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
             messagesError = error.localizedDescription
@@ -99,11 +107,18 @@ final class MessageStore {
             )
 
             let existingMessages = messagesByChatID[chatID] ?? []
-            let existingIDs = Set(existingMessages.map(\.id))
-            let newMessages = response.items.filter { !existingIDs.contains($0.id) }
-            let merged = (newMessages + existingMessages).sorted(by: { $0.sortKey < $1.sortKey })
+            logDuplicateServerMessageIDs(in: response.items, source: "loadOlderMessages response", chatID: chatID)
+            let existingTimelineKeys = Set(existingMessages.map(\.timelineKey))
+            let newMessages = response.items.filter { !existingTimelineKeys.contains($0.timelineKey) }
+            let merged = mergedMessages(
+                existing: existingMessages,
+                incoming: newMessages,
+                chatID: chatID,
+                source: "loadOlderMessages"
+            )
             messagesByChatID[chatID] = merged
             hasMoreMessagesByChatID[chatID] = response.hasMore
+            logger.debug("Loaded \(response.items.count, privacy: .public) older messages for chat \(chatID, privacy: .public). Added: \(newMessages.count, privacy: .public). Total: \(merged.count, privacy: .public).")
         } catch {
             messagesError = error.localizedDescription
         }
@@ -112,10 +127,17 @@ final class MessageStore {
     // MARK: - Direct upsert / delete (from WebSocket payloads)
 
     func upsertMessages(_ newMessages: [Message], for chatID: String) {
-        messagesByChatID[chatID] = mergedMessages(
+        logDuplicateServerMessageIDs(in: newMessages, source: "realtime upsert", chatID: chatID)
+        let payloadSummary = newMessages.map { "\($0.id)|\($0.timelineKey)|\($0.text ?? "<no-text>")" }.joined(separator: " ; ")
+        let merged = mergedMessages(
             existing: messagesByChatID[chatID] ?? [],
-            incoming: newMessages
+            incoming: newMessages,
+            chatID: chatID,
+            source: "realtime upsert"
         )
+        messagesByChatID[chatID] = merged
+        logger.debug("Upserted \(newMessages.count, privacy: .public) realtime messages for chat \(chatID, privacy: .public). Total: \(merged.count, privacy: .public).")
+        logger.debug("Realtime payload for chat \(chatID, privacy: .public): \(payloadSummary, privacy: .public)")
     }
 
     func deleteMessages(ids: [String], from chatID: String) {
@@ -123,12 +145,32 @@ final class MessageStore {
         messagesByChatID[chatID]?.removeAll { idsToRemove.contains($0.id) }
     }
 
-    private func mergedMessages(existing: [Message], incoming: [Message]) -> [Message] {
-        var merged = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
+    private func mergedMessages(existing: [Message], incoming: [Message], chatID: String, source: String) -> [Message] {
+        var merged = Dictionary(existing.map { ($0.timelineKey, $0) }, uniquingKeysWith: { current, _ in current })
         for message in incoming {
-            merged[message.id] = message
+            if let replaced = merged.updateValue(message, forKey: message.timelineKey), replaced.id != message.id {
+                logger.debug("Replacing timeline entry in \(source, privacy: .public) for chat \(chatID, privacy: .public). sortKey: \(message.timelineKey, privacy: .public), oldID: \(replaced.id, privacy: .public), newID: \(message.id, privacy: .public)")
+            }
         }
-        return merged.values.sorted(by: { $0.sortKey < $1.sortKey })
+        let sorted = merged.values.sorted(by: { $0.sortKey < $1.sortKey })
+        logDuplicateTimelineKeys(in: sorted, source: source, chatID: chatID)
+        return sorted
+    }
+
+    private func logDuplicateServerMessageIDs(in messages: [Message], source: String, chatID: String) {
+        let grouped = Dictionary(grouping: messages, by: \.id)
+        for (messageID, entries) in grouped where entries.count > 1 {
+            let sortKeys = entries.map(\.timelineKey).joined(separator: ", ")
+            logger.warning("Duplicate message IDs in \(source, privacy: .public) for chat \(chatID, privacy: .public). messageID: \(messageID, privacy: .public), sortKeys: \(sortKeys, privacy: .public)")
+        }
+    }
+
+    private func logDuplicateTimelineKeys(in messages: [Message], source: String, chatID: String) {
+        let grouped = Dictionary(grouping: messages, by: \.timelineKey)
+        for (timelineKey, entries) in grouped where entries.count > 1 {
+            let ids = entries.map(\.id).joined(separator: ", ")
+            logger.warning("Duplicate sortKeys after merge in \(source, privacy: .public) for chat \(chatID, privacy: .public). sortKey: \(timelineKey, privacy: .public), messageIDs: \(ids, privacy: .public)")
+        }
     }
 
     // MARK: - Sending
