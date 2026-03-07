@@ -42,6 +42,15 @@ final class MessageStore {
         await loadMessages(for: chatID)
     }
 
+    func loadMessagesForChatEntry(for chatID: String) async {
+        let hadCachedMessages = !(messagesByChatID[chatID] ?? []).isEmpty
+        await loadMessages(for: chatID)
+
+        guard !hadCachedMessages else { return }
+        guard hasMoreMessagesByChatID[chatID] == true else { return }
+        await loadOlderMessages(for: chatID)
+    }
+
     func loadMessages(for chatID: String) async {
         guard !currentAccessToken.isEmpty else { return }
 

@@ -5,6 +5,7 @@ struct ChatDetailView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(MessageStore.self) private var messageStore
     @State private var showingChatInfo = false
+    @State private var isPreparingInitialScroll = false
     private let bottomAnchorID = "bottom-id"
 
     var body: some View {
@@ -56,23 +57,28 @@ struct ChatDetailView: View {
                         .id(bottomAnchorID)
                 }
                 .task(id: selectedChat.id) {
+                    isPreparingInitialScroll = true
+                    chatStore.realtimeService.selectedChatID = selectedChat.id
                     messageStore.setReplyTo(nil)
                     messageStore.cancelEditing()
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
-                    await Task.yield()
+                    async let messagesLoad: () = messageStore.loadMessagesForChatEntry(for: selectedChat.id)
+                    await messagesLoad
+                    try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
+                    try? await Task.sleep(for: .milliseconds(100))
+                    guard !Task.isCancelled else { return }
+                    isPreparingInitialScroll = false
                     await detail
                 }
                 .onChange(of: messages.count) {
+                    guard !isPreparingInitialScroll else { return }
                     Task {
                         try? await Task.sleep(for: .milliseconds(50))
                         scrollToBottom(with: proxy, animated: true)
                     }
                 }
                 .listStyle(.plain)
-                .safeAreaBar(edge: .bottom, spacing: 0) {
-                    MessageInputView()
-                }
                 .navigationTitle(selectedChat.displayTitle)
                 .toolbar {
                     if let otherParticipant = oneToOneParticipant(for: selectedChat) {
@@ -98,6 +104,20 @@ struct ChatDetailView: View {
                 .sheet(isPresented: $showingChatInfo) {
                     ChatInfoSheet(chat: selectedChat)
                 }
+                .overlay {
+                    if isPreparingInitialScroll {
+                        ZStack {
+                            Rectangle()
+                                .fill(.background)
+                            ProgressView()
+                                .controlSize(.large)
+                        }
+                        .ignoresSafeArea(edges: .vertical)
+                    }
+                }
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    MessageInputView()
+                }
             }
 //            .id(selectedChat.id)
         } else {
@@ -106,6 +126,10 @@ struct ChatDetailView: View {
                 systemImage: "list.bullet",
                 description: Text("Select a chat from the sidebar to view messages.")
             )
+            .task {
+                chatStore.realtimeService.selectedChatID = nil
+                isPreparingInitialScroll = false
+            }
         }
     }
 
@@ -169,7 +193,7 @@ private struct UnreadDividerView: View {
             line
             Text("New Messages")
                 .font(.caption)
-                .fontWeight(.semibold)
+                .bold()
                 .foregroundStyle(.secondary)
             line
         }
