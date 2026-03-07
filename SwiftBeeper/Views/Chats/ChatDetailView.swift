@@ -48,6 +48,15 @@ struct ChatDetailView: View {
                             .tint(.accentColor)
                             .labelStyle(.iconOnly)
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            if canEditOnLeadingSwipe(entry.message, in: selectedChat) {
+                                Button("Edit", systemImage: "pencil") {
+                                    messageStore.startEditing(entry.message)
+                                }
+                                .tint(.orange)
+                                .labelStyle(.iconOnly)
+                            }
+                        }
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2  , trailing: 10))
                     }
@@ -156,6 +165,23 @@ struct ChatDetailView: View {
     private func oneToOneParticipant(for chat: Chat) -> ChatParticipant? {
         guard chat.isSingleChat else { return nil }
         return chat.otherParticipant
+    }
+
+    private func canEditOnLeadingSwipe(_ message: Message, in chat: Chat) -> Bool {
+        guard isOutgoingMessage(message, in: chat) else { return false }
+        return Date().timeIntervalSince(message.timestamp) <= 15 * 60
+    }
+
+    private func isOutgoingMessage(_ message: Message, in chat: Chat) -> Bool {
+        if let isSender = message.isSender {
+            return isSender
+        }
+
+        guard let currentParticipantID = chat.participants?.items.first(where: { $0.isSelf == true })?.id else {
+            return false
+        }
+
+        return message.senderID == currentParticipantID
     }
 
     private func timelineEntries(for messages: [Message]) -> [TimelineEntry] {
