@@ -9,47 +9,74 @@ struct VideoAttachmentView: View {
     @State private var videoPlayer: AVPlayer?
     @State private var isVideoLoading = false
 
+    private let contentWidth: CGFloat = 500
+    private let contentHeight: CGFloat = 500
+
     var body: some View {
         Group {
             if let videoPlayer {
                 VideoPlayer(player: videoPlayer)
-                    .frame(width: 500, height: 500)
-                    .cornerRadius(12)
+                    .frame(width: contentWidth, height: contentHeight)
+                    .clipShape(.rect(cornerRadius: 12))
                     .onDisappear {
-                        videoPlayer.replaceCurrentItem(with: nil)
+                        stopPlayback(videoPlayer)
                     }
             } else if isVideoLoading {
                 ProgressView()
-                    .frame(width: 200, height: 150)
+                    .frame(width: contentWidth, height: contentHeight)
                     .background(.background.secondary)
                     .clipShape(.rect(cornerRadius: 12))
             } else {
-                Image(systemName: "film")
-                    .foregroundStyle(.secondary)
-                    .font(.title2)
-                    .frame(width: 200, height: 150)
-                    .background(.background.secondary)
-                    .clipShape(.rect(cornerRadius: 12))
+                Button {
+                    Task {
+                        await loadAndPlayVideo()
+                    }
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                        .frame(width: contentWidth, height: contentHeight)
+                        .background(.background.secondary)
+                        .clipShape(.rect(cornerRadius: 12))
+                        .contentShape(.rect(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .controlSize(.extraLarge)
+                .accessibilityLabel(Text(attachment.fileName ?? "Play video"))
             }
-        }
-        .task(id: attachment.resolvedURL) {
-            await loadVideo()
         }
     }
 
-    private func loadVideo() async {
+    private func loadAndPlayVideo() async {
+        if let videoPlayer {
+            videoPlayer.play()
+            return
+        }
+
         guard let urlString = attachment.resolvedURL else { return }
 
         isVideoLoading = true
         defer { isVideoLoading = false }
 
-        let ext = attachment.mimeType?.components(separatedBy: "/").last ?? "mp4"
+        let ext = attachment.mimeType?.split(separator: "/").last.map(String.init) ?? "mp4"
         guard let fileURL = await AuthenticatedImageLoader.downloadToTempFile(
             urlString: urlString,
             accessToken: sessionStore.accessToken,
             fileExtension: ext
         ) else { return }
 
-        videoPlayer = AVPlayer(url: fileURL)
+        let player = AVPlayer(url: fileURL)
+        videoPlayer = player
+        player.play()
+    }
+
+    private func stopPlayback(_ player: AVPlayer) {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        videoPlayer = nil
+    }
+
+    private func formattedDuration(_ seconds: Double) -> String {
+        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
     }
 }
