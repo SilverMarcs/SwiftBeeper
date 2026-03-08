@@ -243,7 +243,7 @@ struct MessageInputView: View {
         Task {
             let didSend = await messageStore.sendMessage(text: text, attachment: attachment, to: chatID)
             if didSend {
-                chatStore.scheduleRefreshAfterSend(chatID: chatID)
+                await chatStore.refreshAfterMessageMutation(chatID: chatID)
             } else if (draftMessagesByChatID[chatID] ?? "").isEmpty {
                 draftMessagesByChatID[chatID] = previousDraft
             }
@@ -265,7 +265,7 @@ struct MessageInputView: View {
                     clearDraft(for: chatID)
                 }
                 if let chatID = chatStore.selectedChat?.id {
-                    chatStore.scheduleRefreshAfterSend(chatID: chatID)
+                    await chatStore.refreshAfterMessageMutation(chatID: chatID)
                 }
             } else if
                 let editingChatID,

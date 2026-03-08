@@ -6,7 +6,7 @@ extension APIClient {
         fileName: String,
         mimeType: String,
         accessToken: String,
-        onProgress: @escaping @Sendable (Double) -> Void
+        onProgress: @escaping @MainActor @Sendable (Double) -> Void
     ) async throws -> UploadAssetOutput {
         let url = API.baseURL.appending(path: "/v1/assets/upload")
         let boundary = UUID().uuidString
@@ -47,9 +47,9 @@ extension APIClient {
 }
 
 private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
-    let onProgress: @Sendable (Double) -> Void
+    let onProgress: @MainActor @Sendable (Double) -> Void
 
-    init(onProgress: @escaping @Sendable (Double) -> Void) {
+    init(onProgress: @escaping @MainActor @Sendable (Double) -> Void) {
         self.onProgress = onProgress
     }
 
@@ -61,7 +61,9 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Se
         totalBytesExpectedToSend: Int64
     ) {
         let progress = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
-        onProgress(progress)
+        Task { @MainActor in
+            onProgress(progress)
+        }
     }
 }
 

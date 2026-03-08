@@ -45,7 +45,7 @@ struct RemoveReactionOutput: Decodable {
     let reactionKey: String
 }
 
-struct ChatParticipant: Identifiable, Decodable {
+struct ChatParticipant: Identifiable, Decodable, Equatable {
     let id: String
     let username: String?
     let fullName: String?
@@ -64,13 +64,13 @@ struct ChatParticipant: Identifiable, Decodable {
     }
 }
 
-struct ChatParticipants: Decodable {
+struct ChatParticipants: Decodable, Equatable {
     let items: [ChatParticipant]
     let hasMore: Bool?
     let total: Int?
 }
 
-struct Chat: Identifiable, Decodable {
+struct Chat: Identifiable, Decodable, Equatable {
     let id: String
     let title: String
     let unreadCount: Int
@@ -178,12 +178,12 @@ struct PendingAttachment {
 
 // MARK: - Attachment Response Types
 
-struct AttachmentSize: Decodable {
+struct AttachmentSize: Decodable, Equatable {
     let width: Int?
     let height: Int?
 }
 
-struct Attachment: Identifiable, Decodable {
+struct Attachment: Identifiable, Decodable, Equatable {
     var id: String? { _id ?? srcURL ?? fileName }
 
     let type: String
@@ -231,7 +231,7 @@ struct Reaction: Codable, Identifiable, Hashable {
     let emoji: Bool?
 }
 
-struct Message: Identifiable, Decodable {
+struct Message: Identifiable, Decodable, Equatable {
     let id: String
     let chatID: String
     let senderID: String

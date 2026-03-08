@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class RealtimeService {
     private var webSocketTask: URLSessionWebSocketTask?
@@ -15,15 +16,8 @@ final class RealtimeService {
     @ObservationIgnored var onRefreshMessages: (@Sendable (String) async -> Void)?
     @ObservationIgnored var onRealtimeError: (@Sendable (String) -> Void)?
 
-    @ObservationIgnored var onChatsUpserted: (@Sendable ([Chat]) async -> Void)?
-    @ObservationIgnored var onChatsDeleted: (@Sendable ([String]) async -> Void)?
-    @ObservationIgnored var onMessagesUpserted: (@Sendable (String, [Message]) async -> Void)?
-    @ObservationIgnored var onMessagesDeleted: (@Sendable (String, [String]) async -> Void)?
-
-    /// Which chatID is currently selected (used to decide whether to refresh messages).
+    /// Which chat ID is currently selected so realtime can invalidate only the active timeline.
     var selectedChatID: String?
-    /// Which chatIDs have loaded messages (used to decide whether to refresh messages).
-    @ObservationIgnored var loadedMessageChatIDs: (@Sendable () -> Set<String>)?
 
     func start(accessToken: String) {
         stop()
@@ -131,45 +125,24 @@ final class RealtimeService {
                 onRealtimeError?("Realtime error: \(message)")
             }
         case "chat.upserted":
-            if let chats = (try? JSONDecoder.beeper.decode(ChatEventPayload.self, from: data))?.entries, !chats.isEmpty {
-                await onChatsUpserted?(chats)
-            } else {
-                scheduleChatsRefresh()
-            }
-        case "chat.deleted":
-            if let ids = envelope.ids, !ids.isEmpty {
-                await onChatsDeleted?(ids)
-            } else {
-                scheduleChatsRefresh()
-            }
-        case "message.upserted":
-            // Chat list still needs updating for preview/unread changes
             scheduleChatsRefresh()
-
-            guard let chatID = envelope.chatID else { return }
-            let loadedIDs = loadedMessageChatIDs?() ?? []
-            let shouldRefreshMessages = selectedChatID == chatID || loadedIDs.contains(chatID)
-            if shouldRefreshMessages {
-                if let messages = (try? JSONDecoder.beeper.decode(MessageEventPayload.self, from: data))?.entries, !messages.isEmpty {
-                    await onMessagesUpserted?(chatID, messages)
-                }
-                scheduleMessagesRefresh(chatID: chatID)
-            }
+        case "chat.deleted":
+            scheduleChatsRefresh()
+        case "message.upserted":
+            scheduleChatsRefresh()
+            scheduleSelectedChatMessagesRefresh(for: envelope.chatID)
         case "message.deleted":
             scheduleChatsRefresh()
-
-            guard let chatID = envelope.chatID else { return }
-            let loadedIDs = loadedMessageChatIDs?() ?? []
-            let shouldRefreshMessages = selectedChatID == chatID || loadedIDs.contains(chatID)
-            if shouldRefreshMessages {
-                if let ids = envelope.ids, !ids.isEmpty {
-                    await onMessagesDeleted?(chatID, ids)
-                }
-                scheduleMessagesRefresh(chatID: chatID)
-            }
+            scheduleSelectedChatMessagesRefresh(for: envelope.chatID)
         default:
             break
         }
+    }
+
+    private func scheduleSelectedChatMessagesRefresh(for chatID: String?) {
+        guard let chatID else { return }
+        guard selectedChatID == chatID else { return }
+        scheduleMessagesRefresh(chatID: chatID)
     }
 
     private func sendSubscriptionsAllChats() async {
@@ -213,14 +186,6 @@ private struct WebSocketEnvelope: Decodable {
     let chatID: String?
     let message: String?
     let ids: [String]?
-}
-
-private struct ChatEventPayload: Decodable {
-    let entries: [Chat]?
-}
-
-private struct MessageEventPayload: Decodable {
-    let entries: [Message]?
 }
 
 private struct SubscriptionsSetCommand: Encodable {

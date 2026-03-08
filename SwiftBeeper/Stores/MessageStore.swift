@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import OSLog
 
+@MainActor
 @Observable
 final class MessageStore {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "MessageStore")
@@ -75,16 +76,16 @@ final class MessageStore {
 
             messagesError = nil
             let existingMessages = messagesByChatID[chatID] ?? []
-            logDuplicateServerMessageIDs(in: response.items, source: "loadMessages response", chatID: chatID)
-            let mergedMessages = mergedMessages(
+            let refreshedMessages = refreshedMessages(
                 existing: existingMessages,
-                incoming: response.items,
-                chatID: chatID,
-                source: "loadMessages"
+                latestPage: response.items,
+                chatID: chatID
             )
-            messagesByChatID[chatID] = mergedMessages
+            if refreshedMessages != existingMessages {
+                messagesByChatID[chatID] = refreshedMessages
+            }
             hasMoreMessagesByChatID[chatID] = response.hasMore
-            logger.debug("Loaded \(response.items.count, privacy: .public) messages for chat \(chatID, privacy: .public). Existing: \(existingMessages.count, privacy: .public). Merged: \(mergedMessages.count, privacy: .public).")
+            logger.debug("Loaded \(response.items.count, privacy: .public) messages for chat \(chatID, privacy: .public). Existing: \(existingMessages.count, privacy: .public). Refreshed: \(refreshedMessages.count, privacy: .public).")
         } catch {
             guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
             messagesError = error.localizedDescription
@@ -111,42 +112,23 @@ final class MessageStore {
             )
 
             let existingMessages = messagesByChatID[chatID] ?? []
-            logDuplicateServerMessageIDs(in: response.items, source: "loadOlderMessages response", chatID: chatID)
             let existingTimelineKeys = Set(existingMessages.map(\.timelineKey))
-            let newMessages = response.items.filter { !existingTimelineKeys.contains($0.timelineKey) }
+            let normalizedResponse = normalizedMessages(response.items, source: "loadOlderMessages response", chatID: chatID)
+            let newMessages = normalizedResponse.filter { !existingTimelineKeys.contains($0.timelineKey) }
             let merged = mergedMessages(
                 existing: existingMessages,
                 incoming: newMessages,
                 chatID: chatID,
                 source: "loadOlderMessages"
             )
-            messagesByChatID[chatID] = merged
+            if merged != existingMessages {
+                messagesByChatID[chatID] = merged
+            }
             hasMoreMessagesByChatID[chatID] = response.hasMore
             logger.debug("Loaded \(response.items.count, privacy: .public) older messages for chat \(chatID, privacy: .public). Added: \(newMessages.count, privacy: .public). Total: \(merged.count, privacy: .public).")
         } catch {
             messagesError = error.localizedDescription
         }
-    }
-
-    // MARK: - Direct upsert / delete (from WebSocket payloads)
-
-    func upsertMessages(_ newMessages: [Message], for chatID: String) {
-        logDuplicateServerMessageIDs(in: newMessages, source: "realtime upsert", chatID: chatID)
-        let payloadSummary = newMessages.map { "\($0.id)|\($0.timelineKey)|\($0.text ?? "<no-text>")" }.joined(separator: " ; ")
-        let merged = mergedMessages(
-            existing: messagesByChatID[chatID] ?? [],
-            incoming: newMessages,
-            chatID: chatID,
-            source: "realtime upsert"
-        )
-        messagesByChatID[chatID] = merged
-        logger.debug("Upserted \(newMessages.count, privacy: .public) realtime messages for chat \(chatID, privacy: .public). Total: \(merged.count, privacy: .public).")
-        logger.debug("Realtime payload for chat \(chatID, privacy: .public): \(payloadSummary, privacy: .public)")
-    }
-
-    func deleteMessages(ids: [String], from chatID: String) {
-        let idsToRemove = Set(ids)
-        messagesByChatID[chatID]?.removeAll { idsToRemove.contains($0.id) }
     }
 
     private func mergedMessages(existing: [Message], incoming: [Message], chatID: String, source: String) -> [Message] {
@@ -159,6 +141,36 @@ final class MessageStore {
         let sorted = merged.values.sorted(by: { $0.sortKey < $1.sortKey })
         logDuplicateTimelineKeys(in: sorted, source: source, chatID: chatID)
         return sorted
+    }
+
+    private func refreshedMessages(existing: [Message], latestPage: [Message], chatID: String) -> [Message] {
+        let normalizedLatestMessages = normalizedMessages(latestPage, source: "loadMessages response", chatID: chatID)
+        guard let oldestLatestSortKey = normalizedLatestMessages.first?.sortKey else {
+            return []
+        }
+
+        let preservedOlderMessages = existing.filter { $0.sortKey < oldestLatestSortKey }
+        return mergedMessages(
+            existing: preservedOlderMessages,
+            incoming: normalizedLatestMessages,
+            chatID: chatID,
+            source: "loadMessages"
+        )
+    }
+
+    private func normalizedMessages(_ messages: [Message], source: String, chatID: String) -> [Message] {
+        logDuplicateServerMessageIDs(in: messages, source: source, chatID: chatID)
+
+        var messagesByTimelineKey: [String: Message] = [:]
+        for message in messages {
+            if let replaced = messagesByTimelineKey.updateValue(message, forKey: message.timelineKey), replaced.id != message.id {
+                logger.debug("Normalized duplicate timeline entry in \(source, privacy: .public) for chat \(chatID, privacy: .public). sortKey: \(message.timelineKey, privacy: .public), oldID: \(replaced.id, privacy: .public), newID: \(message.id, privacy: .public)")
+            }
+        }
+
+        let normalized = messagesByTimelineKey.values.sorted(by: { $0.sortKey < $1.sortKey })
+        logDuplicateTimelineKeys(in: normalized, source: source, chatID: chatID)
+        return normalized
     }
 
     private func logDuplicateServerMessageIDs(in messages: [Message], source: String, chatID: String) {
@@ -212,9 +224,7 @@ final class MessageStore {
                     mimeType: attachment.mimeType,
                     accessToken: currentAccessToken,
                     onProgress: { [weak self] progress in
-                        Task { @MainActor in
-                            self?.uploadProgress = progress
-                        }
+                        self?.uploadProgress = progress
                     }
                 )
 

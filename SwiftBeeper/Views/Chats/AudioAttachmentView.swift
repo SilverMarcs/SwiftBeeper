@@ -53,7 +53,7 @@ struct AudioAttachmentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(.background.tertiary))
+        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color.secondary.opacity(0.1)))
         .clipShape(.rect(cornerRadius: 12))
         .task(id: attachment.resolvedURL) {
             await loadAudio()
