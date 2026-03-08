@@ -38,7 +38,11 @@ extension APIClient {
     }
 
     static func getChat(chatID: String, accessToken: String) async throws -> Chat {
-        let url = API.baseURL.appending(path: "/v1/chats/\(chatID)")
+        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/\(chatID)"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "maxParticipantCount", value: "-1")]
+        guard let url = components.url else {
+            throw APIError.invalidResponse
+        }
         return try await get(url: url, accessToken: accessToken)
     }
 

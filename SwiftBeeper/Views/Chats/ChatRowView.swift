@@ -7,7 +7,7 @@ struct ChatRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            ProfileAvatarView(name: avatarName, imageURLString: avatarImageURL, dimension: 42)
+            ChatAvatarView(chat: chat, dimension: 42)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -67,22 +67,6 @@ struct ChatRowView: View {
             }
             .tint(chatStore.selectedInboxFilter == .archive ? .blue : .orange)
         }
-    }
-
-    private var avatarName: String {
-        if let otherParticipant = chat.otherParticipant {
-            return otherParticipant.displayName
-        }
-
-        if let senderName = chat.preview?.senderName,
-           senderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            return senderName
-        }
-        return chat.displayTitle
-    }
-
-    private var avatarImageURL: String? {
-        chat.otherParticipant?.imgURL
     }
 }
 

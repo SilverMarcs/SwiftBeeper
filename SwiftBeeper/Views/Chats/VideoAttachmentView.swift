@@ -42,7 +42,6 @@ struct VideoAttachmentView: View {
                 }
                 .buttonStyle(.plain)
                 .controlSize(.extraLarge)
-                .accessibilityLabel(Text(attachment.fileName ?? "Play video"))
             }
         }
     }

@@ -109,19 +109,13 @@ struct ChatDetailView: View {
                 .listStyle(.plain)
                 .animation(.default, value: activeComposerMessageID)
                 .navigationTitle(selectedChat.displayTitle)
+                .navigationSubtitle(navigationSubtitle(for: selectedChat))
                 .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
                 .toolbar {
-                    if let otherParticipant = oneToOneParticipant(for: selectedChat) {
-                        ToolbarItem(placement: .navigation) {
-                            ProfileAvatarView(
-                                name: otherParticipant.displayName,
-                                imageURLString: otherParticipant.imgURL,
-                                dimension: 28
-                            )
-                            .accessibilityLabel("\(otherParticipant.displayName) avatar")
-                        }
-                        .sharedBackgroundVisibility(.hidden)
+                    ToolbarItem(placement: .navigation) {
+                        ChatAvatarView(chat: selectedChat, dimension: 28)
                     }
+                    .sharedBackgroundVisibility(.hidden)
 
                     ToolbarItem(placement: .primaryAction) {
                         Button {
@@ -183,11 +177,6 @@ struct ChatDetailView: View {
         return messages.first(where: { $0.isUnread == true })?.id
     }
 
-    private func oneToOneParticipant(for chat: Chat) -> ChatParticipant? {
-        guard chat.isSingleChat else { return nil }
-        return chat.otherParticipant
-    }
-
     private func canEditOnLeadingSwipe(_ message: Message, in chat: Chat) -> Bool {
         guard isOutgoingMessage(message, in: chat) else { return false }
         return Date().timeIntervalSince(message.timestamp) <= 15 * 60
@@ -224,6 +213,15 @@ struct ChatDetailView: View {
         }
 
         return message.timestamp.timeIntervalSince(previousMessage.timestamp) >= 30 * 60
+    }
+
+    private func navigationSubtitle(for chat: Chat) -> Text {
+        guard chat.isGroupChat else { return Text("") }
+
+        let participantCount = chat.participants?.total ?? chat.participants?.items.count ?? 0
+        guard participantCount > 0 else { return Text("") }
+
+        return Text("^[\(participantCount) member](inflect: true)")
     }
 }
 
