@@ -93,7 +93,7 @@ struct ChatRowView: View {
                 linkedMessageID: nil
             ),
             isMuted: false,
-            type: "single",
+            type: .single,
             isPinned: nil,
             isArchived: nil,
             accountID: nil,
@@ -122,7 +122,7 @@ struct ChatRowView: View {
                 linkedMessageID: nil
             ),
             isMuted: true,
-            type: "group",
+            type: .group,
             isPinned: true,
             isArchived: nil,
             accountID: nil,

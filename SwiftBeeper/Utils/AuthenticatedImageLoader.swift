@@ -10,7 +10,7 @@ enum AuthenticatedImageLoader {
         guard let sourceURL = URL(string: urlString) else { return nil }
 
         if sourceURL.scheme == "mxc" || sourceURL.scheme == "localmxc" || sourceURL.scheme == "file" {
-            guard var components = URLComponents(string: "http://localhost:23373/v1/assets/serve") else {
+            guard var components = URLComponents(url: APIConfiguration.assetsProxyURL, resolvingAgainstBaseURL: false) else {
                 return nil
             }
             components.queryItems = [URLQueryItem(name: "url", value: urlString)]
@@ -50,8 +50,8 @@ enum AuthenticatedImageLoader {
             }
 
             let tempDir = FileManager.default.temporaryDirectory
-            let fileName = UUID().uuidString + "." + fileExtension
-            let fileURL = tempDir.appendingPathComponent(fileName)
+            let fileName = "\(UUID().uuidString).\(fileExtension)"
+            let fileURL = tempDir.appending(path: fileName)
             try data.write(to: fileURL)
             return fileURL
         } catch {

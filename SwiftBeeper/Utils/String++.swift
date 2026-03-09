@@ -14,4 +14,12 @@ extension String {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(self)
     }
+    
+    var trimmed: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isBlank: Bool {
+        trimmed.isEmpty
+    }
 }

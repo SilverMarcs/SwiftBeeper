@@ -8,6 +8,7 @@ struct AudioAttachmentView: View {
     let isOutgoing: Bool
 
     @State private var audioPlayer: AVPlayer?
+    @State private var playbackObserver: NSObjectProtocol?
     @State private var isAudioPlaying = false
     @State private var isAudioLoading = false
 
@@ -53,10 +54,13 @@ struct AudioAttachmentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color.secondary.opacity(0.1)))
+        .background(ChatVisualStyle.bubbleFill(isOutgoing: isOutgoing))
         .clipShape(.rect(cornerRadius: 12))
         .task(id: attachment.resolvedURL) {
             await loadAudio()
+        }
+        .onDisappear {
+            tearDownPlayer()
         }
     }
 
@@ -76,7 +80,7 @@ struct AudioAttachmentView: View {
         let player = AVPlayer(url: fileURL)
         audioPlayer = player
 
-        NotificationCenter.default.addObserver(
+        playbackObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player.currentItem,
             queue: .main
@@ -97,8 +101,16 @@ struct AudioAttachmentView: View {
     }
 
     private func formatDuration(_ seconds: Double) -> String {
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
+        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
+    }
+
+    private func tearDownPlayer() {
+        audioPlayer?.pause()
+        audioPlayer = nil
+        if let playbackObserver {
+            NotificationCenter.default.removeObserver(playbackObserver)
+            self.playbackObserver = nil
+        }
+        isAudioPlaying = false
     }
 }

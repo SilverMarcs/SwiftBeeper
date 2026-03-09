@@ -2,7 +2,7 @@ import Foundation
 
 extension APIClient {
     static func listChats(cursor: String? = nil, direction: String? = nil, accessToken: String) async throws -> ListChatsOutput {
-        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats"), resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = []
         if let cursor { queryItems.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let direction { queryItems.append(URLQueryItem(name: "direction", value: direction)) }
@@ -14,7 +14,7 @@ extension APIClient {
     }
 
     static func listLowPriorityChatIDs(accessToken: String) async throws -> Set<String> {
-        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "inbox", value: "low-priority")]
         guard let url = components.url else {
             throw APIError.invalidResponse
@@ -24,7 +24,7 @@ extension APIClient {
     }
 
     static func searchChats(query: String? = nil, inbox: String? = nil, cursor: String? = nil, direction: String? = nil, accessToken: String) async throws -> SearchChatsOutput {
-        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = []
         if let query { queryItems.append(URLQueryItem(name: "query", value: query)) }
         if let inbox { queryItems.append(URLQueryItem(name: "inbox", value: inbox)) }
@@ -38,7 +38,7 @@ extension APIClient {
     }
 
     static func getChat(chatID: String, accessToken: String) async throws -> Chat {
-        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/\(chatID)"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats/\(chatID)"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "maxParticipantCount", value: "-1")]
         guard let url = components.url else {
             throw APIError.invalidResponse
@@ -47,7 +47,7 @@ extension APIClient {
     }
 
     static func archiveChat(chatID: String, archived: Bool, accessToken: String) async throws {
-        guard let url = URL(string: "/v1/chats/\(chatID)/archive", relativeTo: API.baseURL) else {
+        guard let url = URL(string: "/v1/chats/\(chatID)/archive", relativeTo: APIConfiguration.baseURL) else {
             throw APIError.invalidResponse
         }
 

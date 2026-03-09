@@ -2,7 +2,7 @@ import Foundation
 
 extension APIClient {
     static func listMessages(chatID: String, cursor: String? = nil, direction: String? = nil, accessToken: String) async throws -> ListMessagesOutput {
-        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/\(chatID)/messages"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats/\(chatID)/messages"), resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = []
         if let cursor { queryItems.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let direction { queryItems.append(URLQueryItem(name: "direction", value: direction)) }
@@ -14,7 +14,7 @@ extension APIClient {
     }
 
     static func sendMessage(chatID: String, text: String?, replyToMessageID: String? = nil, attachment: MessageAttachmentInput? = nil, accessToken: String) async throws -> SendMessageOutput {
-        guard let url = URL(string: "/v1/chats/\(chatID)/messages", relativeTo: API.baseURL) else {
+        guard let url = URL(string: "/v1/chats/\(chatID)/messages", relativeTo: APIConfiguration.baseURL) else {
             throw APIError.invalidResponse
         }
 
@@ -26,7 +26,7 @@ extension APIClient {
     }
 
     static func editMessage(chatID: String, messageID: String, text: String, accessToken: String) async throws -> EditMessageOutput {
-        guard let url = URL(string: "/v1/chats/\(chatID)/messages/\(messageID)", relativeTo: API.baseURL) else {
+        guard let url = URL(string: "/v1/chats/\(chatID)/messages/\(messageID)", relativeTo: APIConfiguration.baseURL) else {
             throw APIError.invalidResponse
         }
 
@@ -38,7 +38,7 @@ extension APIClient {
     }
 
     static func addReaction(chatID: String, messageID: String, reactionKey: String, accessToken: String) async throws -> AddReactionOutput {
-        guard let url = URL(string: "/v1/chats/\(chatID)/messages/\(messageID)/reactions", relativeTo: API.baseURL) else {
+        guard let url = URL(string: "/v1/chats/\(chatID)/messages/\(messageID)/reactions", relativeTo: APIConfiguration.baseURL) else {
             throw APIError.invalidResponse
         }
 
@@ -50,7 +50,7 @@ extension APIClient {
     }
 
     static func removeReaction(chatID: String, messageID: String, reactionKey: String, accessToken: String) async throws -> RemoveReactionOutput {
-        var components = URLComponents(url: API.baseURL.appending(path: "/v1/chats/\(chatID)/messages/\(messageID)/reactions"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats/\(chatID)/messages/\(messageID)/reactions"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "reactionKey", value: reactionKey)]
         guard let url = components.url else {
             throw APIError.invalidResponse

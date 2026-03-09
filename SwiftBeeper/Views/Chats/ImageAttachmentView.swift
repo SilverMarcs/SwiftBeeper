@@ -15,14 +15,18 @@ struct ImageAttachmentView: View {
     var body: some View {
         Group {
             if let loadedImage {
-                loadedImage
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: thumbnailWidth, height: thumbnailHeight)
-                    .clipped()
-                    .clipShape(.rect(cornerRadius: 12))
-                    .contentShape(.rect(cornerRadius: 12))
-                    .onTapGesture { showFullImage = true }
+                Button {
+                    showFullImage = true
+                } label: {
+                    loadedImage
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: thumbnailWidth, height: thumbnailHeight)
+                        .clipped()
+                        .clipShape(.rect(cornerRadius: 12))
+                        .contentShape(.rect(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
             } else if isLoading {
                 ProgressView()
                     .frame(width: thumbnailWidth, height: thumbnailHeight)

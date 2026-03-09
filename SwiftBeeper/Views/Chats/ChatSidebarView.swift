@@ -29,7 +29,7 @@ struct ChatSidebarView: View {
                     await chatStore.searchChats()
                 }
                 .onChange(of: chatStore.searchQuery) {
-                    if chatStore.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if chatStore.searchQuery.isBlank {
                         chatStore.searchResults = nil
                         chatStore.isSearching = false
                     }

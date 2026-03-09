@@ -35,6 +35,7 @@ final class MessageStore {
     func reset() {
         messagesByChatID = [:]
         hasMoreMessagesByChatID = [:]
+        latestLoadRequestIDByChatID = [:]
         messagesError = nil
         replyingToMessage = nil
         editingMessage = nil
@@ -199,7 +200,7 @@ final class MessageStore {
     func sendMessage(text: String, attachment: PendingAttachment?, to chatID: String) async -> Bool {
         guard !currentAccessToken.isEmpty else { return false }
 
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedText = text.trimmed
         let hasText = !trimmedText.isEmpty
         let hasAttachment = attachment != nil
 
@@ -313,7 +314,7 @@ final class MessageStore {
         guard let message = editingMessage else { return false }
         guard !currentAccessToken.isEmpty else { return false }
 
-        let trimmedText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedText = newText.trimmed
         guard !trimmedText.isEmpty else { return false }
 
         isSendingMessage = true

@@ -60,7 +60,7 @@ final class ChatStore {
     }
 
     var displayedChats: [Chat] {
-        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if searchQuery.isBlank {
             return chats
         }
         return searchResults ?? chats
@@ -72,7 +72,7 @@ final class ChatStore {
     }
 
     func searchChats() async {
-        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = searchQuery.trimmed
         guard !trimmed.isEmpty else {
             searchResults = nil
             isSearching = false
@@ -112,9 +112,12 @@ final class ChatStore {
             realtimeService.stop()
             realtimeService.selectedChatID = nil
             chats = []
+            lowPriorityChatIDs = []
             messageStore.reset()
             selectedChatID = nil
             chatsError = nil
+            chatsCursor = nil
+            hasMoreChats = false
             return
         }
 
@@ -125,6 +128,7 @@ final class ChatStore {
     func loadChats() async {
         guard !currentAccessToken.isEmpty else {
             chats = []
+            lowPriorityChatIDs = []
             messageStore.reset()
             selectedChatID = nil
             chatsError = nil

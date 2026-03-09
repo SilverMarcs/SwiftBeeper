@@ -55,7 +55,7 @@ struct ProfileAvatarView: View {
 
     private var initials: String {
         let words = name
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmed
             .split(separator: " ")
 
         let pickedCharacters = words.prefix(2).compactMap { word in

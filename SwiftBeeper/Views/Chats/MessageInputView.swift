@@ -57,118 +57,112 @@ struct MessageInputView: View {
 
     private var inputView: some View {
         GlassEffectContainer {
-        VStack(spacing: 0) {
-            if let messagesError = messageStore.messagesError {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                    Text(messagesError)
-                        .lineLimit(2)
+            VStack(spacing: 0) {
+                if let messagesError = messageStore.messagesError {
+                    ComposerErrorBanner(message: messagesError)
                 }
-                .font(.footnote)
-                .padding(8)
-                .frame(maxWidth: .infinity)
-                .background(.red.opacity(0.12))
-            }
 
-            if let pending = messageStore.pendingAttachment {
-                HStack {
-                    attachmentCard(pending)
-                    Spacer()
+                if let pending = messageStore.pendingAttachment {
+                    HStack {
+                        PendingAttachmentPreview(
+                            pending: pending,
+                            isSending: messageStore.isSendingMessage,
+                            onRemove: messageStore.clearPendingAttachment
+                        )
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            }
 
-            HStack(alignment: .bottom) {
-                // Attachment menu
-                Menu {
-                    Button {
-                        showingPhotoPicker = true
+                HStack(alignment: .bottom) {
+                    Menu {
+                        Button {
+                            showingPhotoPicker = true
+                        } label: {
+                            Label("Photos Library", systemImage: "photo.on.rectangle.angled")
+                        }
+
+                        Button {
+                            showingFilePicker = true
+                        } label: {
+                            Label("Attach Files", systemImage: "paperclip")
+                        }
                     } label: {
-                        Label("Photos Library", systemImage: "photo.on.rectangle.angled")
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(.secondary, .clear)
+                            .font(.largeTitle)
+                            .glassEffect()
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .offset(y: -1)
+
+                    if hasActiveComposerAction {
+                        Button {
+                            withAnimation {
+                                messageStore.cancelComposerAction()
+                                if isEditing {
+                                    draftMessage = ""
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.largeTitle)
+                                .foregroundStyle(.white.opacity(0.7), .clear)
+                                .glassEffect(.regular.tint(.red.opacity(0.6)))
+                        }
+                        .buttonStyle(.plain)
+                        .keyboardShortcut(.cancelAction)
+                        .offset(y: -1)
+                        .scaleEffect(0.9)
                     }
 
-                    Button {
-                        showingFilePicker = true
-                    } label: {
-                        Label("Attach Files", systemImage: "paperclip")
-                    }
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(.secondary, .clear)
-                        .font(.largeTitle).fontWeight(.semibold)
-                        .glassEffect()
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .offset(y: -1)
-
-                if hasActiveComposerAction {
-                    Button {
-                        withAnimation {
-                            messageStore.cancelComposerAction()
-                            if isEditing {
+                    TextField(
+                        messageFieldPrompt,
+                        text: Binding(
+                            get: { draftMessage },
+                            set: { draftMessage = $0 }
+                        ),
+                        axis: .vertical
+                    )
+                        .textFieldStyle(.plain)
+                        .focused($isMessageFieldFocused)
+                        .lineLimit(1 ... 7)
+                        .padding(.horizontal, 4)
+                        .padding(8)
+                        .glassEffect(in: .rect(cornerRadius: 16))
+                        .onSubmit {
+                            handleSubmit()
+                        }
+                        .onChange(of: messageStore.editingMessage?.id) { _, newValue in
+                            if let editingMessage = messageStore.editingMessage {
+                                draftMessage = editingMessage.text ?? ""
+                            } else if newValue == nil {
                                 draftMessage = ""
                             }
                         }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.largeTitle).fontWeight(.semibold)
-                            .foregroundStyle(.white.opacity(0.7), .clear)
-                            .glassEffect(.regular.tint(.red.opacity(0.6)))
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.cancelAction)
-                    .offset(y: -1)
-                    .scaleEffect(0.9)
-                }
 
-                // Text field with glass effect
-                TextField(
-                    messageFieldPrompt,
-                    text: Binding(
-                        get: { draftMessage },
-                        set: { draftMessage = $0 }
-                    ),
-                    axis: .vertical
-                )
-                    .textFieldStyle(.plain)
-                    .focused($isMessageFieldFocused)
-                    .lineLimit(1 ... 7)
-                    .padding(.horizontal, 4)
-                    .padding(8)
-                    .glassEffect(in: .rect(cornerRadius: 16))
-                    .onSubmit {
+                    Button {
                         handleSubmit()
+                    } label: {
+                        Image(systemName: isEditing ? "checkmark" : "arrow.up")
+                            .font(.system(size: 15))
+                            .bold()
                     }
-                    .onChange(of: messageStore.editingMessage?.id) { _, newValue in
-                        if let editingMessage = messageStore.editingMessage {
-                            draftMessage = editingMessage.text ?? ""
-                        } else if newValue == nil {
-                            draftMessage = ""
-                        }
-                    }
-
-                // Send/Save button
-                Button {
-                    handleSubmit()
-                } label: {
-                    Image(systemName: isEditing ? "checkmark" : "arrow.up")
-                        .font(.system(size: 15)).fontWeight(.bold)
+                    .opacity(0.85)
+                    .controlSize(.large)
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .disabled(sendButtonDisabled)
+                    .offset(y: -2)
                 }
-                .opacity(0.85)
-                .controlSize(.large)
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-//                .disabled(sendButtonDisabled)
-                .offset(y: -2)
+                .padding(8)
+                .padding(.horizontal, 2)
             }
-            .padding(8)
-            .padding(.horizontal, 2)
-        }
-        .fixedSize(horizontal: false, vertical: true)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .fileImporter(
             isPresented: $showingFilePicker,
@@ -239,7 +233,7 @@ struct MessageInputView: View {
     }
 
     private var trimmedDraftMessage: String {
-        draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        draftMessage.trimmed
     }
 
     private var mostRecentEditableOutgoingMessage: Message? {
@@ -372,38 +366,4 @@ struct MessageInputView: View {
         return "application/octet-stream"
     }
 
-    private func attachmentCard(_ pending: PendingAttachment) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: attachmentIcon(for: pending.mimeType))
-                .font(.title2)
-                .foregroundStyle(.secondary)
-
-            Text(pending.fileName)
-                .font(.caption2)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .frame(width: 150, height: 50)
-        .glassEffect(in: .rect(cornerRadius: 12))
-        .overlay(alignment: .topTrailing) {
-            Button {
-                messageStore.clearPendingAttachment()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption)
-                    .foregroundStyle(.white, .secondary)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .offset(x: 4, y: -4)
-            .disabled(messageStore.isSendingMessage)
-        }
-    }
-
-    private func attachmentIcon(for mimeType: String) -> String {
-        if mimeType.hasPrefix("image/") { return "photo" }
-        if mimeType.hasPrefix("video/") { return "video" }
-        if mimeType.hasPrefix("audio/") { return "waveform" }
-        return "doc"
-    }
 }

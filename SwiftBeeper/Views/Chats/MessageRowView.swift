@@ -43,7 +43,7 @@ struct MessageRowView: View {
                         .foregroundStyle(isOutgoing ? .white : .primary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(isOutgoing ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color.secondary.opacity(0.1)))
+                        .background(ChatVisualStyle.bubbleFill(isOutgoing: isOutgoing))
                         .clipShape(.rect(cornerRadius: 15))
                 }
 

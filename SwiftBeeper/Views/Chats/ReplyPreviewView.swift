@@ -29,7 +29,7 @@ struct ReplyPreviewView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(isOutgoing ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
+        .background(ChatVisualStyle.replyPreviewFill(isOutgoing: isOutgoing))
         .clipShape(.rect(cornerRadius: 8))
     }
 }

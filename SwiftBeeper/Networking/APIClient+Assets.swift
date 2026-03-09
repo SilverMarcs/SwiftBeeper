@@ -8,12 +8,10 @@ extension APIClient {
         accessToken: String,
         onProgress: @escaping @MainActor @Sendable (Double) -> Void
     ) async throws -> UploadAssetOutput {
-        let url = API.baseURL.appending(path: "/v1/assets/upload")
+        let url = APIConfiguration.baseURL.appending(path: "/v1/assets/upload")
         let boundary = UUID().uuidString
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        var request = request(url: url, method: .post, accessToken: accessToken)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var body = Data()
@@ -23,16 +21,12 @@ extension APIClient {
         body.append(fileData)
         body.appendString("\r\n--\(boundary)--\r\n")
 
-        print("[Upload] POST \(url) fileName=\(fileName) mimeType=\(mimeType) size=\(fileData.count)")
-
         let delegate = UploadProgressDelegate(onProgress: onProgress)
         let (data, response) = try await URLSession.shared.upload(for: request, from: body, delegate: delegate)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
-
-        print("[Upload] Response \(httpResponse.statusCode): \(String(data: data, encoding: .utf8) ?? "<binary>")")
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             throw APIError.http(statusCode: httpResponse.statusCode, details: parseErrorMessage(from: data))
@@ -69,8 +63,6 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Se
 
 private extension Data {
     mutating func appendString(_ string: String) {
-        if let data = string.data(using: .utf8) {
-            append(data)
-        }
+        append(Data(string.utf8))
     }
 }

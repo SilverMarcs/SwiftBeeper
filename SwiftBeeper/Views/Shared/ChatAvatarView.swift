@@ -30,7 +30,7 @@ struct ChatAvatarView: View {
         }
 
         if let senderName = chat.preview?.senderName,
-           senderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+           senderName.isBlank == false {
             return senderName
         }
 
