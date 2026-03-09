@@ -274,9 +274,16 @@ final class MessageStore {
         replyingToMessage = message
     }
 
-    func startEditing(_ message: Message) {
-        guard message.isSender == true else { return }
-        guard Date().timeIntervalSince(message.timestamp) <= 15 * 60 else { return }
+    func canEdit(_ message: Message, in chat: Chat) -> Bool {
+        guard isOutgoingMessage(message, in: chat) else { return false }
+        if chat.allowsUnlimitedMessageEdits {
+            return true
+        }
+        return Date().timeIntervalSince(message.timestamp) <= 15 * 60
+    }
+
+    func startEditing(_ message: Message, in chat: Chat) {
+        guard canEdit(message, in: chat) else { return }
         replyingToMessage = nil
         editingMessage = message
     }
@@ -288,6 +295,18 @@ final class MessageStore {
     func cancelComposerAction() {
         replyingToMessage = nil
         editingMessage = nil
+    }
+
+    private func isOutgoingMessage(_ message: Message, in chat: Chat) -> Bool {
+        if let isSender = message.isSender {
+            return isSender
+        }
+
+        guard let currentParticipantID = chat.participants?.items.first(where: { $0.isSelf == true })?.id else {
+            return false
+        }
+
+        return message.senderID == currentParticipantID
     }
 
     func saveEdit(newText: String) async -> Bool {

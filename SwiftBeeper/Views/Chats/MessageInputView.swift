@@ -16,8 +16,12 @@ struct MessageInputView: View {
         chatStore.selectedChat?.cannotMessage == true
     }
 
+    private var selectedChat: Chat? {
+        chatStore.selectedChat
+    }
+
     private var selectedChatID: String? {
-        chatStore.selectedChat?.id
+        selectedChat?.id
     }
 
     private var draftMessage: String {
@@ -193,6 +197,21 @@ struct MessageInputView: View {
         .onChange(of: messageStore.activeComposerMessage?.id) { _, _ in
             focusMessageField()
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Button("Focus", systemImage: "text.cursor") {
+                    focusMessageField()
+                }
+                .keyboardShortcut("l", modifiers: .command)
+                .disabled(cannotMessage)
+
+                Button("Edit Last", systemImage: "pencil") {
+                    editMostRecentOutgoingMessage()
+                }
+                .keyboardShortcut("e", modifiers: .command)
+                .disabled(mostRecentEditableOutgoingMessage == nil)
+            }
+        }
     }
 
     private var isEditing: Bool {
@@ -215,12 +234,20 @@ struct MessageInputView: View {
 
     private var sendButtonDisabled: Bool {
         if messageStore.isSendingMessage { return true }
-        if chatStore.selectedChat == nil { return true }
+        if selectedChat == nil { return true }
         return trimmedDraftMessage.isEmpty && messageStore.pendingAttachment == nil
     }
 
     private var trimmedDraftMessage: String {
         draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var mostRecentEditableOutgoingMessage: Message? {
+        guard let selectedChat else { return nil }
+
+        return messageStore.messages(for: selectedChat.id).last { message in
+            messageStore.canEdit(message, in: selectedChat)
+        }
     }
 
     private func handleSubmit() {
@@ -286,6 +313,14 @@ struct MessageInputView: View {
             await Task.yield()
             isMessageFieldFocused = true
         }
+    }
+
+    private func editMostRecentOutgoingMessage() {
+        guard let selectedChat, let message = mostRecentEditableOutgoingMessage else { return }
+        withAnimation {
+            messageStore.startEditing(message, in: selectedChat)
+        }
+        focusMessageField()
     }
 
     private func handleFileImport(_ result: Result<URL, Error>) {

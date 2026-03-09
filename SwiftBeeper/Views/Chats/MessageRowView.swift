@@ -100,10 +100,10 @@ struct MessageRowView: View {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                 }
 
-                if isOutgoing && canEdit {
+                if messageStore.canEdit(message, in: chat) {
                     Button {
                         withAnimation {
-                            messageStore.startEditing(message)
+                            messageStore.startEditing(message, in: chat)
                         }
                     } label: {
                         Label("Edit", systemImage: "pencil")
@@ -129,11 +129,6 @@ struct MessageRowView: View {
     private var senderAvatarImageURL: String? {
         chat.participant(with: message.senderID)?.imgURL
     }
-
-    private var canEdit: Bool {
-        Date().timeIntervalSince(message.timestamp) <= 15 * 60
-    }
-
 
     private var isOutgoing: Bool {
         if let isSender = message.isSender {

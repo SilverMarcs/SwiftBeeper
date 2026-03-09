@@ -105,6 +105,10 @@ struct Chat: Identifiable, Decodable, Equatable {
         return otherParticipant?.cannotMessage == true
     }
 
+    var allowsUnlimitedMessageEdits: Bool {
+        accountID?.localizedStandardContains("telegram") == true
+    }
+
     func participant(with id: String) -> ChatParticipant? {
         participants?.items.first(where: { $0.id == id })
     }
