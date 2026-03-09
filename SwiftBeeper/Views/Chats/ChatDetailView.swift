@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ChatDetailView: View {
     @Environment(SessionStore.self) private var sessionStore
@@ -139,6 +140,9 @@ struct ChatDetailView: View {
                         .ignoresSafeArea(edges: .vertical)
                     }
                 }
+                .onDrop(of: [.item], isTargeted: nil) { providers in
+                    handleDrop(providers)
+                }
                 .safeAreaBar(edge: .bottom, spacing: 0) {
                     MessageInputView()
                 }
@@ -155,6 +159,32 @@ struct ChatDetailView: View {
                 isPreparingInitialScroll = false
             }
         }
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+
+        provider.loadFileRepresentation(forTypeIdentifier: UTType.item.identifier) { url, _ in
+            guard let url else { return }
+            guard let data = try? Data(contentsOf: url) else { return }
+            let fileName = url.lastPathComponent
+            let mimeType: String = {
+                if let utType = UTType(filenameExtension: url.pathExtension) {
+                    return utType.preferredMIMEType ?? "application/octet-stream"
+                }
+                return "application/octet-stream"
+            }()
+
+            Task { @MainActor in
+                messageStore.pendingAttachment = PendingAttachment(
+                    fileData: data,
+                    fileName: fileName,
+                    mimeType: mimeType
+                )
+            }
+        }
+
+        return true
     }
 
     private func scrollToBottom(with proxy: ScrollViewProxy, animated: Bool) {

@@ -182,6 +182,9 @@ struct MessageInputView: View {
             }
             selectedPhotoItem = nil
         }
+        #if os(macOS)
+        .pasteHandler()
+        #endif
         .onAppear {
             focusMessageField()
         }
@@ -365,5 +368,4 @@ struct MessageInputView: View {
         }
         return "application/octet-stream"
     }
-
 }
