@@ -39,6 +39,7 @@ final class ChatStore {
     private var lowPriorityChatIDs: Set<String> = []
     private var chatsCursor: String?
     private(set) var currentAccessToken = ""
+    private var lastLoadedInboxFilter: InboxFilter?
 
     let messageStore = MessageStore()
     let realtimeService = RealtimeService()
@@ -77,6 +78,18 @@ final class ChatStore {
 
     private func isPrimaryInboxChat(_ chat: Chat) -> Bool {
         !lowPriorityChatIDs.contains(chat.id) && chat.isArchived != true
+    }
+
+    private func mergedChatsPreservingExistingContext(
+        refreshedChats: [Chat],
+        existingChats: [Chat],
+        shouldPreserveExistingChats: Bool
+    ) -> [Chat] {
+        guard shouldPreserveExistingChats else { return refreshedChats }
+
+        let refreshedIDs = Set(refreshedChats.map(\.id))
+        let preservedExistingChats = existingChats.filter { !refreshedIDs.contains($0.id) }
+        return refreshedChats + preservedExistingChats
     }
 
     func searchChats() async {
@@ -146,43 +159,63 @@ final class ChatStore {
             chatsError = nil
             chatsCursor = nil
             hasMoreChats = false
+            lastLoadedInboxFilter = nil
             return
         }
+
+        let existingChats = chats
+        let existingSelectedChatID = selectedChatID
+        let existingChatsCursor = chatsCursor
+        let existingHasMoreChats = hasMoreChats
+        let existingLowPriorityChatIDs = lowPriorityChatIDs
+        let shouldPreserveExistingChats = lastLoadedInboxFilter == selectedInboxFilter
 
         isLoadingChats = true
         defer { isLoadingChats = false }
 
-        chatsCursor = nil
-        hasMoreChats = false
-
         do {
+            let refreshedChats: [Chat]
+            let refreshedCursor: String?
+            let refreshedHasMoreChats: Bool
+
             if selectedInboxFilter == .primary {
                 async let chatsResponse = APIClient.listChats(accessToken: currentAccessToken)
                 async let lowPriorityIDs = (try? APIClient.listLowPriorityChatIDs(accessToken: currentAccessToken)) ?? []
 
                 let response = try await chatsResponse
                 lowPriorityChatIDs = await lowPriorityIDs
-                chats = response.items.filter(isPrimaryInboxChat)
-                chatsCursor = response.oldestCursor
-                hasMoreChats = response.hasMore ?? false
+                refreshedChats = response.items.filter(isPrimaryInboxChat)
+                refreshedCursor = response.oldestCursor
+                refreshedHasMoreChats = response.hasMore ?? false
             } else {
                 let response = try await APIClient.searchChats(inbox: selectedInboxFilter.rawValue, accessToken: currentAccessToken)
-                chats = response.items
-                chatsCursor = response.oldestCursor
-                hasMoreChats = response.hasMore
+                refreshedChats = response.items
+                refreshedCursor = response.oldestCursor
+                refreshedHasMoreChats = response.hasMore
             }
-            chatsError = nil
 
-            if !chats.contains(where: { $0.id == selectedChatID }) {
+            chats = mergedChatsPreservingExistingContext(
+                refreshedChats: refreshedChats,
+                existingChats: existingChats,
+                shouldPreserveExistingChats: shouldPreserveExistingChats
+            )
+            chatsCursor = refreshedCursor
+            hasMoreChats = refreshedHasMoreChats
+            chatsError = nil
+            lastLoadedInboxFilter = selectedInboxFilter
+
+            if let existingSelectedChatID, chats.contains(where: { $0.id == existingSelectedChatID }) {
+                selectedChatID = existingSelectedChatID
+            } else if !chats.contains(where: { $0.id == selectedChatID }) {
                 selectedChatID = chats.first?.id
             }
         } catch {
             chatsError = error.localizedDescription
-            chats = []
-            messageStore.reset()
-            selectedChatID = nil
-            chatsCursor = nil
-            hasMoreChats = false
+            chats = existingChats
+            selectedChatID = existingSelectedChatID
+            chatsCursor = existingChatsCursor
+            hasMoreChats = existingHasMoreChats
+            lowPriorityChatIDs = existingLowPriorityChatIDs
         }
     }
 

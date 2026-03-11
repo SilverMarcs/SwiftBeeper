@@ -89,7 +89,7 @@ final class MessageStore {
             logger.debug("Loaded \(response.items.count, privacy: .public) messages for chat \(chatID, privacy: .public). Existing: \(existingMessages.count, privacy: .public). Refreshed: \(refreshedMessages.count, privacy: .public).")
         } catch {
             guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
-            messagesError = error.localizedDescription
+            handleMessageError(error, context: "loading messages for \(chatID)")
         }
     }
 
@@ -128,8 +128,42 @@ final class MessageStore {
             hasMoreMessagesByChatID[chatID] = response.hasMore
             logger.debug("Loaded \(response.items.count, privacy: .public) older messages for chat \(chatID, privacy: .public). Added: \(newMessages.count, privacy: .public). Total: \(merged.count, privacy: .public).")
         } catch {
-            messagesError = error.localizedDescription
+            handleMessageError(error, context: "loading older messages for \(chatID)")
         }
+    }
+
+    private func isCancellationLikeError(_ error: any Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+            return true
+        }
+
+        return error.localizedDescription.localizedStandardContains("cancelled")
+            || error.localizedDescription.localizedStandardContains("canceled")
+    }
+
+    private func handleMessageError(_ error: any Error, context: String) {
+        if isCancellationLikeError(error) {
+            logger.debug("Ignoring cancelled operation while \(context, privacy: .public): \(String(describing: error), privacy: .public)")
+            return
+        }
+
+        messagesError = error.localizedDescription
+        logger.error("Message operation failed while \(context, privacy: .public): \(error.localizedDescription, privacy: .public)")
+    }
+
+    private func handleMessageError(_ message: String, context: String) {
+        if message.localizedStandardContains("cancelled") || message.localizedStandardContains("canceled") {
+            logger.debug("Ignoring cancelled operation while \(context, privacy: .public): \(message, privacy: .public)")
+            return
+        }
+
+        messagesError = message
+        logger.error("Message operation failed while \(context, privacy: .public): \(message, privacy: .public)")
     }
 
     private func mergedMessages(existing: [Message], incoming: [Message], chatID: String, source: String) -> [Message] {
@@ -230,7 +264,7 @@ final class MessageStore {
                 )
 
                 if let error = uploadResult.error {
-                    messagesError = "Upload failed: \(error)"
+                    handleMessageError("Upload failed: \(error)", context: "uploading attachment for \(chatID)")
                     return false
                 }
 
@@ -261,7 +295,7 @@ final class MessageStore {
             messagesError = nil
             return true
         } catch {
-            messagesError = error.localizedDescription
+            handleMessageError(error, context: "sending message to \(chatID)")
             return false
         }
     }
@@ -331,7 +365,7 @@ final class MessageStore {
             messagesError = nil
             return true
         } catch {
-            messagesError = error.localizedDescription
+            handleMessageError(error, context: "editing message \(message.id)")
             return false
         }
     }
@@ -344,7 +378,7 @@ final class MessageStore {
         do {
             _ = try await APIClient.addReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: currentAccessToken)
         } catch {
-            messagesError = error.localizedDescription
+            handleMessageError(error, context: "adding reaction to \(messageID)")
         }
     }
 
@@ -354,7 +388,7 @@ final class MessageStore {
         do {
             _ = try await APIClient.removeReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: currentAccessToken)
         } catch {
-            messagesError = error.localizedDescription
+            handleMessageError(error, context: "removing reaction from \(messageID)")
         }
     }
 }
