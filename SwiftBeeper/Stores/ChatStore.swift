@@ -71,6 +71,14 @@ final class ChatStore {
         return chats.first(where: { $0.id == selectedChatID })
     }
 
+    private var activeInboxSearchFilter: String? {
+        selectedInboxFilter == .primary ? InboxFilter.primary.rawValue : selectedInboxFilter.rawValue
+    }
+
+    private func isPrimaryInboxChat(_ chat: Chat) -> Bool {
+        !lowPriorityChatIDs.contains(chat.id) && chat.isArchived != true
+    }
+
     func searchChats() async {
         let trimmed = searchQuery.trimmed
         guard !trimmed.isEmpty else {
@@ -81,7 +89,11 @@ final class ChatStore {
 
         isSearching = true
         do {
-            let response = try await APIClient.searchChats(query: trimmed, accessToken: currentAccessToken)
+            let response = try await APIClient.searchChats(
+                query: trimmed,
+                inbox: activeInboxSearchFilter,
+                accessToken: currentAccessToken
+            )
             searchResults = response.items
         } catch {
             searchResults = []
@@ -150,7 +162,7 @@ final class ChatStore {
 
                 let response = try await chatsResponse
                 lowPriorityChatIDs = await lowPriorityIDs
-                chats = response.items.filter { !lowPriorityChatIDs.contains($0.id) }
+                chats = response.items.filter(isPrimaryInboxChat)
                 chatsCursor = response.oldestCursor
                 hasMoreChats = response.hasMore ?? false
             } else {
@@ -187,9 +199,7 @@ final class ChatStore {
 
             if selectedInboxFilter == .primary {
                 let response = try await APIClient.listChats(cursor: cursor, direction: "before", accessToken: currentAccessToken)
-                let newChats = response.items.filter {
-                    !existingIDs.contains($0.id) && !lowPriorityChatIDs.contains($0.id)
-                }
+                let newChats = response.items.filter { !existingIDs.contains($0.id) && isPrimaryInboxChat($0) }
                 chats.append(contentsOf: newChats)
                 chatsCursor = response.oldestCursor
                 hasMoreChats = response.hasMore ?? false
