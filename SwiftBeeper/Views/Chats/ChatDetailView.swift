@@ -26,15 +26,17 @@ struct ChatDetailView: View {
                 let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
 
                 List {
-                    LoadOlderMessagesButton(
-                        isLoading: messageStore.isLoadingOlderMessages,
-                        canLoadMore: messageStore.hasMoreMessages(for: selectedChat.id),
-                        action: {
-                            loadOlderMessages(chatID: selectedChat.id)
-                        }
-                    )
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+                    if messageStore.hasMoreMessages(for: selectedChat.id) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(maxWidth: .infinity)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+                            .onAppear {
+                                guard !messageStore.isLoadingOlderMessages else { return }
+                                loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
+                            }
+                    }
 
                     ForEach(timelineEntries) { entry in
                         if entry.message.id == firstUnreadID {
@@ -213,9 +215,14 @@ struct ChatDetailView: View {
         }
     }
 
-    private func loadOlderMessages(chatID: String) {
+    private func loadOlderMessages(chatID: String, proxy: ScrollViewProxy) {
+        let anchorMessageID = messageStore.messages(for: chatID).first?.timelineKey
         Task { @MainActor in
             _ = await messageStore.loadOlderMessages(for: chatID)
+            if let anchorMessageID {
+                try? await Task.sleep(for: .milliseconds(1))
+                proxy.scrollTo(anchorMessageID, anchor: .top)
+            }
         }
     }
 
@@ -276,30 +283,6 @@ private struct TimelineFocusEffect: ViewModifier {
     }
 }
 
-private struct LoadOlderMessagesButton: View {
-    let isLoading: Bool
-    let canLoadMore: Bool
-    let action: () -> Void
-
-    var body: some View {
-        if canLoadMore || isLoading {
-            Button {
-                action()
-            } label: {
-                if isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Text("Load older messages")
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .buttonStyle(.link)
-            .disabled(isLoading)
-        }
-    }
-}
 
 private struct NavigationBarFocusVisibilityModifier: ViewModifier {
     let isFocusedOnComposerMessage: Bool
