@@ -20,6 +20,14 @@ struct SettingsView: View {
                 }
                 .disabled(sessionStore.accessToken.isEmpty)
             }
+
+            Section {
+                Button("Delete Cache", role: .destructive) {
+                    AuthenticatedImageLoader.clearTempFiles()
+                }
+            } footer: {
+                Text("Removes downloaded media files from the temporary directory.")
+            }
         }
         .formStyle(.grouped)
         .frame(width: 520)

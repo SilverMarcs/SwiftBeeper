@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct ProfileAvatarView: View {
-    @Environment(SessionStore.self) private var sessionStore
-
     let name: String
     let imageURLString: String?
     let dimension: CGFloat
@@ -26,7 +24,7 @@ struct ProfileAvatarView: View {
     }
 
     private var imageRequestKey: String {
-        "\(imageURLString ?? "none")|\(sessionStore.accessToken)"
+        imageURLString ?? "none"
     }
 
     private func loadImage() async {
@@ -36,8 +34,7 @@ struct ProfileAvatarView: View {
         }
 
         loadedImage = await AuthenticatedImageLoader.loadImage(
-            urlString: imageURLString,
-            accessToken: sessionStore.accessToken
+            urlString: imageURLString
         )
     }
 
@@ -72,5 +69,4 @@ struct ProfileAvatarView: View {
 
 #Preview {
     ProfileAvatarView(name: "Alice Wonder", imageURLString: nil, dimension: 36)
-        .environment(SessionStore())
 }

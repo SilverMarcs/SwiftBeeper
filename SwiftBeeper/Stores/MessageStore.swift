@@ -22,8 +22,6 @@ final class MessageStore {
         editingMessage ?? replyingToMessage
     }
 
-    var currentAccessToken = ""
-
     func messages(for chatID: String) -> [Message] {
         (messagesByChatID[chatID] ?? []).filter { !$0.isEmptyDeleted && !$0.isReaction && !$0.isMembershipEvent }
     }
@@ -50,12 +48,8 @@ final class MessageStore {
         await loadMessages(for: chatID)
     }
 
-    func loadMessagesForChatEntry(for chatID: String) async {
-        await loadMessages(for: chatID)
-    }
-
     func loadMessages(for chatID: String) async {
-        guard !currentAccessToken.isEmpty else { return }
+        guard !APIClient.accessToken.isEmpty else { return }
 
         let requestID = UUID()
         latestLoadRequestIDByChatID[chatID] = requestID
@@ -67,7 +61,7 @@ final class MessageStore {
         }
 
         do {
-            let response = try await APIClient.listMessages(chatID: chatID, accessToken: currentAccessToken)
+            let response = try await APIClient.listMessages(chatID: chatID)
             guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
 
             messagesError = nil
@@ -94,7 +88,7 @@ final class MessageStore {
 
     @discardableResult
     func loadOlderMessages(for chatID: String) async -> Bool {
-        guard !currentAccessToken.isEmpty else { return false }
+        guard !APIClient.accessToken.isEmpty else { return false }
         guard hasMoreMessagesByChatID[chatID] == true else { return false }
         guard !isLoadingOlderMessages else { return false }
 
@@ -108,8 +102,7 @@ final class MessageStore {
             let response = try await APIClient.listMessages(
                 chatID: chatID,
                 cursor: cursor,
-                direction: "before",
-                accessToken: currentAccessToken
+                direction: "before"
             )
 
             let existingMessages = messagesByChatID[chatID] ?? []
@@ -176,7 +169,7 @@ final class MessageStore {
             }
         }
         let sorted = merged.values.sorted(by: { $0.sortKey < $1.sortKey })
-        logDuplicateTimelineKeys(in: sorted, source: source, chatID: chatID)
+        logDuplicates(in: sorted, keyPath: \.timelineKey, label: "sortKey", source: source, chatID: chatID)
         return sorted
     }
 
@@ -196,7 +189,7 @@ final class MessageStore {
     }
 
     private func normalizedMessages(_ messages: [Message], source: String, chatID: String) -> [Message] {
-        logDuplicateServerMessageIDs(in: messages, source: source, chatID: chatID)
+        logDuplicates(in: messages, keyPath: \.id, label: "messageID", source: source, chatID: chatID)
 
         var messagesByTimelineKey: [String: Message] = [:]
         for message in messages {
@@ -206,23 +199,15 @@ final class MessageStore {
         }
 
         let normalized = messagesByTimelineKey.values.sorted(by: { $0.sortKey < $1.sortKey })
-        logDuplicateTimelineKeys(in: normalized, source: source, chatID: chatID)
+        logDuplicates(in: normalized, keyPath: \.timelineKey, label: "sortKey", source: source, chatID: chatID)
         return normalized
     }
 
-    private func logDuplicateServerMessageIDs(in messages: [Message], source: String, chatID: String) {
-        let grouped = Dictionary(grouping: messages, by: \.id)
-        for (messageID, entries) in grouped where entries.count > 1 {
-            let sortKeys = entries.map(\.timelineKey).joined(separator: ", ")
-            logger.warning("Duplicate message IDs in \(source, privacy: .public) for chat \(chatID, privacy: .public). messageID: \(messageID, privacy: .public), sortKeys: \(sortKeys, privacy: .public)")
-        }
-    }
-
-    private func logDuplicateTimelineKeys(in messages: [Message], source: String, chatID: String) {
-        let grouped = Dictionary(grouping: messages, by: \.timelineKey)
-        for (timelineKey, entries) in grouped where entries.count > 1 {
-            let ids = entries.map(\.id).joined(separator: ", ")
-            logger.warning("Duplicate sortKeys after merge in \(source, privacy: .public) for chat \(chatID, privacy: .public). sortKey: \(timelineKey, privacy: .public), messageIDs: \(ids, privacy: .public)")
+    private func logDuplicates(in messages: [Message], keyPath: KeyPath<Message, String>, label: String, source: String, chatID: String) {
+        let grouped = Dictionary(grouping: messages, by: { $0[keyPath: keyPath] })
+        for (key, entries) in grouped where entries.count > 1 {
+            let details = entries.map { $0.id == key ? $0.timelineKey : $0.id }.joined(separator: ", ")
+            logger.warning("Duplicate \(label, privacy: .public) in \(source, privacy: .public) for chat \(chatID, privacy: .public). \(label, privacy: .public): \(key, privacy: .public), related: \(details, privacy: .public)")
         }
     }
 
@@ -234,7 +219,7 @@ final class MessageStore {
     }
 
     func sendMessage(text: String, attachment: PendingAttachment?, to chatID: String) async -> Bool {
-        guard !currentAccessToken.isEmpty else { return false }
+        guard !APIClient.accessToken.isEmpty else { return false }
 
         let trimmedText = text.trimmed
         let hasText = !trimmedText.isEmpty
@@ -259,7 +244,6 @@ final class MessageStore {
                     fileData: attachment.fileData,
                     fileName: attachment.fileName,
                     mimeType: attachment.mimeType,
-                    accessToken: currentAccessToken,
                     onProgress: { [weak self] progress in
                         self?.uploadProgress = progress
                     }
@@ -289,8 +273,7 @@ final class MessageStore {
                 chatID: chatID,
                 text: hasText ? trimmedText : nil,
                 replyToMessageID: replyToID,
-                attachment: attachmentInput,
-                accessToken: currentAccessToken
+                attachment: attachmentInput
             )
             replyingToMessage = nil
             pendingAttachment = nil
@@ -312,7 +295,7 @@ final class MessageStore {
     }
 
     func canEdit(_ message: Message, in chat: Chat) -> Bool {
-        guard isOutgoingMessage(message, in: chat) else { return false }
+        guard message.isOutgoing(in: chat) else { return false }
         if chat.allowsUnlimitedMessageEdits {
             return true
         }
@@ -334,21 +317,9 @@ final class MessageStore {
         editingMessage = nil
     }
 
-    private func isOutgoingMessage(_ message: Message, in chat: Chat) -> Bool {
-        if let isSender = message.isSender {
-            return isSender
-        }
-
-        guard let currentParticipantID = chat.participants?.items.first(where: { $0.isSelf == true })?.id else {
-            return false
-        }
-
-        return message.senderID == currentParticipantID
-    }
-
     func saveEdit(newText: String) async -> Bool {
         guard let message = editingMessage else { return false }
-        guard !currentAccessToken.isEmpty else { return false }
+        guard !APIClient.accessToken.isEmpty else { return false }
 
         let trimmedText = newText.trimmed
         guard !trimmedText.isEmpty else { return false }
@@ -360,8 +331,7 @@ final class MessageStore {
             _ = try await APIClient.editMessage(
                 chatID: message.chatID,
                 messageID: message.id,
-                text: trimmedText,
-                accessToken: currentAccessToken
+                text: trimmedText
             )
             editingMessage = nil
             messagesError = nil
@@ -375,20 +345,20 @@ final class MessageStore {
     // MARK: - Reactions
 
     func addReaction(to messageID: String, in chatID: String, reactionKey: String) async {
-        guard !currentAccessToken.isEmpty else { return }
+        guard !APIClient.accessToken.isEmpty else { return }
 
         do {
-            _ = try await APIClient.addReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: currentAccessToken)
+            _ = try await APIClient.addReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey)
         } catch {
             handleMessageError(error, context: "adding reaction to \(messageID)")
         }
     }
 
     func removeReaction(from messageID: String, in chatID: String, reactionKey: String) async {
-        guard !currentAccessToken.isEmpty else { return }
+        guard !APIClient.accessToken.isEmpty else { return }
 
         do {
-            _ = try await APIClient.removeReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, accessToken: currentAccessToken)
+            _ = try await APIClient.removeReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey)
         } catch {
             handleMessageError(error, context: "removing reaction from \(messageID)")
         }

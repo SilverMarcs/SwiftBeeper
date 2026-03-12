@@ -2,8 +2,6 @@ import AVKit
 import SwiftUI
 
 struct VideoAttachmentView: View {
-    @Environment(SessionStore.self) private var sessionStore
-
     let attachment: Attachment
 
     @State private var videoPlayer: AVPlayer?
@@ -60,7 +58,6 @@ struct VideoAttachmentView: View {
         let ext = attachment.mimeType?.split(separator: "/").last.map(String.init) ?? "mp4"
         guard let fileURL = await AuthenticatedImageLoader.downloadToTempFile(
             urlString: urlString,
-            accessToken: sessionStore.accessToken,
             fileExtension: ext
         ) else { return }
 

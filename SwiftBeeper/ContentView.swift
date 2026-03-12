@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
+    @Environment(RealtimeCoordinator.self) private var coordinator
 
     var body: some View {
         NavigationSplitView {
@@ -12,15 +13,22 @@ struct ContentView: View {
             ChatDetailView()
         }
         .task(id: sessionStore.accessToken) {
-            await chatStore.updateAccessToken(sessionStore.accessToken)
+            await coordinator.updateAccessToken(sessionStore.accessToken)
         }
     }
 }
 
 #Preview {
     let chatStore = ChatStore()
+    let messageStore = MessageStore()
+    let realtimeService = RealtimeService()
     ContentView()
         .environment(SessionStore())
         .environment(chatStore)
-        .environment(chatStore.messageStore)
+        .environment(messageStore)
+        .environment(RealtimeCoordinator(
+            chatStore: chatStore,
+            messageStore: messageStore,
+            realtimeService: realtimeService
+        ))
 }

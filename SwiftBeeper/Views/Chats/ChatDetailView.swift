@@ -5,6 +5,7 @@ struct ChatDetailView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
     @Environment(MessageStore.self) private var messageStore
+    @Environment(RealtimeCoordinator.self) private var coordinator
     @State private var showingChatInfo = false
     @State private var isPreparingInitialScroll = false
     private let bottomAnchorID = "bottom-id"
@@ -92,11 +93,11 @@ struct ChatDetailView: View {
                 .task(id: selectedChat.id) {
                     isPreparingInitialScroll = true
                     resetScrollPaginationState()
-                    chatStore.realtimeService.selectedChatID = selectedChat.id
+                    coordinator.setSelectedChatID(selectedChat.id)
                     messageStore.setReplyTo(nil)
                     messageStore.cancelEditing()
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
-                    async let messagesLoad: () = messageStore.loadMessagesForChatEntry(for: selectedChat.id)
+                    async let messagesLoad: () = messageStore.loadMessages(for: selectedChat.id)
                     await messagesLoad
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
@@ -105,14 +106,10 @@ struct ChatDetailView: View {
                     isPreparingInitialScroll = false
                     await detail
                 }
-                .onChange(of: messages.map(\.id)) { oldMessageIDs, newMessageIDs in
+                .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
                     guard !isPreparingInitialScroll else { return }
-                    guard shouldScrollToBottomAfterMessageUpdate(
-                        oldMessageIDs: oldMessageIDs,
-                        newMessageIDs: newMessageIDs
-                    ) else {
-                        return
-                    }
+                    guard newTracker.count > oldTracker.count else { return }
+                    guard newTracker.lastID != oldTracker.lastID else { return }
 
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
@@ -173,7 +170,7 @@ struct ChatDetailView: View {
                 description: Text("Select a chat from the sidebar to view messages.")
             )
             .task {
-                chatStore.realtimeService.selectedChatID = nil
+                coordinator.setSelectedChatID(nil)
                 isPreparingInitialScroll = false
                 resetScrollPaginationState()
             }
@@ -220,14 +217,6 @@ struct ChatDetailView: View {
         Task { @MainActor in
             _ = await messageStore.loadOlderMessages(for: chatID)
         }
-    }
-
-    private func shouldScrollToBottomAfterMessageUpdate(
-        oldMessageIDs: [String],
-        newMessageIDs: [String]
-    ) -> Bool {
-        guard newMessageIDs.count > oldMessageIDs.count else { return false }
-        return Array(oldMessageIDs) == Array(newMessageIDs.prefix(oldMessageIDs.count))
     }
 
     private func resetScrollPaginationState() {
@@ -322,6 +311,11 @@ private struct NavigationBarFocusVisibilityModifier: ViewModifier {
         content
         #endif
     }
+}
+
+private struct MessageListTracker: Equatable {
+    let count: Int
+    let lastID: String?
 }
 
 private struct TimelineEntry: Identifiable {

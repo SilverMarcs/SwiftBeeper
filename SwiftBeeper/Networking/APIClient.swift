@@ -4,45 +4,54 @@ import OSLog
 enum APIClient {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "APIClient")
 
-    static func makeWebSocketTask(accessToken: String) -> URLSessionWebSocketTask {
-        let request = request(url: APIConfiguration.webSocketURL, method: .get, accessToken: accessToken)
+    private static let _tokenLock = NSLock()
+    private static var _accessToken: String = ""
+
+    static var accessToken: String {
+        get { _tokenLock.withLock { _accessToken } }
+        set { _tokenLock.withLock { _accessToken = newValue } }
+    }
+
+    static func clearToken() {
+        accessToken = ""
+    }
+
+    static func makeWebSocketTask() -> URLSessionWebSocketTask {
+        let request = request(url: APIConfiguration.webSocketURL, method: .get, accessToken: Self.accessToken)
         return URLSession.shared.webSocketTask(with: request)
     }
 
-    static func get<Response: Decodable>(url: URL, accessToken: String) async throws -> Response {
-        let request = request(url: url, method: .get, accessToken: accessToken)
+    static func get<Response: Decodable>(url: URL) async throws -> Response {
+        let request = request(url: url, method: .get, accessToken: Self.accessToken)
         return try await send(request)
     }
 
     static func post<Body: Encodable, Response: Decodable>(
         url: URL,
-        body: Body,
-        accessToken: String
+        body: Body
     ) async throws -> Response {
-        let request = try request(url: url, method: .post, body: body, accessToken: accessToken)
+        let request = try request(url: url, method: .post, body: body, accessToken: Self.accessToken)
         return try await send(request)
     }
 
     static func put<Body: Encodable, Response: Decodable>(
         url: URL,
-        body: Body,
-        accessToken: String
+        body: Body
     ) async throws -> Response {
-        let request = try request(url: url, method: .put, body: body, accessToken: accessToken)
+        let request = try request(url: url, method: .put, body: body, accessToken: Self.accessToken)
         return try await send(request)
     }
 
-    static func delete<Response: Decodable>(url: URL, accessToken: String) async throws -> Response {
-        let request = request(url: url, method: .delete, accessToken: accessToken)
+    static func delete<Response: Decodable>(url: URL) async throws -> Response {
+        let request = request(url: url, method: .delete, accessToken: Self.accessToken)
         return try await send(request)
     }
 
     static func postNoContent<Body: Encodable>(
         url: URL,
-        body: Body,
-        accessToken: String
+        body: Body
     ) async throws {
-        let request = try request(url: url, method: .post, body: body, accessToken: accessToken)
+        let request = try request(url: url, method: .post, body: body, accessToken: Self.accessToken)
         _ = try await sendRaw(request)
     }
 
@@ -109,12 +118,15 @@ private struct APIErrorPayload: Decodable {
 }
 
 enum APIError: LocalizedError {
+    case invalidURL(String)
     case invalidResponse
     case http(statusCode: Int, details: String?)
     case decoding(String)
 
     var errorDescription: String? {
         switch self {
+        case .invalidURL(let urlString):
+            return "Invalid URL: \(urlString)"
         case .invalidResponse:
             return "Invalid server response."
         case .http(let statusCode, let details):
@@ -129,17 +141,15 @@ enum APIError: LocalizedError {
 }
 
 extension JSONDecoder {
-    static var beeper: JSONDecoder {
+    static let beeper: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }
+    }()
 }
 
 extension JSONEncoder {
-    static var beeper: JSONEncoder {
-        JSONEncoder()
-    }
+    static let beeper = JSONEncoder()
 }
 
 enum HTTPMethod: String {

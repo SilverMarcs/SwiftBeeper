@@ -38,27 +38,8 @@ final class ChatStore {
     var isSearching = false
     private var lowPriorityChatIDs: Set<String> = []
     private var chatsCursor: String?
-    private(set) var currentAccessToken = ""
     private var lastLoadedInboxFilter: InboxFilter?
-
-    let messageStore = MessageStore()
-    let realtimeService = RealtimeService()
-
-    init() {
-        let messageStore = self.messageStore
-        let realtimeService = self.realtimeService
-        realtimeService.onRefreshChats = { [weak self] in
-            await self?.loadChats()
-        }
-        realtimeService.onRefreshMessages = { [weak messageStore] chatID in
-            await messageStore?.loadMessages(for: chatID)
-        }
-        realtimeService.onRealtimeError = { error in
-            Task { @MainActor [weak messageStore] in
-                messageStore?.messagesError = error
-            }
-        }
-    }
+    private var chatsByID: [String: Chat] = [:]
 
     var displayedChats: [Chat] {
         if searchQuery.isBlank {
@@ -69,11 +50,55 @@ final class ChatStore {
 
     var selectedChat: Chat? {
         guard let selectedChatID else { return nil }
-        return chats.first(where: { $0.id == selectedChatID })
+        return chatsByID[selectedChatID]
     }
 
-    private var activeInboxSearchFilter: String? {
-        selectedInboxFilter == .primary ? InboxFilter.primary.rawValue : selectedInboxFilter.rawValue
+    private struct ChatListState {
+        var chats: [Chat]
+        var selectedChatID: String?
+        var chatsCursor: String?
+        var hasMoreChats: Bool
+        var lowPriorityChatIDs: Set<String>
+        var lastLoadedInboxFilter: InboxFilter?
+        var chatsError: String?
+
+        static let empty = ChatListState(
+            chats: [],
+            selectedChatID: nil,
+            chatsCursor: nil,
+            hasMoreChats: false,
+            lowPriorityChatIDs: [],
+            lastLoadedInboxFilter: nil,
+            chatsError: nil
+        )
+    }
+
+    private var chatListState: ChatListState {
+        get {
+            ChatListState(
+                chats: chats,
+                selectedChatID: selectedChatID,
+                chatsCursor: chatsCursor,
+                hasMoreChats: hasMoreChats,
+                lowPriorityChatIDs: lowPriorityChatIDs,
+                lastLoadedInboxFilter: lastLoadedInboxFilter,
+                chatsError: chatsError
+            )
+        }
+        set {
+            setChats(newValue.chats)
+            selectedChatID = newValue.selectedChatID
+            chatsCursor = newValue.chatsCursor
+            hasMoreChats = newValue.hasMoreChats
+            lowPriorityChatIDs = newValue.lowPriorityChatIDs
+            lastLoadedInboxFilter = newValue.lastLoadedInboxFilter
+            chatsError = newValue.chatsError
+        }
+    }
+
+    private func setChats(_ newChats: [Chat]) {
+        chats = newChats
+        chatsByID = Dictionary(newChats.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
     }
 
     private func isPrimaryInboxChat(_ chat: Chat) -> Bool {
@@ -104,8 +129,7 @@ final class ChatStore {
         do {
             let response = try await APIClient.searchChats(
                 query: trimmed,
-                inbox: activeInboxSearchFilter,
-                accessToken: currentAccessToken
+                inbox: selectedInboxFilter.rawValue
             )
             searchResults = response.items
         } catch {
@@ -115,59 +139,31 @@ final class ChatStore {
     }
 
     func loadChatDetail(for chatID: String) async {
-        guard !currentAccessToken.isEmpty else { return }
+        guard !APIClient.accessToken.isEmpty else { return }
 
         do {
-            let detail = try await APIClient.getChat(chatID: chatID, accessToken: currentAccessToken)
+            let detail = try await APIClient.getChat(chatID: chatID)
             if let index = chats.firstIndex(where: { $0.id == chatID }) {
-                chats[index] = chats[index].merging(detail: detail)
+                let merged = chats[index].merging(detail: detail)
+                chats[index] = merged
+                chatsByID[chatID] = merged
             }
         } catch {
             // Non-critical; we still have list data
         }
     }
 
-    func updateAccessToken(_ accessToken: String) async {
-        if accessToken == currentAccessToken { return }
-
-        currentAccessToken = accessToken
-        messageStore.currentAccessToken = accessToken
-
-        if accessToken.isEmpty {
-            realtimeService.stop()
-            realtimeService.selectedChatID = nil
-            chats = []
-            lowPriorityChatIDs = []
-            messageStore.reset()
-            selectedChatID = nil
-            chatsError = nil
-            chatsCursor = nil
-            hasMoreChats = false
-            return
-        }
-
-        await loadChats()
-        realtimeService.start(accessToken: accessToken)
+    func clearState() {
+        chatListState = .empty
     }
 
     func loadChats() async {
-        guard !currentAccessToken.isEmpty else {
-            chats = []
-            lowPriorityChatIDs = []
-            messageStore.reset()
-            selectedChatID = nil
-            chatsError = nil
-            chatsCursor = nil
-            hasMoreChats = false
-            lastLoadedInboxFilter = nil
+        guard !APIClient.accessToken.isEmpty else {
+            chatListState = .empty
             return
         }
 
-        let existingChats = chats
-        let existingSelectedChatID = selectedChatID
-        let existingChatsCursor = chatsCursor
-        let existingHasMoreChats = hasMoreChats
-        let existingLowPriorityChatIDs = lowPriorityChatIDs
+        let snapshot = chatListState
         let shouldPreserveExistingChats = lastLoadedInboxFilter == selectedInboxFilter
 
         isLoadingChats = true
@@ -179,8 +175,8 @@ final class ChatStore {
             let refreshedHasMoreChats: Bool
 
             if selectedInboxFilter == .primary {
-                async let chatsResponse = APIClient.listChats(accessToken: currentAccessToken)
-                async let lowPriorityIDs = (try? APIClient.listLowPriorityChatIDs(accessToken: currentAccessToken)) ?? []
+                async let chatsResponse = APIClient.listChats()
+                async let lowPriorityIDs = (try? APIClient.listLowPriorityChatIDs()) ?? []
 
                 let response = try await chatsResponse
                 lowPriorityChatIDs = await lowPriorityIDs
@@ -188,39 +184,35 @@ final class ChatStore {
                 refreshedCursor = response.oldestCursor
                 refreshedHasMoreChats = response.hasMore ?? false
             } else {
-                let response = try await APIClient.searchChats(inbox: selectedInboxFilter.rawValue, accessToken: currentAccessToken)
+                let response = try await APIClient.searchChats(inbox: selectedInboxFilter.rawValue)
                 refreshedChats = response.items
                 refreshedCursor = response.oldestCursor
                 refreshedHasMoreChats = response.hasMore
             }
 
-            chats = mergedChatsPreservingExistingContext(
+            setChats(mergedChatsPreservingExistingContext(
                 refreshedChats: refreshedChats,
-                existingChats: existingChats,
+                existingChats: snapshot.chats,
                 shouldPreserveExistingChats: shouldPreserveExistingChats
-            )
+            ))
             chatsCursor = refreshedCursor
             hasMoreChats = refreshedHasMoreChats
             chatsError = nil
             lastLoadedInboxFilter = selectedInboxFilter
 
-            if let existingSelectedChatID, chats.contains(where: { $0.id == existingSelectedChatID }) {
+            if let existingSelectedChatID = snapshot.selectedChatID, chats.contains(where: { $0.id == existingSelectedChatID }) {
                 selectedChatID = existingSelectedChatID
             } else if !chats.contains(where: { $0.id == selectedChatID }) {
                 selectedChatID = chats.first?.id
             }
         } catch {
+            chatListState = snapshot
             chatsError = error.localizedDescription
-            chats = existingChats
-            selectedChatID = existingSelectedChatID
-            chatsCursor = existingChatsCursor
-            hasMoreChats = existingHasMoreChats
-            lowPriorityChatIDs = existingLowPriorityChatIDs
         }
     }
 
     func loadMoreChats() async {
-        guard !currentAccessToken.isEmpty else { return }
+        guard !APIClient.accessToken.isEmpty else { return }
         guard hasMoreChats, let cursor = chatsCursor else { return }
         guard !isLoadingMoreChats else { return }
 
@@ -231,20 +223,19 @@ final class ChatStore {
             let existingIDs = Set(chats.map(\.id))
 
             if selectedInboxFilter == .primary {
-                let response = try await APIClient.listChats(cursor: cursor, direction: "before", accessToken: currentAccessToken)
+                let response = try await APIClient.listChats(cursor: cursor, direction: "before")
                 let newChats = response.items.filter { !existingIDs.contains($0.id) && isPrimaryInboxChat($0) }
-                chats.append(contentsOf: newChats)
+                setChats(chats + newChats)
                 chatsCursor = response.oldestCursor
                 hasMoreChats = response.hasMore ?? false
             } else {
                 let response = try await APIClient.searchChats(
                     inbox: selectedInboxFilter.rawValue,
                     cursor: cursor,
-                    direction: "before",
-                    accessToken: currentAccessToken
+                    direction: "before"
                 )
                 let newChats = response.items.filter { !existingIDs.contains($0.id) }
-                chats.append(contentsOf: newChats)
+                setChats(chats + newChats)
                 chatsCursor = response.oldestCursor
                 hasMoreChats = response.hasMore
             }
@@ -256,11 +247,11 @@ final class ChatStore {
     // MARK: - Archive / Unarchive
 
     func archiveChat(_ chatID: String) async {
-        guard !currentAccessToken.isEmpty else { return }
+        guard !APIClient.accessToken.isEmpty else { return }
 
         do {
-            try await APIClient.archiveChat(chatID: chatID, archived: true, accessToken: currentAccessToken)
-            chats.removeAll { $0.id == chatID }
+            try await APIClient.archiveChat(chatID: chatID, archived: true)
+            setChats(chats.filter { $0.id != chatID })
             if selectedChatID == chatID {
                 selectedChatID = chats.first?.id
             }
@@ -270,24 +261,16 @@ final class ChatStore {
     }
 
     func unarchiveChat(_ chatID: String) async {
-        guard !currentAccessToken.isEmpty else { return }
+        guard !APIClient.accessToken.isEmpty else { return }
 
         do {
-            try await APIClient.archiveChat(chatID: chatID, archived: false, accessToken: currentAccessToken)
-            chats.removeAll { $0.id == chatID }
+            try await APIClient.archiveChat(chatID: chatID, archived: false)
+            setChats(chats.filter { $0.id != chatID })
             if selectedChatID == chatID {
                 selectedChatID = chats.first?.id
             }
         } catch {
             chatsError = error.localizedDescription
         }
-    }
-
-    // MARK: - Message Mutations
-
-    func refreshAfterMessageMutation(chatID: String) async {
-        async let chatsRefresh: Void = loadChats()
-        async let messagesRefresh: Void = messageStore.loadMessages(for: chatID)
-        _ = await (chatsRefresh, messagesRefresh)
     }
 }

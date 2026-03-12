@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct MessageInputView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(MessageStore.self) private var messageStore
+    @Environment(RealtimeCoordinator.self) private var coordinator
 
     @State private var draftMessagesByChatID: [String: String] = [:]
     @State private var showingFilePicker = false
@@ -267,7 +268,7 @@ struct MessageInputView: View {
         Task {
             let didSend = await messageStore.sendMessage(text: text, attachment: attachment, to: chatID)
             if didSend {
-                await chatStore.refreshAfterMessageMutation(chatID: chatID)
+                await coordinator.refreshAfterMessageMutation(chatID: chatID)
             } else if (draftMessagesByChatID[chatID] ?? "").isEmpty {
                 draftMessagesByChatID[chatID] = previousDraft
             }
@@ -289,7 +290,7 @@ struct MessageInputView: View {
                     clearDraft(for: chatID)
                 }
                 if let chatID = chatStore.selectedChat?.id {
-                    await chatStore.refreshAfterMessageMutation(chatID: chatID)
+                    await coordinator.refreshAfterMessageMutation(chatID: chatID)
                 }
             } else if
                 let editingChatID,

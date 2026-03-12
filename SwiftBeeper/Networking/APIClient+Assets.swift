@@ -5,13 +5,12 @@ extension APIClient {
         fileData: Data,
         fileName: String,
         mimeType: String,
-        accessToken: String,
         onProgress: @escaping @MainActor @Sendable (Double) -> Void
     ) async throws -> UploadAssetOutput {
         let url = APIConfiguration.baseURL.appending(path: "/v1/assets/upload")
         let boundary = UUID().uuidString
 
-        var request = request(url: url, method: .post, accessToken: accessToken)
+        var request = request(url: url, method: .post, accessToken: Self.accessToken)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var body = Data()

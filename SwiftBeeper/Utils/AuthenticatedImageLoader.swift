@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 enum AuthenticatedImageLoader {
-    static func buildRequest(for urlString: String, accessToken: String) -> URLRequest? {
+    static func buildRequest(for urlString: String) -> URLRequest? {
         guard let sourceURL = URL(string: urlString) else { return nil }
 
         if sourceURL.scheme == "mxc" || sourceURL.scheme == "localmxc" || sourceURL.scheme == "file" {
@@ -17,15 +17,15 @@ enum AuthenticatedImageLoader {
             guard let proxyURL = components.url else { return nil }
 
             var request = URLRequest(url: proxyURL)
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("Bearer \(APIClient.accessToken)", forHTTPHeaderField: "Authorization")
             return request
         }
 
         return URLRequest(url: sourceURL)
     }
 
-    static func loadImage(urlString: String, accessToken: String) async -> Image? {
-        guard let request = buildRequest(for: urlString, accessToken: accessToken) else {
+    static func loadImage(urlString: String) async -> Image? {
+        guard let request = buildRequest(for: urlString) else {
             return nil
         }
 
@@ -40,8 +40,8 @@ enum AuthenticatedImageLoader {
         }
     }
 
-    static func downloadToTempFile(urlString: String, accessToken: String, fileExtension: String) async -> URL? {
-        guard let request = buildRequest(for: urlString, accessToken: accessToken) else { return nil }
+    static func downloadToTempFile(urlString: String, fileExtension: String) async -> URL? {
+        guard let request = buildRequest(for: urlString) else { return nil }
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -50,12 +50,24 @@ enum AuthenticatedImageLoader {
             }
 
             let tempDir = FileManager.default.temporaryDirectory
-            let fileName = "\(UUID().uuidString).\(fileExtension)"
+            let fileName = "beeper-\(UUID().uuidString).\(fileExtension)"
             let fileURL = tempDir.appending(path: fileName)
             try data.write(to: fileURL)
             return fileURL
         } catch {
             return nil
+        }
+    }
+
+    static func clearTempFiles() {
+        let tempDir = FileManager.default.temporaryDirectory
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: tempDir,
+            includingPropertiesForKeys: nil
+        ) else { return }
+
+        for fileURL in contents where fileURL.lastPathComponent.hasPrefix("beeper-") {
+            try? FileManager.default.removeItem(at: fileURL)
         }
     }
 

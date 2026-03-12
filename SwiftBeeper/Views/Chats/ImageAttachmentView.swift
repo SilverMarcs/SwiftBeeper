@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct ImageAttachmentView: View {
-    @Environment(SessionStore.self) private var sessionStore
-
     let attachment: Attachment
 
     @State private var loadedImage: Image?
@@ -41,7 +39,7 @@ struct ImageAttachmentView: View {
                     .clipShape(.rect(cornerRadius: 12))
             }
         }
-        .task(id: "\(attachment.resolvedURL ?? "none")|\(sessionStore.accessToken)") {
+        .task(id: attachment.resolvedURL) {
             await loadImage()
         }
         .sheet(isPresented: $showFullImage) {
@@ -57,7 +55,7 @@ struct ImageAttachmentView: View {
         isLoading = true
         defer { isLoading = false }
 
-        loadedImage = await AuthenticatedImageLoader.loadImage(urlString: urlString, accessToken: sessionStore.accessToken)
+        loadedImage = await AuthenticatedImageLoader.loadImage(urlString: urlString)
     }
 }
 

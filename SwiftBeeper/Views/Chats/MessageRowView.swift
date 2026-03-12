@@ -15,14 +15,14 @@ struct MessageRowView: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            if isOutgoing {
+            if message.isOutgoing(in: chat) {
                 Spacer(minLength: 100)
             } else if showIncomingIdentity {
                 ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
             }
 
-            VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
-                if isOutgoing == false && showIncomingIdentity {
+            VStack(alignment: message.isOutgoing(in: chat) ? .trailing : .leading, spacing: 4) {
+                if !message.isOutgoing(in: chat) && showIncomingIdentity {
                     Text(message.senderDisplayName)
                         .font(.subheadline)
                         .bold()
@@ -32,26 +32,26 @@ struct MessageRowView: View {
                     ReplyPreviewView(
                         linkedMessageID: linkedMessageID,
                         chatID: message.chatID,
-                        isOutgoing: isOutgoing
+                        isOutgoing: message.isOutgoing(in: chat)
                     )
                 }
 
                 if let attachments = message.attachments, attachments.isEmpty == false {
                     ForEach(attachments) { attachment in
-                        AttachmentView(attachment: attachment, isOutgoing: isOutgoing)
+                        AttachmentView(attachment: attachment, isOutgoing: message.isOutgoing(in: chat))
                     }
                 }
 
                 if message.hasText {
                     Text(message.displayText.markdownAttributed)
-                        .foregroundStyle(isOutgoing ? .white : .primary)
+                        .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(ChatVisualStyle.bubbleFill(isOutgoing: isOutgoing))
+                        .background(ChatVisualStyle.bubbleFill(isOutgoing: message.isOutgoing(in: chat)))
                         .clipShape(.rect(cornerRadius: 15))
                 }
 
-                if let groupedReactions = groupedReactions, groupedReactions.isEmpty == false {
+                if let groupedReactions = message.groupedReactions, groupedReactions.isEmpty == false {
                     ReactionsBarView(
                         groupedReactions: groupedReactions,
                         currentParticipantID: currentParticipant?.id,
@@ -124,7 +124,7 @@ struct MessageRowView: View {
 
             }
 
-            if isOutgoing == false {
+            if !message.isOutgoing(in: chat) {
                 Spacer(minLength: 100)
             }
         }
@@ -140,41 +140,6 @@ struct MessageRowView: View {
 
     private var senderAvatarImageURL: String? {
         chat.participant(with: message.senderID)?.imgURL
-    }
-
-    private var isOutgoing: Bool {
-        if let isSender = message.isSender {
-            return isSender
-        }
-
-        if let currentParticipant {
-            return message.senderID == currentParticipant.id
-        }
-
-        return false
-    }
-
-    private var groupedReactions: [GroupedReaction]? {
-        guard let reactions = message.reactions, reactions.isEmpty == false else {
-            return nil
-        }
-
-        var groups: [String: GroupedReaction] = [:]
-        for reaction in reactions {
-            if var existing = groups[reaction.reactionKey] {
-                existing.count += 1
-                existing.participantIDs.append(reaction.participantID)
-                groups[reaction.reactionKey] = existing
-            } else {
-                groups[reaction.reactionKey] = GroupedReaction(
-                    reactionKey: reaction.reactionKey,
-                    count: 1,
-                    participantIDs: [reaction.participantID]
-                )
-            }
-        }
-
-        return groups.values.sorted(by: { $0.reactionKey < $1.reactionKey })
     }
 
     private func hasOwnReaction(for reactionKey: String) -> Bool {

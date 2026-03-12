@@ -2,8 +2,6 @@ import AVKit
 import SwiftUI
 
 struct AudioAttachmentView: View {
-    @Environment(SessionStore.self) private var sessionStore
-
     let attachment: Attachment
     let isOutgoing: Bool
 
@@ -73,7 +71,6 @@ struct AudioAttachmentView: View {
         let ext = attachment.mimeType?.components(separatedBy: "/").last ?? "m4a"
         guard let fileURL = await AuthenticatedImageLoader.downloadToTempFile(
             urlString: urlString,
-            accessToken: sessionStore.accessToken,
             fileExtension: ext
         ) else { return }
 
