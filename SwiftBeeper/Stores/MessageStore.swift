@@ -51,12 +51,7 @@ final class MessageStore {
     }
 
     func loadMessagesForChatEntry(for chatID: String) async {
-        let hadCachedMessages = !(messagesByChatID[chatID] ?? []).isEmpty
         await loadMessages(for: chatID)
-
-        guard !hadCachedMessages else { return }
-        guard hasMoreMessagesByChatID[chatID] == true else { return }
-        await loadOlderMessages(for: chatID)
     }
 
     func loadMessages(for chatID: String) async {
@@ -93,12 +88,17 @@ final class MessageStore {
         }
     }
 
-    func loadOlderMessages(for chatID: String) async {
-        guard !currentAccessToken.isEmpty else { return }
-        guard hasMoreMessagesByChatID[chatID] == true else { return }
-        guard !isLoadingOlderMessages else { return }
+    func hasMoreMessages(for chatID: String) -> Bool {
+        hasMoreMessagesByChatID[chatID] == true
+    }
 
-        guard let oldestMessage = messagesByChatID[chatID]?.first else { return }
+    @discardableResult
+    func loadOlderMessages(for chatID: String) async -> Bool {
+        guard !currentAccessToken.isEmpty else { return false }
+        guard hasMoreMessagesByChatID[chatID] == true else { return false }
+        guard !isLoadingOlderMessages else { return false }
+
+        guard let oldestMessage = messagesByChatID[chatID]?.first else { return false }
         let cursor = oldestMessage.sortKey
 
         isLoadingOlderMessages = true
@@ -127,8 +127,10 @@ final class MessageStore {
             }
             hasMoreMessagesByChatID[chatID] = response.hasMore
             logger.debug("Loaded \(response.items.count, privacy: .public) older messages for chat \(chatID, privacy: .public). Added: \(newMessages.count, privacy: .public). Total: \(merged.count, privacy: .public).")
+            return merged != existingMessages
         } catch {
             handleMessageError(error, context: "loading older messages for \(chatID)")
+            return false
         }
     }
 

@@ -25,6 +25,16 @@ struct ChatDetailView: View {
                 let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
 
                 List {
+                    LoadOlderMessagesButton(
+                        isLoading: messageStore.isLoadingOlderMessages,
+                        canLoadMore: messageStore.hasMoreMessages(for: selectedChat.id),
+                        action: {
+                            loadOlderMessages(chatID: selectedChat.id)
+                        }
+                    )
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+
                     ForEach(timelineEntries) { entry in
                         if entry.message.id == firstUnreadID {
                             UnreadDividerView()
@@ -81,6 +91,7 @@ struct ChatDetailView: View {
                 }
                 .task(id: selectedChat.id) {
                     isPreparingInitialScroll = true
+                    resetScrollPaginationState()
                     chatStore.realtimeService.selectedChatID = selectedChat.id
                     messageStore.setReplyTo(nil)
                     messageStore.cancelEditing()
@@ -94,9 +105,16 @@ struct ChatDetailView: View {
                     isPreparingInitialScroll = false
                     await detail
                 }
-                .onChange(of: messages.count) {
+                .onChange(of: messages.map(\.id)) { oldMessageIDs, newMessageIDs in
                     guard !isPreparingInitialScroll else { return }
-                    Task {
+                    guard shouldScrollToBottomAfterMessageUpdate(
+                        oldMessageIDs: oldMessageIDs,
+                        newMessageIDs: newMessageIDs
+                    ) else {
+                        return
+                    }
+
+                    Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
                         scrollToBottom(with: proxy, animated: true)
                     }
@@ -157,6 +175,7 @@ struct ChatDetailView: View {
             .task {
                 chatStore.realtimeService.selectedChatID = nil
                 isPreparingInitialScroll = false
+                resetScrollPaginationState()
             }
         }
     }
@@ -195,6 +214,23 @@ struct ChatDetailView: View {
         } else {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
+    }
+
+    private func loadOlderMessages(chatID: String) {
+        Task { @MainActor in
+            _ = await messageStore.loadOlderMessages(for: chatID)
+        }
+    }
+
+    private func shouldScrollToBottomAfterMessageUpdate(
+        oldMessageIDs: [String],
+        newMessageIDs: [String]
+    ) -> Bool {
+        guard newMessageIDs.count > oldMessageIDs.count else { return false }
+        return Array(oldMessageIDs) == Array(newMessageIDs.prefix(oldMessageIDs.count))
+    }
+
+    private func resetScrollPaginationState() {
     }
 
     private func firstUnreadMessageID(messages: [Message], chat: Chat) -> String? {
@@ -248,6 +284,31 @@ private struct TimelineFocusEffect: ViewModifier {
             .scaleEffect(isFocused ? 1 : 0.992)
             .allowsHitTesting(isFocused)
             .animation(.easeInOut(duration: 0.2), value: isFocused)
+    }
+}
+
+private struct LoadOlderMessagesButton: View {
+    let isLoading: Bool
+    let canLoadMore: Bool
+    let action: () -> Void
+
+    var body: some View {
+        if canLoadMore || isLoading {
+            Button {
+                action()
+            } label: {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("Load older messages")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.link)
+            .disabled(isLoading)
+        }
     }
 }
 
