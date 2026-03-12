@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 struct MessageRowView: View {
     @Environment(MessageStore.self) private var messageStore
@@ -39,7 +44,6 @@ struct MessageRowView: View {
 
                 if message.hasText {
                     Text(message.displayText.markdownAttributed)
-                        .textSelection(.enabled)
                         .foregroundStyle(isOutgoing ? .white : .primary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
@@ -98,6 +102,14 @@ struct MessageRowView: View {
                     }
                 } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
+                }
+
+                if message.hasText {
+                    Button {
+                        copyMessageText()
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
                 }
 
                 if messageStore.canEdit(message, in: chat) {
@@ -168,5 +180,14 @@ struct MessageRowView: View {
     private func hasOwnReaction(for reactionKey: String) -> Bool {
         guard let participantID = currentParticipant?.id else { return false }
         return message.reactions?.contains(where: { $0.reactionKey == reactionKey && $0.participantID == participantID }) == true
+    }
+
+    private func copyMessageText() {
+#if canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(message.displayText, forType: .string)
+#elseif canImport(UIKit)
+        UIPasteboard.general.string = message.displayText
+#endif
     }
 }
