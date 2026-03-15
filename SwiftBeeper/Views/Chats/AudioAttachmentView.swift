@@ -11,32 +11,42 @@ struct AudioAttachmentView: View {
 
     @State private var audioPlayer: AVPlayer?
     @State private var playbackObserver: NSObjectProtocol?
+    @State private var timeObserver: Any?
     @State private var isAudioPlaying = false
     @State private var isAudioLoading = false
     @State private var loadError: String?
+    @State private var currentTime: Double = 0
+    @State private var duration: Double = 0
+    @State private var isSeeking = false
 
     var body: some View {
         Group {
             if audioPlayer != nil {
-                Button {
-                    toggleAudioPlayback()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: isAudioPlaying ? "pause.circle.fill" : "play.circle.fill")
+                HStack(spacing: 8) {
+                    Button {
+                        toggleAudioPlayback()
+                    } label: {
+                        Image(systemName: isAudioPlaying ? "pause.fill" : "play.fill")
                             .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(attachment.fileName ?? "Audio")
-                                .font(.callout)
-                                .lineLimit(1)
-                            if let duration = attachment.duration {
-                                Text(formatDuration(duration))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                    }
+                    .buttonStyle(.plain)
+
+                    Slider(
+                        value: $currentTime,
+                        in: 0...max(duration, 1)
+                    ) { editing in
+                        isSeeking = editing
+                        if !editing, let player = audioPlayer {
+                            player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600))
                         }
                     }
+                    .frame(width: 160)
+
+                    Text(formatDuration(isSeeking || isAudioPlaying ? currentTime : (attachment.duration ?? duration)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
-                .buttonStyle(.plain)
             } else if isAudioLoading {
                 HStack(spacing: 8) {
                     ProgressView()
@@ -120,12 +130,29 @@ struct AudioAttachmentView: View {
 
         audioPlayer = player
 
+        // Get actual duration from the loaded asset
+        if let itemDuration = player.currentItem?.asset.duration, itemDuration.isNumeric {
+            duration = itemDuration.seconds
+        } else if let d = attachment.duration {
+            duration = d
+        }
+
+        // Periodic time observer to drive the slider
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
+            queue: .main
+        ) { time in
+            guard !isSeeking else { return }
+            currentTime = time.seconds
+        }
+
         playbackObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player.currentItem,
             queue: .main
         ) { _ in
             isAudioPlaying = false
+            currentTime = 0
             player.seek(to: .zero)
         }
     }
@@ -145,6 +172,10 @@ struct AudioAttachmentView: View {
     }
 
     private func tearDownPlayer() {
+        if let timeObserver {
+            audioPlayer?.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
         audioPlayer?.pause()
         audioPlayer = nil
         if let playbackObserver {
@@ -152,6 +183,7 @@ struct AudioAttachmentView: View {
             self.playbackObserver = nil
         }
         isAudioPlaying = false
+        currentTime = 0
     }
 
     /// Extract a clean file extension from a MIME type like "audio/ogg; codecs=opus"
