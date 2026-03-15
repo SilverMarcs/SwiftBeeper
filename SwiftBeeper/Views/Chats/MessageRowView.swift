@@ -28,7 +28,7 @@ struct MessageRowView: View {
                         .bold()
                 }
 
-                if let linkedMessageID = message.linkedMessageID {
+                if let linkedMessageID = message.linkedMessageID, !linkedMessageID.isEmpty {
                     ReplyPreviewView(
                         linkedMessageID: linkedMessageID,
                         chatID: message.chatID,

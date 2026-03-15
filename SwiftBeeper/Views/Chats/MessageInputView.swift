@@ -329,7 +329,7 @@ struct MessageInputView: View {
 
             guard let data = try? Data(contentsOf: url) else { return }
             let fileName = url.lastPathComponent
-            let mimeType = mimeTypeForURL(url)
+            let mimeType = url.mimeType
 
             messageStore.pendingAttachment = PendingAttachment(
                 fileData: data,
@@ -363,10 +363,4 @@ struct MessageInputView: View {
         )
     }
 
-    private func mimeTypeForURL(_ url: URL) -> String {
-        if let utType = UTType(filenameExtension: url.pathExtension) {
-            return utType.preferredMIMEType ?? "application/octet-stream"
-        }
-        return "application/octet-stream"
-    }
 }

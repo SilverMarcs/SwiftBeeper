@@ -152,7 +152,8 @@ final class MessageStore {
     }
 
     private func handleMessageError(_ message: String, context: String) {
-        if message.localizedStandardContains("cancelled") || message.localizedStandardContains("canceled") {
+        let nsError = NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
+        if isCancellationLikeError(nsError) {
             logger.debug("Ignoring cancelled operation while \(context, privacy: .public): \(message, privacy: .public)")
             return
         }

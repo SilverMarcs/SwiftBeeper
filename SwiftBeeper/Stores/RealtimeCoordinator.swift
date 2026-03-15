@@ -110,16 +110,16 @@ final class RealtimeCoordinator: RealtimeEventHandler {
         scheduledMessagesRefreshTasks[chatID] = Task { [weak self] in
             guard let self else { return }
 
-            defer {
-                self.scheduledMessagesRefreshTasks[chatID] = nil
-            }
-
             do {
                 try await Task.sleep(for: .milliseconds(250))
             } catch { return }
 
             guard !Task.isCancelled else { return }
             await self.messageStore.loadMessages(for: chatID)
+
+            if !Task.isCancelled {
+                self.scheduledMessagesRefreshTasks[chatID] = nil
+            }
         }
     }
 }

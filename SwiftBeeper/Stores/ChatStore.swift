@@ -200,9 +200,9 @@ final class ChatStore {
             chatsError = nil
             lastLoadedInboxFilter = selectedInboxFilter
 
-            if let existingSelectedChatID = snapshot.selectedChatID, chats.contains(where: { $0.id == existingSelectedChatID }) {
+            if let existingSelectedChatID = snapshot.selectedChatID, chatsByID[existingSelectedChatID] != nil {
                 selectedChatID = existingSelectedChatID
-            } else if !chats.contains(where: { $0.id == selectedChatID }) {
+            } else if chatsByID[selectedChatID ?? ""] == nil {
                 selectedChatID = chats.first?.id
             }
         } catch {

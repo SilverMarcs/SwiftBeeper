@@ -94,7 +94,6 @@ struct ChatDetailView: View {
                 }
                 .task(id: selectedChat.id) {
                     isPreparingInitialScroll = true
-                    resetScrollPaginationState()
                     coordinator.setSelectedChatID(selectedChat.id)
                     messageStore.setReplyTo(nil)
                     messageStore.cancelEditing()
@@ -164,7 +163,6 @@ struct ChatDetailView: View {
                     MessageInputView()
                 }
             }
-//            .id(selectedChat.id)
         } else {
             ContentUnavailableView(
                 "Pick a Chat",
@@ -174,7 +172,6 @@ struct ChatDetailView: View {
             .task {
                 coordinator.setSelectedChatID(nil)
                 isPreparingInitialScroll = false
-                resetScrollPaginationState()
             }
         }
     }
@@ -186,12 +183,7 @@ struct ChatDetailView: View {
             guard let url else { return }
             guard let data = try? Data(contentsOf: url) else { return }
             let fileName = url.lastPathComponent
-            let mimeType: String = {
-                if let utType = UTType(filenameExtension: url.pathExtension) {
-                    return utType.preferredMIMEType ?? "application/octet-stream"
-                }
-                return "application/octet-stream"
-            }()
+            let mimeType = url.mimeType
 
             Task { @MainActor in
                 messageStore.pendingAttachment = PendingAttachment(
@@ -224,9 +216,6 @@ struct ChatDetailView: View {
                 proxy.scrollTo(anchorMessageID, anchor: .top)
             }
         }
-    }
-
-    private func resetScrollPaginationState() {
     }
 
     private func firstUnreadMessageID(messages: [Message], chat: Chat) -> String? {

@@ -52,7 +52,7 @@ struct PasteHandler: ViewModifier {
            let fileURL = URL(dataRepresentation: fileURLData, relativeTo: nil) {
             guard let data = try? Data(contentsOf: fileURL) else { return }
             let fileName = fileURL.lastPathComponent
-            let mimeType = mimeTypeForURL(fileURL)
+            let mimeType = fileURL.mimeType
             messageStore.pendingAttachment = PendingAttachment(
                 fileData: data,
                 fileName: fileName,
@@ -73,12 +73,6 @@ struct PasteHandler: ViewModifier {
         }
     }
 
-    private func mimeTypeForURL(_ url: URL) -> String {
-        if let utType = UTType(filenameExtension: url.pathExtension) {
-            return utType.preferredMIMEType ?? "application/octet-stream"
-        }
-        return "application/octet-stream"
-    }
 }
 
 private struct HostingViewFinder: NSViewRepresentable {

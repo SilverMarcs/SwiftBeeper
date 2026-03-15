@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBC2F665F1B00950962 /* SwiftOGG */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
 /* End PBXBuildFile section */
 
@@ -28,6 +29,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */,
 				08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -80,6 +82,7 @@
 			);
 			name = SwiftBeeper;
 			packageProductDependencies = (
+				08974BBC2F665F1B00950962 /* SwiftOGG */,
 			);
 			productName = SwiftBeeper;
 			productReference = 0865737D2F58F64E0084BD91 /* SwiftBeeper.app */;
@@ -109,6 +112,9 @@
 			);
 			mainGroup = 086573742F58F64E0084BD91;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0865737E2F58F64E0084BD91 /* Products */;
 			projectDirPath = "";
@@ -386,6 +392,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/element-hq/swift-ogg";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		08974BBC2F665F1B00950962 /* SwiftOGG */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */;
+			productName = SwiftOGG;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 086573752F58F64E0084BD91 /* Project object */;
 }
