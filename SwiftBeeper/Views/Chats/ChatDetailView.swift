@@ -177,20 +177,22 @@ struct ChatDetailView: View {
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
+        guard !providers.isEmpty else { return false }
 
-        provider.loadFileRepresentation(forTypeIdentifier: UTType.item.identifier) { url, _ in
-            guard let url else { return }
-            guard let data = try? Data(contentsOf: url) else { return }
-            let fileName = url.lastPathComponent
-            let mimeType = url.mimeType
+        for provider in providers {
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.item.identifier) { url, _ in
+                guard let url else { return }
+                guard let data = try? Data(contentsOf: url) else { return }
+                let fileName = url.lastPathComponent
+                let mimeType = url.mimeType
 
-            Task { @MainActor in
-                messageStore.pendingAttachment = PendingAttachment(
-                    fileData: data,
-                    fileName: fileName,
-                    mimeType: mimeType
-                )
+                Task { @MainActor in
+                    messageStore.pendingAttachments.append(PendingAttachment(
+                        fileData: data,
+                        fileName: fileName,
+                        mimeType: mimeType
+                    ))
+                }
             }
         }
 

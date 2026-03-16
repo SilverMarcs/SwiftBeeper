@@ -37,14 +37,15 @@ struct PasteHandler: ViewModifier {
 
         let mediaTypes: Set<NSPasteboard.PasteboardType> = [.fileURL, .png, .tiff]
 
+        var didProcess = false
         for item in items {
             if !Set(item.types).intersection(mediaTypes).isEmpty {
                 processPasteItem(item)
-                return true
+                didProcess = true
             }
         }
 
-        return false
+        return didProcess
     }
 
     private func processPasteItem(_ item: NSPasteboardItem) {
@@ -53,23 +54,23 @@ struct PasteHandler: ViewModifier {
             guard let data = try? Data(contentsOf: fileURL) else { return }
             let fileName = fileURL.lastPathComponent
             let mimeType = fileURL.mimeType
-            messageStore.pendingAttachment = PendingAttachment(
+            messageStore.pendingAttachments.append(PendingAttachment(
                 fileData: data,
                 fileName: fileName,
                 mimeType: mimeType
-            )
+            ))
         } else if let imageData = item.data(forType: .png) {
-            messageStore.pendingAttachment = PendingAttachment(
+            messageStore.pendingAttachments.append(PendingAttachment(
                 fileData: imageData,
                 fileName: "Pasted_Image_\(UUID().uuidString.prefix(8)).png",
                 mimeType: "image/png"
-            )
+            ))
         } else if let imageData = item.data(forType: .tiff) {
-            messageStore.pendingAttachment = PendingAttachment(
+            messageStore.pendingAttachments.append(PendingAttachment(
                 fileData: imageData,
                 fileName: "Pasted_Image_\(UUID().uuidString.prefix(8)).tiff",
                 mimeType: "image/tiff"
-            )
+            ))
         }
     }
 

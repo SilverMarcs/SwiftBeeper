@@ -16,7 +16,7 @@ final class MessageStore {
     private(set) var uploadProgress: Double?
     var replyingToMessage: Message?
     var editingMessage: Message?
-    var pendingAttachment: PendingAttachment?
+    var pendingAttachments: [PendingAttachment] = []
 
     var activeComposerMessage: Message? {
         editingMessage ?? replyingToMessage
@@ -37,7 +37,7 @@ final class MessageStore {
         messagesError = nil
         replyingToMessage = nil
         editingMessage = nil
-        pendingAttachment = nil
+        pendingAttachments = []
         uploadProgress = nil
     }
 
@@ -229,19 +229,22 @@ final class MessageStore {
 
     // MARK: - Sending
 
-    func clearPendingAttachment() {
-        pendingAttachment = nil
+    func clearPendingAttachments() {
+        pendingAttachments = []
         uploadProgress = nil
     }
 
-    func sendMessage(text: String, attachment: PendingAttachment?, to chatID: String) async -> Bool {
+    func removePendingAttachment(id: UUID) {
+        pendingAttachments.removeAll { $0.id == id }
+    }
+
+    func sendMessage(text: String, attachments: [PendingAttachment], to chatID: String) async -> Bool {
         guard !APIClient.accessToken.isEmpty else { return false }
 
         let trimmedText = text.trimmed
         let hasText = !trimmedText.isEmpty
-        let hasAttachment = attachment != nil
 
-        guard hasText || hasAttachment else { return false }
+        guard hasText || !attachments.isEmpty else { return false }
 
         isSendingMessage = true
         defer {
@@ -252,53 +255,71 @@ final class MessageStore {
         let replyToID = replyingToMessage?.id
 
         do {
-            var attachmentInput: MessageAttachmentInput?
-
-            if let attachment {
-                uploadProgress = 0
-                let uploadResult = try await APIClient.uploadAsset(
-                    fileData: attachment.fileData,
-                    fileName: attachment.fileName,
-                    mimeType: attachment.mimeType,
-                    onProgress: { [weak self] progress in
-                        self?.uploadProgress = progress
-                    }
-                )
-
-                if let error = uploadResult.error {
-                    handleMessageError("Upload failed: \(error)", context: "uploading attachment for \(chatID)")
-                    return false
-                }
-
-                var size: AttachmentSizeInput?
-                if let w = uploadResult.width, let h = uploadResult.height {
-                    size = AttachmentSizeInput(width: w, height: h)
-                }
-
-                attachmentInput = MessageAttachmentInput(
-                    uploadID: uploadResult.uploadID,
-                    mimeType: attachment.mimeType,
-                    fileName: attachment.fileName,
-                    size: size,
-                    duration: uploadResult.duration,
-                    type: nil
-                )
-            }
+            // First message: text + reply + first attachment (if any)
+            let firstAttachment = attachments.first
+            let firstAttachmentInput = try await uploadAttachment(firstAttachment, chatID: chatID)
 
             _ = try await APIClient.sendMessage(
                 chatID: chatID,
                 text: hasText ? trimmedText : nil,
                 replyToMessageID: replyToID,
-                attachment: attachmentInput
+                attachment: firstAttachmentInput
             )
+
+            // Remaining attachments: one message each, no text or reply
+            for attachment in attachments.dropFirst() {
+                let attachmentInput = try await uploadAttachment(attachment, chatID: chatID)
+                _ = try await APIClient.sendMessage(
+                    chatID: chatID,
+                    text: nil,
+                    attachment: attachmentInput
+                )
+            }
+
             replyingToMessage = nil
-            pendingAttachment = nil
             messagesError = nil
             return true
         } catch {
             handleMessageError(error, context: "sending message to \(chatID)")
             return false
         }
+    }
+
+    private func uploadAttachment(_ attachment: PendingAttachment?, chatID: String) async throws -> MessageAttachmentInput? {
+        guard let attachment else { return nil }
+
+        uploadProgress = 0
+        let uploadResult = try await APIClient.uploadAsset(
+            fileData: attachment.fileData,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            onProgress: { [weak self] progress in
+                self?.uploadProgress = progress
+            }
+        )
+
+        if let error = uploadResult.error {
+            handleMessageError("Upload failed: \(error)", context: "uploading attachment for \(chatID)")
+            throw UploadError.serverError(error)
+        }
+
+        var size: AttachmentSizeInput?
+        if let w = uploadResult.width, let h = uploadResult.height {
+            size = AttachmentSizeInput(width: w, height: h)
+        }
+
+        return MessageAttachmentInput(
+            uploadID: uploadResult.uploadID,
+            mimeType: attachment.mimeType,
+            fileName: attachment.fileName,
+            size: size,
+            duration: uploadResult.duration,
+            type: nil
+        )
+    }
+
+    private enum UploadError: Error {
+        case serverError(String)
     }
 
     // MARK: - Reply / Edit

@@ -10,7 +10,7 @@ struct MessageInputView: View {
     @State private var draftMessagesByChatID: [String: String] = [:]
     @State private var showingFilePicker = false
     @State private var showingPhotoPicker = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @FocusState private var isMessageFieldFocused: Bool
 
     private var cannotMessage: Bool {
@@ -63,14 +63,17 @@ struct MessageInputView: View {
                     ComposerErrorBanner(message: messagesError)
                 }
 
-                if let pending = messageStore.pendingAttachment {
-                    HStack {
-                        PendingAttachmentPreview(
-                            pending: pending,
-                            isSending: messageStore.isSendingMessage,
-                            onRemove: messageStore.clearPendingAttachment
-                        )
-                        Spacer()
+                if !messageStore.pendingAttachments.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(messageStore.pendingAttachments) { pending in
+                                PendingAttachmentPreview(
+                                    pending: pending,
+                                    isSending: messageStore.isSendingMessage,
+                                    onRemove: { messageStore.removePendingAttachment(id: pending.id) }
+                                )
+                            }
+                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -173,15 +176,17 @@ struct MessageInputView: View {
         }
         .photosPicker(
             isPresented: $showingPhotoPicker,
-            selection: $selectedPhotoItem,
+            selection: $selectedPhotoItems,
             matching: .any(of: [.images, .videos])
         )
-        .onChange(of: selectedPhotoItem) { _, newItem in
-            guard let newItem else { return }
+        .onChange(of: selectedPhotoItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
             Task {
-                await handlePhotoPick(newItem)
+                for item in newItems {
+                    await handlePhotoPick(item)
+                }
             }
-            selectedPhotoItem = nil
+            selectedPhotoItems = []
         }
         #if os(macOS)
         .pasteHandler()
@@ -233,7 +238,7 @@ struct MessageInputView: View {
     private var sendButtonDisabled: Bool {
         if messageStore.isSendingMessage { return true }
         if selectedChat == nil { return true }
-        return trimmedDraftMessage.isEmpty && messageStore.pendingAttachment == nil
+        return trimmedDraftMessage.isEmpty && messageStore.pendingAttachments.isEmpty
     }
 
     private var trimmedDraftMessage: String {
@@ -259,18 +264,24 @@ struct MessageInputView: View {
     private func sendMessage() {
         guard let chatID = chatStore.selectedChat?.id else { return }
         let text = trimmedDraftMessage
-        let attachment = messageStore.pendingAttachment
+        let attachments = messageStore.pendingAttachments
 
-        guard !text.isEmpty || attachment != nil else { return }
+        guard !text.isEmpty || !attachments.isEmpty else { return }
         let previousDraft = draftMessage
         clearDraft(for: chatID)
+        messageStore.clearPendingAttachments()
 
         Task {
-            let didSend = await messageStore.sendMessage(text: text, attachment: attachment, to: chatID)
+            let didSend = await messageStore.sendMessage(text: text, attachments: attachments, to: chatID)
             if didSend {
                 await coordinator.refreshAfterMessageMutation(chatID: chatID)
-            } else if (draftMessagesByChatID[chatID] ?? "").isEmpty {
-                draftMessagesByChatID[chatID] = previousDraft
+            } else {
+                if (draftMessagesByChatID[chatID] ?? "").isEmpty {
+                    draftMessagesByChatID[chatID] = previousDraft
+                }
+                if messageStore.pendingAttachments.isEmpty {
+                    messageStore.pendingAttachments = attachments
+                }
             }
         }
     }
@@ -331,11 +342,11 @@ struct MessageInputView: View {
             let fileName = url.lastPathComponent
             let mimeType = url.mimeType
 
-            messageStore.pendingAttachment = PendingAttachment(
+            messageStore.pendingAttachments.append(PendingAttachment(
                 fileData: data,
                 fileName: fileName,
                 mimeType: mimeType
-            )
+            ))
         case .failure:
             break
         }
@@ -356,11 +367,10 @@ struct MessageInputView: View {
             fileName = "photo.jpg"
         }
 
-        messageStore.pendingAttachment = PendingAttachment(
+        messageStore.pendingAttachments.append(PendingAttachment(
             fileData: data,
             fileName: fileName,
             mimeType: mimeType
-        )
+        ))
     }
-
 }
