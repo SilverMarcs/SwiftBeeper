@@ -22,6 +22,7 @@ struct ContentView: View {
     let chatStore = ChatStore()
     let messageStore = MessageStore()
     let realtimeService = RealtimeService()
+    let notificationService = NotificationService()
     ContentView()
         .environment(SessionStore())
         .environment(chatStore)
@@ -29,6 +30,7 @@ struct ContentView: View {
         .environment(RealtimeCoordinator(
             chatStore: chatStore,
             messageStore: messageStore,
-            realtimeService: realtimeService
+            realtimeService: realtimeService,
+            notificationService: notificationService
         ))
 }

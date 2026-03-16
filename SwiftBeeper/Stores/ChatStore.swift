@@ -53,6 +53,10 @@ final class ChatStore {
         return chatsByID[selectedChatID]
     }
 
+    func chat(byID chatID: String) -> Chat? {
+        chatsByID[chatID]
+    }
+
     private struct ChatListState {
         var chats: [Chat]
         var selectedChatID: String?

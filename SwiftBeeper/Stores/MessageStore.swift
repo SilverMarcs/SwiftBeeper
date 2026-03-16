@@ -48,8 +48,10 @@ final class MessageStore {
         await loadMessages(for: chatID)
     }
 
-    func loadMessages(for chatID: String) async {
-        guard !APIClient.accessToken.isEmpty else { return }
+    /// Loads messages and returns any truly new messages not previously in history.
+    @discardableResult
+    func loadMessages(for chatID: String) async -> [Message] {
+        guard !APIClient.accessToken.isEmpty else { return [] }
 
         let requestID = UUID()
         latestLoadRequestIDByChatID[chatID] = requestID
@@ -62,23 +64,36 @@ final class MessageStore {
 
         do {
             let response = try await APIClient.listMessages(chatID: chatID)
-            guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
+            guard latestLoadRequestIDByChatID[chatID] == requestID else { return [] }
 
             messagesError = nil
             let existingMessages = messagesByChatID[chatID] ?? []
+            let existingTimelineKeys = Set(existingMessages.map(\.timelineKey))
             let refreshedMessages = refreshedMessages(
                 existing: existingMessages,
                 latestPage: response.items,
                 chatID: chatID
             )
+
+            // Detect truly new messages: present in refreshed but not in existing history
+            let newMessages: [Message]
+            if existingMessages.isEmpty {
+                // First load — nothing is "new" for notification purposes
+                newMessages = []
+            } else {
+                newMessages = refreshedMessages.filter { !existingTimelineKeys.contains($0.timelineKey) }
+            }
+
             if refreshedMessages != existingMessages {
                 messagesByChatID[chatID] = refreshedMessages
             }
             hasMoreMessagesByChatID[chatID] = response.hasMore
-            logger.debug("Loaded \(response.items.count, privacy: .public) messages for chat \(chatID, privacy: .public). Existing: \(existingMessages.count, privacy: .public). Refreshed: \(refreshedMessages.count, privacy: .public).")
+            logger.debug("Loaded \(response.items.count, privacy: .public) messages for chat \(chatID, privacy: .public). Existing: \(existingMessages.count, privacy: .public). Refreshed: \(refreshedMessages.count, privacy: .public). New: \(newMessages.count, privacy: .public).")
+            return newMessages
         } catch {
-            guard latestLoadRequestIDByChatID[chatID] == requestID else { return }
+            guard latestLoadRequestIDByChatID[chatID] == requestID else { return [] }
             handleMessageError(error, context: "loading messages for \(chatID)")
+            return []
         }
     }
 
