@@ -173,7 +173,7 @@ final class RealtimeCoordinator: RealtimeEventHandler {
             for message in messagesToNotify {
                 // Skip outgoing, reactions, membership events
                 if message.isOutgoing(in: chat) { continue }
-                if message.isReaction || message.isMembershipEvent || message.isEmptyDeleted { continue }
+                if !message.isDisplayable { continue }
                 // Skip stale messages (older than 60s) to avoid notifying for old chat history
                 if Date().timeIntervalSince(message.timestamp) > 60 { continue }
 

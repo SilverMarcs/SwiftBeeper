@@ -23,7 +23,7 @@ final class MessageStore {
     }
 
     func messages(for chatID: String) -> [Message] {
-        (messagesByChatID[chatID] ?? []).filter { !$0.isEmptyDeleted && !$0.isReaction && !$0.isMembershipEvent }
+        (messagesByChatID[chatID] ?? []).filter(\.isDisplayable)
     }
 
     func message(byID messageID: String, in chatID: String) -> Message? {

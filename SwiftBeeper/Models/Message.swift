@@ -113,6 +113,11 @@ struct Message: Identifiable, Decodable, Equatable {
         !hasText && (attachments ?? []).isEmpty
     }
 
+    /// Whether this message represents real user content (not a reaction, membership event, or empty/deleted message).
+    var isDisplayable: Bool {
+        !isReaction && !isMembershipEvent && !isEmptyDeleted
+    }
+
     var hasText: Bool {
         text?.trimmed.isEmpty == false
     }
