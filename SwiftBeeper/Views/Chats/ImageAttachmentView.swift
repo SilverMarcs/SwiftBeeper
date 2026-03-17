@@ -7,8 +7,8 @@ struct ImageAttachmentView: View {
     @State private var isLoading = false
     @State private var showFullImage = false
 
-    private let thumbnailWidth: CGFloat = 330
-    private let thumbnailHeight: CGFloat = 330
+    private let maxWidth: CGFloat = 330
+    private let maxHeight: CGFloat = 500
 
     var body: some View {
         Group {
@@ -19,7 +19,7 @@ struct ImageAttachmentView: View {
                     loadedImage
                         .resizable()
                         .scaledToFill()
-                        .frame(width: thumbnailWidth, height: thumbnailHeight)
+                        .frame(width: imageSize.width, height: imageSize.height)
                         .clipped()
                         .clipShape(.rect(cornerRadius: 12))
                         .contentShape(.rect(cornerRadius: 12))
@@ -27,14 +27,14 @@ struct ImageAttachmentView: View {
                 .buttonStyle(.plain)
             } else if isLoading {
                 ProgressView()
-                    .frame(width: thumbnailWidth, height: thumbnailHeight)
+                    .frame(width: imageSize.width, height: imageSize.height)
                     .background(.background.secondary)
                     .clipShape(.rect(cornerRadius: 12))
             } else {
                 Image(systemName: "photo")
                     .foregroundStyle(.secondary)
                     .font(.title2)
-                    .frame(width: thumbnailWidth, height: thumbnailHeight)
+                    .frame(width: imageSize.width, height: imageSize.height)
                     .background(.background.secondary)
                     .clipShape(.rect(cornerRadius: 12))
             }
@@ -47,6 +47,24 @@ struct ImageAttachmentView: View {
                 FullImageSheet(image: loadedImage)
             }
         }
+    }
+
+    private var imageSize: CGSize {
+        guard let w = attachment.size?.width, let h = attachment.size?.height,
+              w > 0, h > 0 else {
+            return CGSize(width: maxWidth, height: maxWidth)
+        }
+
+        let aspectRatio = CGFloat(w) / CGFloat(h)
+        var width = min(CGFloat(w), maxWidth)
+        var height = width / aspectRatio
+
+        if height > maxHeight {
+            height = maxHeight
+            width = height * aspectRatio
+        }
+
+        return CGSize(width: width, height: height)
     }
 
     private func loadImage() async {
