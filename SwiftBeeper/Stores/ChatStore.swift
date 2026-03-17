@@ -105,8 +105,14 @@ final class ChatStore {
         chatsByID = Dictionary(newChats.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
     }
 
-    private func isPrimaryInboxChat(_ chat: Chat) -> Bool {
+    func isPrimaryInboxChat(_ chat: Chat) -> Bool {
         !lowPriorityChatIDs.contains(chat.id) && chat.isArchived != true
+    }
+
+    /// Ensures `lowPriorityChatIDs` are loaded (fetches them if empty).
+    func ensureLowPriorityIDsLoaded() async {
+        guard lowPriorityChatIDs.isEmpty else { return }
+        lowPriorityChatIDs = (try? await APIClient.listLowPriorityChatIDs()) ?? []
     }
 
     private func mergedChatsPreservingExistingContext(

@@ -74,11 +74,10 @@ final class RealtimeCoordinator: RealtimeEventHandler {
                 if chatID == selectedChatID {
                     // Selected chat: refresh messages and check for new ones to notify
                     scheduleMessagesRefreshWithNotification(chatID: chatID)
-                } else if messageStore.messagesByChatID[chatID] != nil {
-                    // Non-selected chat we've already loaded: refresh and notify
+                } else {
+                    // Any other chat: refresh and notify
                     scheduleMessagesRefreshWithNotification(chatID: chatID)
                 }
-                // Chats we haven't loaded messages for: skip (chat list refresh handles unread badge)
             }
         }
     }
@@ -142,21 +141,41 @@ final class RealtimeCoordinator: RealtimeEventHandler {
             } catch { return }
 
             guard !Task.isCancelled else { return }
+
+            // Track whether this is the first load for this chat
+            let isFirstLoad = self.messageStore.messagesByChatID[chatID] == nil
             let newMessages = await self.messageStore.loadMessages(for: chatID)
 
             guard !Task.isCancelled else { return }
             self.scheduledMessagesRefreshTasks[chatID] = nil
 
-            // Post notifications for truly new incoming messages
-            let chat = self.chatStore.chat(byID: chatID)
-            let isMuted = chat?.isMuted == true
-            guard !isMuted, !newMessages.isEmpty else { return }
+            // For first loads, loadMessages returns [] (by design).
+            // Since a realtime event triggered this, the latest message is the new one.
+            let messagesToNotify: [Message]
+            if isFirstLoad {
+                if let latestMessage = self.messageStore.messagesByChatID[chatID]?.last {
+                    messagesToNotify = [latestMessage]
+                } else {
+                    messagesToNotify = []
+                }
+            } else {
+                messagesToNotify = newMessages
+            }
 
-            let chatTitle = chat?.displayTitle ?? "New Message"
-            for message in newMessages {
+            // Post notifications for truly new incoming messages
+            await self.chatStore.ensureLowPriorityIDsLoaded()
+            guard let chat = self.chatStore.chat(byID: chatID) else { return }
+            let isMuted = chat.isMuted == true
+            let isPrimary = self.chatStore.isPrimaryInboxChat(chat)
+            guard !isMuted, isPrimary, !messagesToNotify.isEmpty else { return }
+
+            let chatTitle = chat.displayTitle
+            for message in messagesToNotify {
                 // Skip outgoing, reactions, membership events
-                if let chat, message.isOutgoing(in: chat) { continue }
+                if message.isOutgoing(in: chat) { continue }
                 if message.isReaction || message.isMembershipEvent || message.isEmptyDeleted { continue }
+                // Skip stale messages (older than 60s) to avoid notifying for old chat history
+                if Date().timeIntervalSince(message.timestamp) > 60 { continue }
 
                 self.notificationService.postNewMessageNotification(
                     message: message,
