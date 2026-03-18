@@ -42,7 +42,20 @@ struct MessageRowView: View {
                     }
                 }
 
-                if message.hasText {
+                if let urls = message.extractedURLs, !urls.isEmpty {
+                    if message.textWithoutURLs?.isEmpty == false {
+                        Text(message.textWithoutURLs!.markdownAttributed)
+                            .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(ChatVisualStyle.bubbleFill(isOutgoing: message.isOutgoing(in: chat)))
+                            .clipShape(.rect(cornerRadius: 15))
+                    }
+
+                    ForEach(urls, id: \.absoluteString) { url in
+                        LinkPillView(url: url)
+                    }
+                } else if message.hasText {
                     Text(message.displayText.markdownAttributed)
                         .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
                         .padding(.horizontal, 12)

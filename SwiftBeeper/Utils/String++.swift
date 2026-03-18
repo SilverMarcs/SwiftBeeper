@@ -22,4 +22,12 @@ extension String {
     var isBlank: Bool {
         trimmed.isEmpty
     }
+
+    var extractedURLs: [URL] {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return []
+        }
+        let range = NSRange(startIndex..., in: self)
+        return detector.matches(in: self, range: range).compactMap { $0.url }
+    }
 }

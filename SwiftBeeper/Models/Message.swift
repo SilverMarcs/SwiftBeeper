@@ -122,6 +122,22 @@ struct Message: Identifiable, Decodable, Equatable {
         text?.trimmed.isEmpty == false
     }
 
+    var extractedURLs: [URL]? {
+        let urls = text?.extractedURLs ?? []
+        return urls.isEmpty ? nil : urls
+    }
+
+    var textWithoutURLs: String? {
+        guard let text = text?.trimmed, !text.isEmpty else { return nil }
+        guard let urls = extractedURLs else { return text }
+        var result = text
+        for url in urls {
+            result = result.replacingOccurrences(of: url.absoluteString, with: "")
+        }
+        let trimmed = result.trimmed
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     var timestampText: String {
         timestamp.formatted(date: .abbreviated, time: .shortened)
     }
