@@ -30,7 +30,7 @@ struct ImageAttachmentView: View {
         }
         .buttonStyle(.plain)
         .frame(width: imageSize.width, height: imageSize.height)
-        .background(.background.secondary)
+        .subtleBackground()
         .clipShape(.rect(cornerRadius: 12))
         .contentShape(.rect(cornerRadius: 12))
         .task(id: attachment.resolvedURL) {

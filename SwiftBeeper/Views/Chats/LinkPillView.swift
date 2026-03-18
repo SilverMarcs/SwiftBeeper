@@ -17,7 +17,7 @@ struct LinkPillView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(.background.secondary)
+            .subtleBackground()
             .clipShape(.rect(cornerRadius: 12))
         }
     }

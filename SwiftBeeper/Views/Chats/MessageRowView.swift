@@ -48,7 +48,7 @@ struct MessageRowView: View {
                             .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(ChatVisualStyle.bubbleFill(isOutgoing: message.isOutgoing(in: chat)))
+                            .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
                             .clipShape(.rect(cornerRadius: 15))
                     }
 
@@ -60,7 +60,7 @@ struct MessageRowView: View {
                         .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(ChatVisualStyle.bubbleFill(isOutgoing: message.isOutgoing(in: chat)))
+                        .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
                         .clipShape(.rect(cornerRadius: 15))
                 }
 

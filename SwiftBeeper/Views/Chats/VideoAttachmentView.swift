@@ -22,12 +22,12 @@ struct VideoAttachmentView: View {
             } else if isLoading {
                 ProgressView()
                     .frame(width: videoSize.width, height: videoSize.height)
-                    .background(.background.secondary)
+                    .subtleBackground()
                     .clipShape(.rect(cornerRadius: 12))
             } else {
                 Color.clear
                     .frame(width: videoSize.width, height: videoSize.height)
-                    .background(.background.secondary)
+                    .subtleBackground()
                     .clipShape(.rect(cornerRadius: 12))
             }
         }

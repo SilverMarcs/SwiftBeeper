@@ -24,7 +24,7 @@ struct FileAttachmentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(ChatVisualStyle.bubbleFill(isOutgoing: isOutgoing))
+        .bubbleBackground(isOutgoing: isOutgoing)
         .clipShape(.rect(cornerRadius: 12))
     }
 
