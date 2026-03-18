@@ -5,55 +5,60 @@ struct VideoAttachmentView: View {
     let attachment: Attachment
 
     @State private var videoPlayer: AVPlayer?
-    @State private var isVideoLoading = false
+    @State private var isLoading = false
 
-    private let contentWidth: CGFloat = 500
-    private let contentHeight: CGFloat = 500
+    private let maxWidth: CGFloat = 500
+    private let maxHeight: CGFloat = 500
 
     var body: some View {
         Group {
             if let videoPlayer {
                 VideoPlayer(player: videoPlayer)
-                    .frame(width: contentWidth, height: contentHeight)
+                    .frame(width: videoSize.width, height: videoSize.height)
                     .clipShape(.rect(cornerRadius: 12))
                     .onDisappear {
                         stopPlayback(videoPlayer)
                     }
-            } else if isVideoLoading {
+            } else if isLoading {
                 ProgressView()
-                    .frame(width: contentWidth, height: contentHeight)
+                    .frame(width: videoSize.width, height: videoSize.height)
                     .background(.background.secondary)
                     .clipShape(.rect(cornerRadius: 12))
             } else {
-                Button {
-                    Task {
-                        await loadAndPlayVideo()
-                    }
-                } label: {
-                    Image(systemName: "play.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                        .frame(width: contentWidth, height: contentHeight)
-                        .background(.background.secondary)
-                        .clipShape(.rect(cornerRadius: 12))
-                        .contentShape(.rect(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
-                .controlSize(.extraLarge)
+                Color.clear
+                    .frame(width: videoSize.width, height: videoSize.height)
+                    .background(.background.secondary)
+                    .clipShape(.rect(cornerRadius: 12))
             }
+        }
+        .task(id: attachment.resolvedURL) {
+            await loadVideo()
         }
     }
 
-    private func loadAndPlayVideo() async {
-        if let videoPlayer {
-            videoPlayer.play()
-            return
+    private var videoSize: CGSize {
+        guard let w = attachment.size?.width, let h = attachment.size?.height,
+              w > 0, h > 0 else {
+            return CGSize(width: maxWidth, height: maxWidth)
         }
 
+        let aspectRatio = CGFloat(w) / CGFloat(h)
+        var width = min(CGFloat(w), maxWidth)
+        var height = width / aspectRatio
+
+        if height > maxHeight {
+            height = maxHeight
+            width = height * aspectRatio
+        }
+
+        return CGSize(width: width, height: height)
+    }
+
+    private func loadVideo() async {
         guard let urlString = attachment.resolvedURL else { return }
 
-        isVideoLoading = true
-        defer { isVideoLoading = false }
+        isLoading = true
+        defer { isLoading = false }
 
         let ext = attachment.mimeType?.split(separator: "/").last.map(String.init) ?? "mp4"
         guard let fileURL = await AuthenticatedImageLoader.downloadToTempFile(
@@ -62,17 +67,13 @@ struct VideoAttachmentView: View {
         ) else { return }
 
         let player = AVPlayer(url: fileURL)
+        player.pause()
         videoPlayer = player
-        player.play()
     }
 
     private func stopPlayback(_ player: AVPlayer) {
         player.pause()
         player.replaceCurrentItem(with: nil)
         videoPlayer = nil
-    }
-
-    private func formattedDuration(_ seconds: Double) -> String {
-        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
     }
 }

@@ -11,34 +11,28 @@ struct ImageAttachmentView: View {
     private let maxHeight: CGFloat = 500
 
     var body: some View {
-        Group {
-            if let loadedImage {
-                Button {
-                    showFullImage = true
-                } label: {
+        Button {
+            if loadedImage != nil {
+                showFullImage = true
+            }
+        } label: {
+            ZStack {
+                Color.clear
+
+                if let loadedImage {
                     loadedImage
                         .resizable()
                         .scaledToFill()
-                        .frame(width: imageSize.width, height: imageSize.height)
-                        .clipped()
-                        .clipShape(.rect(cornerRadius: 12))
-                        .contentShape(.rect(cornerRadius: 12))
+                } else if isLoading {
+                    ProgressView()
                 }
-                .buttonStyle(.plain)
-            } else if isLoading {
-                ProgressView()
-                    .frame(width: imageSize.width, height: imageSize.height)
-                    .background(.background.secondary)
-                    .clipShape(.rect(cornerRadius: 12))
-            } else {
-                Image(systemName: "photo")
-                    .foregroundStyle(.secondary)
-                    .font(.title2)
-                    .frame(width: imageSize.width, height: imageSize.height)
-                    .background(.background.secondary)
-                    .clipShape(.rect(cornerRadius: 12))
             }
         }
+        .buttonStyle(.plain)
+        .frame(width: imageSize.width, height: imageSize.height)
+        .background(.background.secondary)
+        .clipShape(.rect(cornerRadius: 12))
+        .contentShape(.rect(cornerRadius: 12))
         .task(id: attachment.resolvedURL) {
             await loadImage()
         }
