@@ -46,6 +46,7 @@ struct MessageRowView: View {
                     if message.textWithoutURLs?.isEmpty == false {
                         Text(message.textWithoutURLs!.markdownAttributed)
                             .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
@@ -58,6 +59,7 @@ struct MessageRowView: View {
                 } else if message.hasText {
                     Text(message.displayText.markdownAttributed)
                         .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
