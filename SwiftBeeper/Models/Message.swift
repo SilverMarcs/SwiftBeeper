@@ -1,5 +1,5 @@
 import Foundation
-import OSLog
+
 
 enum MessageKind: RawRepresentable, Decodable, Equatable {
     case reaction
@@ -48,7 +48,7 @@ struct Reaction: Codable, Identifiable, Hashable {
 }
 
 struct Message: Identifiable, Decodable, Equatable {
-    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "Message")
+
 
     let id: String
     let chatID: String
@@ -76,11 +76,7 @@ struct Message: Identifiable, Decodable, Equatable {
             return true
         }
         guard let loweredText = text?.lowercased() else { return false }
-        let matchedByText = loweredText.contains("joined the chat") || loweredText.contains("was invited to the chat")
-        if matchedByText {
-            Self.logger.info("isMembershipEvent matched by text fallback. type=\(String(describing: type), privacy: .public), text=\(loweredText, privacy: .public)")
-        }
-        return matchedByText
+        return loweredText.contains("joined the chat") || loweredText.contains("was invited to the chat")
     }
 
     var senderDisplayName: String {

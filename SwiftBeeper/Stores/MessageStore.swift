@@ -1,11 +1,9 @@
 import Foundation
 import Observation
-import OSLog
 
 @MainActor
 @Observable
 final class MessageStore {
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "MessageStore")
     private(set) var messagesByChatID: [String: [Message]] = [:]
     private(set) var hasMoreMessagesByChatID: [String: Bool] = [:]
     /// Tracks the furthest sortKey that another participant has read, per chat.
@@ -106,7 +104,6 @@ final class MessageStore {
                 messagesByChatID[chatID] = refreshedMessages
             }
             hasMoreMessagesByChatID[chatID] = response.hasMore
-            logger.debug("Loaded \(response.items.count, privacy: .public) messages for chat \(chatID, privacy: .public). Existing: \(existingMessages.count, privacy: .public). Refreshed: \(refreshedMessages.count, privacy: .public). New: \(newMessages.count, privacy: .public).")
             return newMessages
         } catch {
             guard latestLoadRequestIDByChatID[chatID] == requestID else { return [] }
@@ -140,19 +137,16 @@ final class MessageStore {
 
             let existingMessages = messagesByChatID[chatID] ?? []
             let existingTimelineKeys = Set(existingMessages.map(\.timelineKey))
-            let normalizedResponse = normalizedMessages(response.items, source: "loadOlderMessages response", chatID: chatID)
+            let normalizedResponse = normalizedMessages(response.items)
             let newMessages = normalizedResponse.filter { !existingTimelineKeys.contains($0.timelineKey) }
             let merged = mergedMessages(
                 existing: existingMessages,
-                incoming: newMessages,
-                chatID: chatID,
-                source: "loadOlderMessages"
+                incoming: newMessages
             )
             if merged != existingMessages {
                 messagesByChatID[chatID] = merged
             }
             hasMoreMessagesByChatID[chatID] = response.hasMore
-            logger.debug("Loaded \(response.items.count, privacy: .public) older messages for chat \(chatID, privacy: .public). Added: \(newMessages.count, privacy: .public). Total: \(merged.count, privacy: .public).")
             return merged != existingMessages
         } catch {
             handleMessageError(error, context: "loading older messages for \(chatID)")
@@ -175,40 +169,27 @@ final class MessageStore {
     }
 
     private func handleMessageError(_ error: any Error, context: String) {
-        if isCancellationLikeError(error) {
-            logger.debug("Ignoring cancelled operation while \(context, privacy: .public): \(String(describing: error), privacy: .public)")
-            return
-        }
-
+        if isCancellationLikeError(error) { return }
         messagesError = error.localizedDescription
-        logger.error("Message operation failed while \(context, privacy: .public): \(error.localizedDescription, privacy: .public)")
     }
 
     private func handleMessageError(_ message: String, context: String) {
         let nsError = NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
-        if isCancellationLikeError(nsError) {
-            logger.debug("Ignoring cancelled operation while \(context, privacy: .public): \(message, privacy: .public)")
-            return
-        }
-
+        if isCancellationLikeError(nsError) { return }
         messagesError = message
-        logger.error("Message operation failed while \(context, privacy: .public): \(message, privacy: .public)")
     }
 
-    private func mergedMessages(existing: [Message], incoming: [Message], chatID: String, source: String) -> [Message] {
+    private func mergedMessages(existing: [Message], incoming: [Message]) -> [Message] {
         var merged = Dictionary(existing.map { ($0.timelineKey, $0) }, uniquingKeysWith: { current, _ in current })
         for message in incoming {
-            if let replaced = merged.updateValue(message, forKey: message.timelineKey), replaced.id != message.id {
-                logger.debug("Replacing timeline entry in \(source, privacy: .public) for chat \(chatID, privacy: .public). sortKey: \(message.timelineKey, privacy: .public), oldID: \(replaced.id, privacy: .public), newID: \(message.id, privacy: .public)")
-            }
+            merged.updateValue(message, forKey: message.timelineKey)
         }
         let sorted = merged.values.sorted(by: { $0.numericSortKey < $1.numericSortKey })
-        logDuplicates(in: sorted, keyPath: \.timelineKey, label: "sortKey", source: source, chatID: chatID)
         return sorted
     }
 
     private func refreshedMessages(existing: [Message], latestPage: [Message], chatID: String) -> [Message] {
-        let normalizedLatestMessages = normalizedMessages(latestPage, source: "loadMessages response", chatID: chatID)
+        let normalizedLatestMessages = normalizedMessages(latestPage)
         guard let oldestLatestSortKey = normalizedLatestMessages.first?.sortKey else {
             return []
         }
@@ -217,33 +198,16 @@ final class MessageStore {
         let preservedOlderMessages = existing.filter { $0.numericSortKey < oldestLatestNumeric }
         return mergedMessages(
             existing: preservedOlderMessages,
-            incoming: normalizedLatestMessages,
-            chatID: chatID,
-            source: "loadMessages"
+            incoming: normalizedLatestMessages
         )
     }
 
-    private func normalizedMessages(_ messages: [Message], source: String, chatID: String) -> [Message] {
-        logDuplicates(in: messages, keyPath: \.id, label: "messageID", source: source, chatID: chatID)
-
+    private func normalizedMessages(_ messages: [Message]) -> [Message] {
         var messagesByTimelineKey: [String: Message] = [:]
         for message in messages {
-            if let replaced = messagesByTimelineKey.updateValue(message, forKey: message.timelineKey), replaced.id != message.id {
-                logger.debug("Normalized duplicate timeline entry in \(source, privacy: .public) for chat \(chatID, privacy: .public). sortKey: \(message.timelineKey, privacy: .public), oldID: \(replaced.id, privacy: .public), newID: \(message.id, privacy: .public)")
-            }
+            messagesByTimelineKey.updateValue(message, forKey: message.timelineKey)
         }
-
-        let normalized = messagesByTimelineKey.values.sorted(by: { $0.numericSortKey < $1.numericSortKey })
-        logDuplicates(in: normalized, keyPath: \.timelineKey, label: "sortKey", source: source, chatID: chatID)
-        return normalized
-    }
-
-    private func logDuplicates(in messages: [Message], keyPath: KeyPath<Message, String>, label: String, source: String, chatID: String) {
-        let grouped = Dictionary(grouping: messages, by: { $0[keyPath: keyPath] })
-        for (key, entries) in grouped where entries.count > 1 {
-            let details = entries.map { $0.id == key ? $0.timelineKey : $0.id }.joined(separator: ", ")
-            logger.warning("Duplicate \(label, privacy: .public) in \(source, privacy: .public) for chat \(chatID, privacy: .public). \(label, privacy: .public): \(key, privacy: .public), related: \(details, privacy: .public)")
-        }
+        return messagesByTimelineKey.values.sorted(by: { $0.numericSortKey < $1.numericSortKey })
     }
 
     // MARK: - Sending

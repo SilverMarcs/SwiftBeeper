@@ -144,6 +144,22 @@ private struct WebSocketEnvelope: Decodable {
     let message: String?
     let ids: [String]?
     let entries: [[String: String]]?
+
+    enum CodingKeys: String, CodingKey {
+        case type, requestID, chatID, message, ids, entries
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decode(String.self, forKey: .type)
+        requestID = try? container.decodeIfPresent(String.self, forKey: .requestID)
+        chatID = try? container.decodeIfPresent(String.self, forKey: .chatID)
+        message = try? container.decodeIfPresent(String.self, forKey: .message)
+        ids = try? container.decodeIfPresent([String].self, forKey: .ids)
+        // entries may contain non-string values (bools, nulls) in message events;
+        // only receipt events use this field, so fall back to nil on type mismatch.
+        entries = try? container.decodeIfPresent([[String: String]].self, forKey: .entries)
+    }
 }
 
 private struct SubscriptionsSetCommand: Encodable {

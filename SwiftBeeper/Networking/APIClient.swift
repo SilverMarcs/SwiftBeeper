@@ -1,9 +1,6 @@
 import Foundation
-import OSLog
 
 enum APIClient {
-    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "APIClient")
-
     private static let _tokenLock = NSLock()
     private static var _accessToken: String = ""
 
@@ -88,22 +85,17 @@ enum APIClient {
         do {
             return try JSONDecoder.beeper.decode(Response.self, from: data)
         } catch {
-            logger.error("Decoding failed for \(request.httpMethod ?? "UNKNOWN", privacy: .public) \(request.url?.absoluteString ?? "<nil>", privacy: .public): \(error.localizedDescription, privacy: .public)")
             throw APIError.decoding(error.localizedDescription)
         }
     }
 
     @discardableResult
     static func sendRaw(_ request: URLRequest) async throws -> Data {
-        logger.debug("Sending \(request.httpMethod ?? "UNKNOWN", privacy: .public) \(request.url?.absoluteString ?? "<nil>", privacy: .public)")
-
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
-
-        logger.debug("Received \(httpResponse.statusCode, privacy: .public) for \(request.url?.absoluteString ?? "<nil>", privacy: .public)")
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             throw APIError.http(statusCode: httpResponse.statusCode, details: parseErrorMessage(from: data))
