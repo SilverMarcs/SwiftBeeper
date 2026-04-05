@@ -91,6 +91,20 @@ final class RealtimeCoordinator: RealtimeEventHandler {
         }
     }
 
+    nonisolated func realtimeDidUpdateReceipt(chatID: String?, entries: [[String: String]]?) {
+        Task { @MainActor in
+            // Update read-by-other sort key directly from the WS event entry.
+            if let chatID, let entries, let entry = entries.first,
+               let readKey = entry["lastReadByOtherSortKey"] {
+                messageStore.lastReadByOtherSortKeyByChatID[chatID] = readKey
+            }
+            // Also refresh messages if this is the selected chat to update the UI.
+            if let chatID, chatID == selectedChatID {
+                scheduleMessagesRefresh(chatID: chatID)
+            }
+        }
+    }
+
     nonisolated func realtimeDidReceiveError(_ message: String) {
         Task { @MainActor in
             messageStore.messagesError = message

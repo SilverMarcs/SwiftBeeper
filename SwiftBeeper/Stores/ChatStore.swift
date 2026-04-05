@@ -283,4 +283,41 @@ final class ChatStore {
             chatsError = error.localizedDescription
         }
     }
+
+    // MARK: - Mute / Unmute
+
+    func muteChat(_ chatID: String) async {
+        guard !APIClient.accessToken.isEmpty else { return }
+
+        do {
+            try await APIClient.muteChat(chatID: chatID, muted: true)
+            await loadChats()
+        } catch {
+            chatsError = error.localizedDescription
+        }
+    }
+
+    func unmuteChat(_ chatID: String) async {
+        guard !APIClient.accessToken.isEmpty else { return }
+
+        do {
+            try await APIClient.muteChat(chatID: chatID, muted: false)
+            await loadChats()
+        } catch {
+            chatsError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Mark as Read
+
+    func markChatAsRead(_ chatID: String) async {
+        guard !APIClient.accessToken.isEmpty else { return }
+
+        do {
+            try await APIClient.markChatAsRead(chatID: chatID)
+            await loadChats()
+        } catch {
+            chatsError = error.localizedDescription
+        }
+    }
 }

@@ -8,6 +8,8 @@ final class MessageStore {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "MessageStore")
     private(set) var messagesByChatID: [String: [Message]] = [:]
     private(set) var hasMoreMessagesByChatID: [String: Bool] = [:]
+    /// Tracks the furthest sortKey that another participant has read, per chat.
+    var lastReadByOtherSortKeyByChatID: [String: String] = [:]
     private var latestLoadRequestIDByChatID: [String: UUID] = [:]
     private(set) var isLoadingOlderMessages = false
     private(set) var isLoadingMessages = false
@@ -30,9 +32,22 @@ final class MessageStore {
         messagesByChatID[chatID]?.first(where: { $0.id == messageID })
     }
 
+    /// Returns true if the given outgoing message has been read/seen by the other side.
+    func isReadByOther(message: Message) -> Bool {
+        guard let readKey = lastReadByOtherSortKeyByChatID[message.chatID], !readKey.isEmpty else {
+            return false
+        }
+        // Compare sort keys numerically.
+        guard let msgSort = Int64(message.sortKey), let readSort = Int64(readKey) else {
+            return message.sortKey <= readKey
+        }
+        return msgSort <= readSort
+    }
+
     func reset() {
         messagesByChatID = [:]
         hasMoreMessagesByChatID = [:]
+        lastReadByOtherSortKeyByChatID = [:]
         latestLoadRequestIDByChatID = [:]
         messagesError = nil
         replyingToMessage = nil
@@ -67,6 +82,9 @@ final class MessageStore {
             guard latestLoadRequestIDByChatID[chatID] == requestID else { return [] }
 
             messagesError = nil
+            if let readKey = response.lastReadByOtherSortKey {
+                lastReadByOtherSortKeyByChatID[chatID] = readKey
+            }
             let existingMessages = messagesByChatID[chatID] ?? []
             let existingTimelineKeys = Set(existingMessages.map(\.timelineKey))
             let refreshedMessages = refreshedMessages(
@@ -184,7 +202,7 @@ final class MessageStore {
                 logger.debug("Replacing timeline entry in \(source, privacy: .public) for chat \(chatID, privacy: .public). sortKey: \(message.timelineKey, privacy: .public), oldID: \(replaced.id, privacy: .public), newID: \(message.id, privacy: .public)")
             }
         }
-        let sorted = merged.values.sorted(by: { $0.sortKey < $1.sortKey })
+        let sorted = merged.values.sorted(by: { $0.numericSortKey < $1.numericSortKey })
         logDuplicates(in: sorted, keyPath: \.timelineKey, label: "sortKey", source: source, chatID: chatID)
         return sorted
     }
@@ -195,7 +213,8 @@ final class MessageStore {
             return []
         }
 
-        let preservedOlderMessages = existing.filter { $0.sortKey < oldestLatestSortKey }
+        let oldestLatestNumeric = Int64(oldestLatestSortKey) ?? 0
+        let preservedOlderMessages = existing.filter { $0.numericSortKey < oldestLatestNumeric }
         return mergedMessages(
             existing: preservedOlderMessages,
             incoming: normalizedLatestMessages,
@@ -214,7 +233,7 @@ final class MessageStore {
             }
         }
 
-        let normalized = messagesByTimelineKey.values.sorted(by: { $0.sortKey < $1.sortKey })
+        let normalized = messagesByTimelineKey.values.sorted(by: { $0.numericSortKey < $1.numericSortKey })
         logDuplicates(in: normalized, keyPath: \.timelineKey, label: "sortKey", source: source, chatID: chatID)
         return normalized
     }
@@ -298,7 +317,7 @@ final class MessageStore {
             }
         )
 
-        if let error = uploadResult.error {
+        if let error = uploadResult.error, !error.isEmpty {
             handleMessageError("Upload failed: \(error)", context: "uploading attachment for \(chatID)")
             throw UploadError.serverError(error)
         }

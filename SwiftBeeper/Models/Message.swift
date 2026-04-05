@@ -66,6 +66,9 @@ struct Message: Identifiable, Decodable, Equatable {
 
     var timelineKey: String { sortKey }
 
+    /// Numeric sort key for correct ordering (handles negative backfill IDs).
+    var numericSortKey: Int64 { Int64(sortKey) ?? 0 }
+
     var isReaction: Bool { type == .reaction }
 
     var isMembershipEvent: Bool {

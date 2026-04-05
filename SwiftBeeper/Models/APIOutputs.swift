@@ -17,6 +17,9 @@ struct SearchChatsOutput: Decodable {
 struct ListMessagesOutput: Decodable {
     let items: [Message]
     let hasMore: Bool
+    /// The sortKey of the furthest message that at least one other participant has read.
+    /// Outgoing messages with sortKey <= this value have been seen by the other side.
+    let lastReadByOtherSortKey: String?
 }
 
 struct SendMessageOutput: Decodable {

@@ -10,6 +10,9 @@ struct MessageRowView: View {
 
     let message: Message
     let chat: Chat
+    /// Whether to show the "Read" indicator below this outgoing message.
+    /// Only the last consecutive outgoing message that's been read should show this.
+    var showReadIndicator: Bool = false
 
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
@@ -80,6 +83,16 @@ struct MessageRowView: View {
                             }
                         }
                     )
+                }
+
+                if message.isOutgoing(in: chat) && showReadIndicator {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                        Text("Read")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.secondary)
                 }
             }
             .contextMenu {

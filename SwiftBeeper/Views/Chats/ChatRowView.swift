@@ -66,6 +66,36 @@ struct ChatRowView: View {
                 .labelStyle(.iconOnly)
             }
             .tint(chatStore.selectedInboxFilter == .archive ? .blue : .orange)
+
+            Button {
+                Task {
+                    if chat.isMuted == true {
+                        await chatStore.unmuteChat(chat.id)
+                    } else {
+                        await chatStore.muteChat(chat.id)
+                    }
+                }
+            } label: {
+                Label(
+                    chat.isMuted == true ? "Unmute" : "Mute",
+                    systemImage: chat.isMuted == true ? "bell" : "bell.slash"
+                )
+                .labelStyle(.iconOnly)
+            }
+            .tint(.purple)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            if chat.unreadCount > 0 {
+                Button {
+                    Task {
+                        await chatStore.markChatAsRead(chat.id)
+                    }
+                } label: {
+                    Label("Mark Read", systemImage: "envelope.open")
+                        .labelStyle(.iconOnly)
+                }
+                .tint(.blue)
+            }
         }
     }
 }

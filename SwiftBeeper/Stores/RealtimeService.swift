@@ -6,6 +6,7 @@ import Observation
     func realtimeDidDeleteChat(chatID: String?)
     func realtimeDidUpsertMessage(chatID: String?)
     func realtimeDidDeleteMessage(chatID: String?)
+    func realtimeDidUpdateReceipt(chatID: String?, entries: [[String: String]]?)
     func realtimeDidReceiveError(_ message: String)
 }
 
@@ -94,6 +95,8 @@ final class RealtimeService {
             eventHandler?.realtimeDidUpsertMessage(chatID: envelope.chatID)
         case "message.deleted":
             eventHandler?.realtimeDidDeleteMessage(chatID: envelope.chatID)
+        case "receipt.updated":
+            eventHandler?.realtimeDidUpdateReceipt(chatID: envelope.chatID, entries: envelope.entries)
         default:
             break
         }
@@ -140,6 +143,7 @@ private struct WebSocketEnvelope: Decodable {
     let chatID: String?
     let message: String?
     let ids: [String]?
+    let entries: [[String: String]]?
 }
 
 private struct SubscriptionsSetCommand: Encodable {

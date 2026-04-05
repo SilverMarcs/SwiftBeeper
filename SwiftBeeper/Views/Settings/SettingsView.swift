@@ -12,7 +12,7 @@ struct SettingsView: View {
             } header: {
                 Text("Beeper API")
             } footer: {
-                Text("Use the token for localhost:23373 API requests.")
+                Text("Use the token for localhost:23374 API requests.")
             }
             .sectionActions {
                 Button("Clear Token", role: .destructive) {

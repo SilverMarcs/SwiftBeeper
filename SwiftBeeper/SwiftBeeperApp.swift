@@ -10,6 +10,11 @@ struct SwiftBeeperApp: App {
     @State private var coordinator: RealtimeCoordinator
 
     init() {
+        // MARK: - Auto-launch EasyMatrix server (comment out these 4 lines to disable)
+        EasyMatrixServer.shared.start()
+        AppTerminationObserver.shared.register()
+        // END auto-launch
+
         let chatStore = ChatStore()
         let messageStore = MessageStore()
         let realtimeService = RealtimeService()
@@ -47,3 +52,22 @@ struct SwiftBeeperApp: App {
         #endif
     }
 }
+
+#if os(macOS)
+/// Monitors app termination to cleanly stop the EasyMatrix server.
+final class AppTerminationObserver {
+    static let shared = AppTerminationObserver()
+    private var observation: Any?
+
+    func register() {
+        guard observation == nil else { return }
+        observation = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            EasyMatrixServer.shared.stop()
+        }
+    }
+}
+#endif

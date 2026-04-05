@@ -21,6 +21,7 @@ struct ChatDetailView: View {
             let messages = messageStore.messages(for: selectedChat.id)
             let timelineEntries = timelineEntries(for: messages)
             let activeComposerMessageID = messageStore.activeComposerMessage?.id
+            let readIndicatorMessageID = lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
 
             ScrollViewReader { proxy in
                 let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
@@ -55,7 +56,8 @@ struct ChatDetailView: View {
 
                         MessageRowView(
                             message: entry.message,
-                            chat: selectedChat
+                            chat: selectedChat,
+                            showReadIndicator: entry.message.id == readIndicatorMessageID
                         )
                         .modifier(
                             TimelineFocusEffect(
@@ -224,10 +226,38 @@ struct ChatDetailView: View {
         guard chat.unreadCount > 0 else { return nil }
 
         if let lastReadSortKey = chat.lastReadMessageSortKey {
-            return messages.first(where: { $0.sortKey > lastReadSortKey })?.id
+            let lastReadNumeric = Int64(lastReadSortKey) ?? 0
+            return messages.first(where: { $0.numericSortKey > lastReadNumeric })?.id
         }
 
         return messages.first(where: { $0.isUnread == true })?.id
+    }
+
+    /// Returns the ID of the outgoing message that should show the "Read" indicator.
+    /// Rules:
+    /// - Only the last outgoing message that the other side has read gets the indicator.
+    /// - If there's an incoming message AFTER that outgoing message, don't show
+    ///   the indicator — the reply itself proves they read it.
+    private func lastReadOutgoingMessageID(messages: [Message], chat: Chat) -> String? {
+        // Find the last outgoing message that the other side has read.
+        var lastReadOutgoing: Message?
+        for message in messages {
+            guard message.isOutgoing(in: chat) else { continue }
+            guard messageStore.isReadByOther(message: message) else { continue }
+            lastReadOutgoing = message
+        }
+        guard let target = lastReadOutgoing else { return nil }
+
+        // If there's any incoming message after the target, the reply proves
+        // reading — no need for an explicit indicator.
+        let hasIncomingAfter = messages.contains { msg in
+            !msg.isOutgoing(in: chat) && msg.numericSortKey > target.numericSortKey
+        }
+        if hasIncomingAfter {
+            return nil
+        }
+
+        return target.id
     }
 
     private func timelineEntries(for messages: [Message]) -> [TimelineEntry] {

@@ -56,10 +56,42 @@ extension APIClient {
             body: ArchiveChatRequest(archived: archived)
         )
     }
+
+    static func muteChat(chatID: String, muted: Bool) async throws {
+        guard let url = URL(string: "/v1/chats/\(chatID)/mute", relativeTo: APIConfiguration.baseURL) else {
+            throw APIError.invalidURL("/v1/chats/\(chatID)/mute")
+        }
+
+        let _: ActionSuccessOutput = try await post(
+            url: url,
+            body: MuteChatRequest(muted: muted)
+        )
+    }
+
+    static func markChatAsRead(chatID: String) async throws {
+        guard let url = URL(string: "/v1/chats/\(chatID)/read", relativeTo: APIConfiguration.baseURL) else {
+            throw APIError.invalidURL("/v1/chats/\(chatID)/read")
+        }
+
+        let _: ActionSuccessOutput = try await post(
+            url: url,
+            body: EmptyBody()
+        )
+    }
 }
 
 private struct ArchiveChatRequest: Encodable {
     let archived: Bool
+}
+
+private struct MuteChatRequest: Encodable {
+    let muted: Bool
+}
+
+private struct EmptyBody: Encodable {}
+
+private struct ActionSuccessOutput: Decodable {
+    let success: Bool
 }
 
 private struct ChatIDOnly: Decodable {
