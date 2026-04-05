@@ -130,8 +130,9 @@ struct AudioAttachmentView: View {
 
         audioPlayer = player
 
-        // Get actual duration from the loaded asset
-        if let itemDuration = player.currentItem?.asset.duration, itemDuration.isNumeric {
+        // Get actual duration from the loaded asset.
+        let itemDuration = try? await playerItem.asset.load(.duration)
+        if let itemDuration, itemDuration.isNumeric {
             duration = itemDuration.seconds
         } else if let d = attachment.duration {
             duration = d

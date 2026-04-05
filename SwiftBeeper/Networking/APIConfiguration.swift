@@ -1,7 +1,7 @@
 import Foundation
 
 enum APIConfiguration {
-    static let baseURL = URL(string: "http://localhost:23374")!
+    static let baseURL = URL(string: "http://localhost:23373")!
     static let assetsProxyURL = baseURL.appending(path: "/v1/assets/serve")
 
     static var webSocketURL: URL {

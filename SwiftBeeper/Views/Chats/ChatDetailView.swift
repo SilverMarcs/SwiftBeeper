@@ -99,7 +99,7 @@ struct ChatDetailView: View {
                     messageStore.cancelEditing()
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
                     async let messagesLoad = messageStore.loadMessages(for: selectedChat.id)
-                    await messagesLoad
+                    let _ = await messagesLoad
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
                     try? await Task.sleep(for: .milliseconds(100))
