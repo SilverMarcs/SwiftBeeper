@@ -20,6 +20,7 @@ struct SwiftBeeperApp: App {
         let realtimeService = RealtimeService()
         let notificationService = NotificationService()
         notificationService.messageStore = messageStore
+        notificationService.chatStore = chatStore
         _chatStore = State(initialValue: chatStore)
         _messageStore = State(initialValue: messageStore)
         _realtimeService = State(initialValue: realtimeService)

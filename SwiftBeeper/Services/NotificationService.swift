@@ -11,6 +11,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "NotificationService")
     private(set) var isAuthorized = false
     var messageStore: MessageStore?
+    var chatStore: ChatStore?
 
     func requestAuthorization() async {
         let center = UNUserNotificationCenter.current()
@@ -76,23 +77,24 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        guard response.actionIdentifier == Self.replyAction,
-              let textResponse = response as? UNTextInputNotificationResponse else {
-            completionHandler()
-            return
-        }
-
         let chatID = response.notification.request.content.userInfo["chatID"] as? String ?? ""
-        let replyText = textResponse.userText
 
-        guard !chatID.isEmpty, !replyText.isEmpty else {
-            completionHandler()
-            return
+        if response.actionIdentifier == Self.replyAction,
+           let textResponse = response as? UNTextInputNotificationResponse {
+            let replyText = textResponse.userText
+            guard !chatID.isEmpty, !replyText.isEmpty else {
+                completionHandler()
+                return
+            }
+            Task { @MainActor in
+                _ = await messageStore?.sendMessage(text: replyText, attachments: [], to: chatID)
+            }
+        } else if !chatID.isEmpty {
+            Task { @MainActor in
+                chatStore?.selectedChatID = chatID
+            }
         }
 
-        Task { @MainActor in
-            _ = await messageStore?.sendMessage(text: replyText, attachments: [], to: chatID)
-        }
         completionHandler()
     }
 }

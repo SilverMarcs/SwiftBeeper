@@ -8,6 +8,7 @@ struct ChatDetailView: View {
     @Environment(RealtimeCoordinator.self) private var coordinator
     @State private var showingChatInfo = false
     @State private var isPreparingInitialScroll = false
+    @State private var firstUnreadID: String?
     private let bottomAnchorID = "bottom-id"
 
     var body: some View {
@@ -24,8 +25,6 @@ struct ChatDetailView: View {
             let readIndicatorMessageID = lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
 
             ScrollViewReader { proxy in
-                let firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
-
                 List {
                     if messageStore.hasMoreMessages(for: selectedChat.id) {
                         ProgressView()
@@ -96,12 +95,14 @@ struct ChatDetailView: View {
                 }
                 .task(id: selectedChat.id) {
                     isPreparingInitialScroll = true
+                    firstUnreadID = nil
                     coordinator.setSelectedChatID(selectedChat.id)
                     messageStore.setReplyTo(nil)
                     messageStore.cancelEditing()
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
                     async let messagesLoad = messageStore.loadMessages(for: selectedChat.id)
                     let _ = await messagesLoad
+                    firstUnreadID = firstUnreadMessageID(messages: messageStore.messages(for: selectedChat.id), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
                     try? await Task.sleep(for: .milliseconds(100))
@@ -114,6 +115,7 @@ struct ChatDetailView: View {
                     guard newTracker.count > oldTracker.count else { return }
                     guard newTracker.lastID != oldTracker.lastID else { return }
 
+                    firstUnreadID = nil
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
                         scrollToBottom(with: proxy, animated: true)

@@ -86,13 +86,10 @@ struct MessageRowView: View {
                 }
 
                 if message.isOutgoing(in: chat) && showReadIndicator {
-                    HStack(spacing: 3) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10))
-                        Text("Read")
-                            .font(.caption2)
-                    }
-                    .foregroundStyle(.secondary)
+                   Text("Read")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 3)
                 }
             }
             .contextMenu {
