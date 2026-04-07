@@ -96,9 +96,8 @@ struct Message: Identifiable, Decodable, Equatable {
             return "\(name) reacted \(emoji)"
         }
 
-        let trimmedText = text?.trimmed
-        if let trimmedText, trimmedText.isEmpty == false {
-            return trimmedText
+        if hasText {
+            return text!.trimmed
         }
 
         if let attachments, let first = attachments.first {
@@ -118,7 +117,13 @@ struct Message: Identifiable, Decodable, Equatable {
     }
 
     var hasText: Bool {
-        text?.trimmed.isEmpty == false
+        guard let trimmed = text?.trimmed, !trimmed.isEmpty else { return false }
+        // The API echoes the attachment filename as message text for media messages.
+        // Suppress it so we don't show a redundant text bubble (e.g. "image" or "IMG_2647.jpeg").
+        if let attachments, !attachments.isEmpty {
+            if attachments.contains(where: { $0.fileName == trimmed }) { return false }
+        }
+        return true
     }
 
     var extractedURLs: [URL]? {
