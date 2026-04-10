@@ -14,60 +14,45 @@ struct AudioAttachmentView: View {
     @State private var timeObserver: Any?
     @State private var isAudioPlaying = false
     @State private var isAudioLoading = false
-    @State private var loadError: String?
+
     @State private var currentTime: Double = 0
     @State private var duration: Double = 0
     @State private var isSeeking = false
 
+    private var isReady: Bool { audioPlayer != nil }
+
     var body: some View {
-        Group {
-            if audioPlayer != nil {
-                HStack(spacing: 8) {
-                    Button {
-                        toggleAudioPlayback()
-                    } label: {
-                        Image(systemName: isAudioPlaying ? "pause.fill" : "play.fill")
-                            .font(.title2)
-                    }
-                    .buttonStyle(.plain)
-
-                    Slider(
-                        value: $currentTime,
-                        in: 0...max(duration, 1)
-                    ) { editing in
-                        isSeeking = editing
-                        if !editing, let player = audioPlayer {
-                            player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600))
-                        }
-                    }
-                    .frame(width: 160)
-
-                    Text(formatDuration(isSeeking || isAudioPlaying ? currentTime : (attachment.duration ?? duration)))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            } else if isAudioLoading {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Loading...")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                HStack(spacing: 8) {
-                    Image(systemName: loadError != nil ? "exclamationmark.triangle" : "waveform")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                    Text(attachment.fileName ?? "Audio")
-                        .font(.callout)
-                        .lineLimit(1)
-                }
-                .onTapGesture {
+        HStack(spacing: 8) {
+            Button {
+                if isReady {
+                    toggleAudioPlayback()
+                } else if !isAudioLoading {
                     Task { await loadAudio() }
                 }
+            } label: {
+                Image(systemName: isAudioPlaying ? "pause.fill" : "play.fill")
+                    .font(.title2)
             }
+            .buttonStyle(.plain)
+
+            Slider(
+                value: $currentTime,
+                in: 0...max(duration, 1)
+            ) { editing in
+                isSeeking = editing
+                if !editing, let player = audioPlayer {
+                    player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600))
+                }
+            }
+            .frame(width: 160)
+            .disabled(!isReady)
+
+            Text(formatDuration(isSeeking || isAudioPlaying ? currentTime : (attachment.duration ?? duration)))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
+        .opacity(isAudioLoading ? 0.4 : 1.0)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .bubbleBackground(isOutgoing: isOutgoing)
@@ -83,12 +68,10 @@ struct AudioAttachmentView: View {
     private func loadAudio() async {
         guard let urlString = attachment.resolvedURL else {
             logger.warning("Audio attachment has no resolved URL")
-            loadError = "No URL"
             return
         }
 
         isAudioLoading = true
-        loadError = nil
         defer { isAudioLoading = false }
 
         let ext = Self.fileExtension(from: attachment.mimeType)
@@ -97,7 +80,6 @@ struct AudioAttachmentView: View {
             fileExtension: ext
         ) else {
             logger.error("Failed to download audio: \(urlString)")
-            loadError = "Download failed"
             return
         }
 
@@ -110,7 +92,6 @@ struct AudioAttachmentView: View {
                 logger.info("Converted OGG Opus to M4A")
             } catch {
                 logger.error("OGG to M4A conversion failed: \(error)")
-                loadError = "Unsupported format"
                 return
             }
         } else {
@@ -124,7 +105,6 @@ struct AudioAttachmentView: View {
         let isPlayable = (try? await playerItem.asset.load(.isPlayable)) ?? false
         guard isPlayable else {
             logger.error("AVPlayer cannot play this audio format: \(attachment.mimeType ?? "unknown")")
-            loadError = "Unsupported format"
             return
         }
 
