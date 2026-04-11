@@ -50,11 +50,11 @@ final class ChatStore {
 
     var selectedChat: Chat? {
         guard let selectedChatID else { return nil }
-        return chatsByID[selectedChatID]
+        return chat(byID: selectedChatID)
     }
 
     func chat(byID chatID: String) -> Chat? {
-        chatsByID[chatID]
+        chatsByID[chatID] ?? searchResults?.first(where: { $0.id == chatID })
     }
 
     private struct ChatListState {
@@ -136,16 +136,23 @@ final class ChatStore {
         }
 
         isSearching = true
+        defer { isSearching = false }
+
         do {
             let response = try await APIClient.searchChats(
                 query: trimmed,
                 inbox: selectedInboxFilter.rawValue
             )
             searchResults = response.items
+
+            // Hydrate metadata (preview, last activity) for results not already in the main list.
+            for item in response.items where chatsByID[item.id] == nil {
+                if Task.isCancelled { return }
+                await loadChatDetail(for: item.id)
+            }
         } catch {
             searchResults = []
         }
-        isSearching = false
     }
 
     func loadChatDetail(for chatID: String) async {
@@ -157,6 +164,11 @@ final class ChatStore {
                 let merged = chats[index].merging(detail: detail)
                 chats[index] = merged
                 chatsByID[chatID] = merged
+            }
+            if let searchIndex = searchResults?.firstIndex(where: { $0.id == chatID }),
+               var updated = searchResults {
+                updated[searchIndex] = updated[searchIndex].merging(detail: detail)
+                searchResults = updated
             }
         } catch {
             // Non-critical; we still have list data
