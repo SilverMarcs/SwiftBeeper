@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 
 struct ImageAttachmentView: View {
@@ -5,7 +6,7 @@ struct ImageAttachmentView: View {
 
     @State private var loadedImage: Image?
     @State private var isLoading = false
-    @State private var showFullImage = false
+    @State private var previewURL: URL?
 
     private let maxWidth: CGFloat = 330
     private let maxHeight: CGFloat = 500
@@ -13,7 +14,7 @@ struct ImageAttachmentView: View {
     var body: some View {
         Button {
             if loadedImage != nil {
-                showFullImage = true
+                Task { await openQuickLook() }
             }
         } label: {
             ZStack {
@@ -36,11 +37,7 @@ struct ImageAttachmentView: View {
         .task(id: attachment.resolvedURL) {
             await loadImage()
         }
-        .sheet(isPresented: $showFullImage) {
-            if let loadedImage {
-                FullImageSheet(image: loadedImage)
-            }
-        }
+        .quickLookPreview($previewURL)
     }
 
     private var imageSize: CGSize {
@@ -69,25 +66,24 @@ struct ImageAttachmentView: View {
 
         loadedImage = await AuthenticatedImageLoader.loadImage(urlString: urlString)
     }
-}
 
-private struct FullImageSheet: View {
-    let image: Image
-    @Environment(\.dismiss) private var dismiss
+    private func openQuickLook() async {
+        guard let urlString = attachment.resolvedURL else { return }
 
-    var body: some View {
-        image
-            .resizable()
-            .scaledToFit()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .topTrailing) {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.large)
-                .padding()
-            }
+        let fileExtension: String
+        if let fileName = attachment.fileName, let ext = fileName.split(separator: ".").last, !ext.isEmpty {
+            fileExtension = String(ext)
+        } else if attachment.isGif == true {
+            fileExtension = "gif"
+        } else {
+            fileExtension = "png"
+        }
+
+        guard let localURL = await AuthenticatedImageLoader.downloadToTempFile(
+            urlString: urlString,
+            fileExtension: fileExtension
+        ) else { return }
+
+        previewURL = localURL
     }
 }
