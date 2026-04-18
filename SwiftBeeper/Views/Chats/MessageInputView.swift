@@ -152,15 +152,22 @@ struct MessageInputView: View {
                     Button {
                         handleSubmit()
                     } label: {
-                        Image(systemName: isEditing ? "checkmark" : "arrow.up")
-                            .font(.system(size: 15))
-                            .bold()
+                        Group {
+                            if messageStore.isSendingMessage {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: isEditing ? "checkmark" : "arrow.up")
+                                    .font(.system(size: 15))
+                                    .bold()
+                            }
+                        }
                     }
-                    .opacity(0.85)
+                    .opacity(sendButtonDisabled ? 0.35 : 0.85)
                     .controlSize(.large)
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(.circle)
-                    .disabled(sendButtonDisabled)
+                    .allowsHitTesting(!sendButtonDisabled)
                     .offset(y: -2)
                 }
                 .padding(8)

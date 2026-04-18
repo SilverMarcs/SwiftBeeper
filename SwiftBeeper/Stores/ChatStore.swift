@@ -222,9 +222,16 @@ final class ChatStore {
             chatsError = nil
             lastLoadedInboxFilter = selectedInboxFilter
 
-            if let existingSelectedChatID = snapshot.selectedChatID, chatsByID[existingSelectedChatID] != nil {
-                selectedChatID = existingSelectedChatID
+            // Only restore selection from snapshot if the user hasn't switched
+            // chats during the async refresh — otherwise we'd override their action.
+            if selectedChatID == snapshot.selectedChatID {
+                if let existingSelectedChatID = snapshot.selectedChatID, chatsByID[existingSelectedChatID] != nil {
+                    selectedChatID = existingSelectedChatID
+                } else if chatsByID[selectedChatID ?? ""] == nil {
+                    selectedChatID = chats.first?.id
+                }
             } else if chatsByID[selectedChatID ?? ""] == nil {
+                // User switched to a chat that no longer exists in the list
                 selectedChatID = chats.first?.id
             }
         } catch {
