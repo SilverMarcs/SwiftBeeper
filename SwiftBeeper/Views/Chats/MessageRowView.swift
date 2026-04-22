@@ -13,77 +13,39 @@ struct MessageRowView: View {
     /// Whether to show the "Read" indicator below this outgoing message.
     /// Only the last consecutive outgoing message that's been read should show this.
     var showReadIndicator: Bool = false
+    var isFirstInGroup: Bool = true
+    var isLastInGroup: Bool = true
 
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .bottom, spacing: 6) {
             if message.isOutgoing(in: chat) {
                 Spacer(minLength: 100)
             } else if showIncomingIdentity {
-                ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
+                if isLastInGroup {
+                    ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
+                } else {
+                    Color.clear
+                        .frame(width: 28, height: 1)
+                }
             }
 
             VStack(alignment: message.isOutgoing(in: chat) ? .trailing : .leading, spacing: 4) {
-                if !message.isOutgoing(in: chat) && showIncomingIdentity {
+                if !message.isOutgoing(in: chat) && showIncomingIdentity && isFirstInGroup {
                     Text(message.senderDisplayName)
                         .font(.subheadline)
                         .bold()
                 }
 
-                if let linkedMessageID = message.linkedMessageID, !linkedMessageID.isEmpty {
-                    ReplyPreviewView(
-                        linkedMessageID: linkedMessageID,
-                        chatID: message.chatID,
-                        isOutgoing: message.isOutgoing(in: chat)
-                    )
-                }
-
-                if let attachments = message.attachments, attachments.isEmpty == false {
-                    ForEach(attachments) { attachment in
-                        AttachmentView(attachment: attachment, isOutgoing: message.isOutgoing(in: chat))
+                messageContent
+                    .overlay(alignment: message.isOutgoing(in: chat) ? .bottomLeading : .bottomTrailing) {
+                        reactionsView
+                            .offset(
+                                x: message.isOutgoing(in: chat) ? -15 : 15,
+                                y: 1
+                            )
                     }
-                }
-
-                if let urls = message.extractedURLs, !urls.isEmpty {
-                    if message.textWithoutURLs?.isEmpty == false {
-                        Text(message.textWithoutURLs!.markdownAttributed)
-                            .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
-                            .clipShape(.rect(cornerRadius: 15))
-                    }
-
-                    ForEach(urls, id: \.absoluteString) { url in
-                        LinkPillView(url: url)
-                    }
-                } else if message.hasText {
-                    Text(message.displayText.markdownAttributed)
-                        .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
-                        .clipShape(.rect(cornerRadius: 15))
-                }
-
-                if let groupedReactions = message.groupedReactions, groupedReactions.isEmpty == false {
-                    ReactionsBarView(
-                        groupedReactions: groupedReactions,
-                        currentParticipantID: currentParticipant?.id,
-                        onToggle: { reactionKey, isOwn in
-                            Task {
-                                if isOwn {
-                                    await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: reactionKey)
-                                } else {
-                                    await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey)
-                                }
-                            }
-                        }
-                    )
-                }
 
                 if message.isOutgoing(in: chat) && showReadIndicator {
                    Text("Read")
@@ -151,6 +113,68 @@ struct MessageRowView: View {
 
             if !message.isOutgoing(in: chat) {
                 Spacer(minLength: 100)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var reactionsView: some View {
+        if let groupedReactions = message.groupedReactions, groupedReactions.isEmpty == false {
+            ReactionsBarView(
+                groupedReactions: groupedReactions,
+                currentParticipantID: currentParticipant?.id,
+                onToggle: { reactionKey, isOwn in
+                    Task {
+                        if isOwn {
+                            await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: reactionKey)
+                        } else {
+                            await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey)
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var messageContent: some View {
+        VStack(alignment: message.isOutgoing(in: chat) ? .trailing : .leading, spacing: 4) {
+            if let linkedMessageID = message.linkedMessageID, !linkedMessageID.isEmpty {
+                ReplyPreviewView(
+                    linkedMessageID: linkedMessageID,
+                    chatID: message.chatID,
+                    isOutgoing: message.isOutgoing(in: chat)
+                )
+            }
+
+            if let attachments = message.attachments, attachments.isEmpty == false {
+                ForEach(attachments) { attachment in
+                    AttachmentView(attachment: attachment, isOutgoing: message.isOutgoing(in: chat))
+                }
+            }
+
+            if let urls = message.extractedURLs, !urls.isEmpty {
+                if message.textWithoutURLs?.isEmpty == false {
+                    Text(message.textWithoutURLs!.markdownAttributed)
+                        .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
+                        .clipShape(.rect(cornerRadius: 15))
+                }
+
+                ForEach(urls, id: \.absoluteString) { url in
+                    LinkPillView(url: url)
+                }
+            } else if message.hasText {
+                Text(message.displayText.markdownAttributed)
+                    .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
+                    .clipShape(.rect(cornerRadius: 15))
             }
         }
     }

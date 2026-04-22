@@ -56,7 +56,9 @@ struct ChatDetailView: View {
                         MessageRowView(
                             message: entry.message,
                             chat: selectedChat,
-                            showReadIndicator: entry.message.id == readIndicatorMessageID
+                            showReadIndicator: entry.message.id == readIndicatorMessageID,
+                            isFirstInGroup: entry.isFirstInGroup,
+                            isLastInGroup: entry.isLastInGroup
                         )
                         .modifier(
                             TimelineFocusEffect(
@@ -263,13 +265,30 @@ struct ChatDetailView: View {
     }
 
     private func timelineEntries(for messages: [Message]) -> [TimelineEntry] {
-        var previousMessage: Message?
+        var entries: [TimelineEntry] = []
+        let count = messages.count
 
-        return messages.map { message in
-            let showsTimestamp = shouldShowTimestamp(before: message, previousMessage: previousMessage)
-            previousMessage = message
-            return TimelineEntry(message: message, showsTimestamp: showsTimestamp)
+        for i in 0..<count {
+            let message = messages[i]
+            let prev: Message? = i > 0 ? messages[i - 1] : nil
+            let next: Message? = i < count - 1 ? messages[i + 1] : nil
+
+            let showsTimestamp = shouldShowTimestamp(before: message, previousMessage: prev)
+
+            let sameSenderAsPrev = prev.map { $0.senderID == message.senderID } ?? false
+            let sameSenderAsNext = next.map { $0.senderID == message.senderID } ?? false
+
+            // A timestamp break or unread divider resets the group
+            let nextShowsTimestamp = next.map { shouldShowTimestamp(before: $0, previousMessage: message) } ?? false
+            let nextIsUnread = next.map { $0.id == firstUnreadID } ?? false
+
+            let isFirstInGroup = !sameSenderAsPrev || showsTimestamp || message.id == firstUnreadID
+            let isLastInGroup = !sameSenderAsNext || nextShowsTimestamp || nextIsUnread
+
+            entries.append(TimelineEntry(message: message, showsTimestamp: showsTimestamp, isFirstInGroup: isFirstInGroup, isLastInGroup: isLastInGroup))
         }
+
+        return entries
     }
 
     private func shouldShowTimestamp(before message: Message, previousMessage: Message?) -> Bool {
@@ -327,6 +346,8 @@ private struct MessageListTracker: Equatable {
 private struct TimelineEntry: Identifiable {
     let message: Message
     let showsTimestamp: Bool
+    let isFirstInGroup: Bool
+    let isLastInGroup: Bool
 
     var id: String { message.timelineKey }
 }
