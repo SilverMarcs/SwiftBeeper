@@ -6,11 +6,17 @@ struct ContentView: View {
     @Environment(RealtimeCoordinator.self) private var coordinator
 
     var body: some View {
-        NavigationSplitView {
-            ChatSidebarView()
-            .navigationSplitViewColumnWidth(min: 280, ideal: 340)
-        } detail: {
-            ChatDetailView()
+        Group {
+            if sessionStore.accessToken.isEmpty {
+                OnboardingView()
+            } else {
+                NavigationSplitView {
+                    ChatSidebarView()
+                        .navigationSplitViewColumnWidth(min: 280, ideal: 340)
+                } detail: {
+                    ChatDetailView()
+                }
+            }
         }
         .task(id: sessionStore.accessToken) {
             await coordinator.updateAccessToken(sessionStore.accessToken)

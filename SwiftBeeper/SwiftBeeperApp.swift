@@ -2,19 +2,16 @@ import SwiftUI
 
 @main
 struct SwiftBeeperApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var sessionStore = SessionStore()
     @State private var chatStore = ChatStore()
     @State private var messageStore = MessageStore()
     @State private var realtimeService = RealtimeService()
     @State private var notificationService = NotificationService()
     @State private var coordinator: RealtimeCoordinator
+    @State private var backend = EasyMatrixProcess.shared
 
     init() {
-        // MARK: - Auto-launch EasyMatrix server (comment out these 4 lines to disable)
-        EasyMatrixServer.shared.start()
-        AppTerminationObserver.shared.register()
-        // END auto-launch
-
         let chatStore = ChatStore()
         let messageStore = MessageStore()
         let realtimeService = RealtimeService()
@@ -31,18 +28,22 @@ struct SwiftBeeperApp: App {
             realtimeService: realtimeService,
             notificationService: notificationService
         ))
+        APIClient.manageSecret = EasyMatrixProcess.shared.manageSecret
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(sessionStore)
-                .environment(chatStore)
-                .environment(messageStore)
-                .environment(coordinator)
-                .task {
-                    await notificationService.requestAuthorization()
-                }
+            BackendGate(backend: backend) {
+                ContentView()
+                    .environment(sessionStore)
+                    .environment(chatStore)
+                    .environment(messageStore)
+                    .environment(coordinator)
+                    .task {
+                        await notificationService.requestAuthorization()
+                    }
+            }
+            .task { await backend.start() }
         }
 
         #if os(macOS)
@@ -54,21 +55,46 @@ struct SwiftBeeperApp: App {
     }
 }
 
-#if os(macOS)
-/// Monitors app termination to cleanly stop the EasyMatrix server.
-final class AppTerminationObserver {
-    static let shared = AppTerminationObserver()
-    private var observation: Any?
-
-    func register() {
-        guard observation == nil else { return }
-        observation = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            EasyMatrixServer.shared.stop()
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            EasyMatrixProcess.shared.stop()
         }
     }
 }
-#endif
+
+private struct BackendGate<Content: View>: View {
+    let backend: EasyMatrixProcess
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        switch backend.state {
+        case .idle, .starting:
+            VStack(spacing: 16) {
+                ProgressView()
+                Text("Starting backend…")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .ready:
+            content()
+        case .crashed(let message):
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.orange)
+                Text("Backend failed to start")
+                    .font(.headline)
+                Text(message)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 32)
+                Button("Retry") {
+                    Task { await backend.start() }
+                }
+                .controlSize(.large)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}

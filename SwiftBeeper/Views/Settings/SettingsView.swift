@@ -4,21 +4,16 @@ struct SettingsView: View {
     @Environment(SessionStore.self) private var sessionStore
 
     var body: some View {
-        @Bindable var sessionStore = sessionStore
-
         Form {
-            Section {
-                SecureField("Bearer token", text: $sessionStore.accessToken)
-            } header: {
-                Text("Beeper API")
-            } footer: {
-                Text("Use the token for localhost:23374 API requests.")
-            }
-            .sectionActions {
-                Button("Clear Token", role: .destructive) {
-                    sessionStore.clearToken()
+            Section("Account") {
+                if sessionStore.accessToken.isEmpty {
+                    Text("Not signed in.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button("Sign out", role: .destructive) {
+                        sessionStore.clearToken()
+                    }
                 }
-                .disabled(sessionStore.accessToken.isEmpty)
             }
 
             Section {

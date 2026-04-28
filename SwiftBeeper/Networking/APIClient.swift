@@ -64,8 +64,13 @@ enum APIClient {
         request.httpMethod = method.rawValue
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if url.path.hasPrefix("/manage/") || url.path == "/manage" {
+            request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
+        }
         return request
     }
+
+    static var manageSecret: String = ""
 
     static func request<Body: Encodable>(
         url: URL,
