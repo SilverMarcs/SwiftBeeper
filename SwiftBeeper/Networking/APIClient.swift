@@ -72,6 +72,11 @@ enum APIClient {
 
     static var manageSecret: String = ""
 
+    /// Wired up by the app at startup. Returns a fresh bearer token. Called
+    /// at most once per request when sendRaw observes a 401 on a /v1/* path,
+    /// then the request is retried with the new token.
+    static var tokenRefresher: (() async throws -> String)?
+
     static func request<Body: Encodable>(
         url: URL,
         method: HTTPMethod,
@@ -100,6 +105,26 @@ enum APIClient {
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401,
+           request.url?.path.hasPrefix("/v1/") == true,
+           let refresher = tokenRefresher {
+            do {
+                let newToken = try await refresher()
+                var retry = request
+                retry.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                let (retryData, retryResponse) = try await URLSession.shared.data(for: retry)
+                guard let retryHTTP = retryResponse as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                guard (200 ... 299).contains(retryHTTP.statusCode) else {
+                    throw APIError.http(statusCode: retryHTTP.statusCode, details: parseErrorMessage(from: retryData))
+                }
+                return retryData
+            } catch {
+                // refresh failed — fall through and surface the original 401
+            }
         }
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
