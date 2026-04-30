@@ -12,12 +12,14 @@ struct SwiftBeeperApp: App {
     @State private var backend = EasyMatrixProcess.shared
 
     init() {
+        let sessionStore = SessionStore()
         let chatStore = ChatStore()
         let messageStore = MessageStore()
         let realtimeService = RealtimeService()
         let notificationService = NotificationService()
         notificationService.messageStore = messageStore
         notificationService.chatStore = chatStore
+        _sessionStore = State(initialValue: sessionStore)
         _chatStore = State(initialValue: chatStore)
         _messageStore = State(initialValue: messageStore)
         _realtimeService = State(initialValue: realtimeService)
@@ -29,6 +31,9 @@ struct SwiftBeeperApp: App {
             notificationService: notificationService
         ))
         APIClient.manageSecret = EasyMatrixProcess.shared.manageSecret
+        APIClient.tokenRefresher = { [sessionStore] in
+            try await sessionStore.refreshAccessToken()
+        }
     }
 
     var body: some Scene {
@@ -43,8 +48,10 @@ struct SwiftBeeperApp: App {
                         await notificationService.requestAuthorization()
                     }
             }
+            .frame(minWidth: 900, minHeight: 600)
             .task { await backend.start() }
         }
+        .defaultSize(width: 1100, height: 720)
 
         #if os(macOS)
         Settings {
