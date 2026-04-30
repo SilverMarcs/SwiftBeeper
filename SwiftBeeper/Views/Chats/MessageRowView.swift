@@ -157,6 +157,7 @@ struct MessageRowView: View {
                 if message.textWithoutURLs?.isEmpty == false {
                     Text(message.textWithoutURLs!.markdownAttributed)
                         .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                        .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
@@ -170,6 +171,7 @@ struct MessageRowView: View {
             } else if message.hasText {
                 Text(message.displayText.markdownAttributed)
                     .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                    .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)

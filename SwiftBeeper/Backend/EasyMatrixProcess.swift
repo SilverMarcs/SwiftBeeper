@@ -27,6 +27,8 @@ final class EasyMatrixProcess {
         if state == .ready || state == .starting { return }
         state = .starting
 
+        Self.reapOrphans(logger: logger)
+
         do {
             let binaryURL = try Self.locateBinary()
             let gomuksRoot = try Self.gomuksRoot()
@@ -152,6 +154,49 @@ final class EasyMatrixProcess {
     private func cleanup() {
         process = nil
         stderrPipe = nil
+    }
+
+    /// Kill any easymatrix process still bound to the management port from a
+    /// previous run that didn't shut down cleanly (crash, force-quit, Xcode
+    /// stop button — none of which trigger `applicationWillTerminate`).
+    static func reapOrphans(logger: Logger) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-ti", "tcp:23374"]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return
+        }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else { return }
+        let pids = output
+            .split(whereSeparator: { $0.isNewline })
+            .compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+            .filter { $0 > 0 && $0 != getpid() }
+
+        guard !pids.isEmpty else { return }
+
+        for pid in pids {
+            logger.warning("Reaping orphaned backend pid \(pid, privacy: .public)")
+            kill(pid, SIGTERM)
+        }
+
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline, pids.contains(where: { kill($0, 0) == 0 }) {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        for pid in pids where kill(pid, 0) == 0 {
+            logger.warning("Orphan pid \(pid, privacy: .public) ignored SIGTERM — sending SIGKILL")
+            kill(pid, SIGKILL)
+        }
     }
 
     static func locateBinary() throws -> URL {
