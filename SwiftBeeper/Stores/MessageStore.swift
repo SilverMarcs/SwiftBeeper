@@ -26,6 +26,13 @@ final class MessageStore {
         (messagesByChatID[chatID] ?? []).filter(\.isDisplayable)
     }
 
+    /// Most recent locally-known message for a chat, including reactions and tombstoned
+    /// (empty/deleted) messages. Used by the sidebar to keep its subtitle in sync with
+    /// realtime updates that the server's chat-list `preview` field doesn't include.
+    func latestKnownMessage(for chatID: String) -> Message? {
+        (messagesByChatID[chatID] ?? []).filter { !$0.isMembershipEvent }.last
+    }
+
     func message(byID messageID: String, in chatID: String) -> Message? {
         messagesByChatID[chatID]?.first(where: { $0.id == messageID })
     }

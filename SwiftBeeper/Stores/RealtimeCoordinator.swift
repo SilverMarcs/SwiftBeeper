@@ -185,9 +185,10 @@ final class RealtimeCoordinator: RealtimeEventHandler {
 
             let chatTitle = chat.displayTitle
             for message in messagesToNotify {
-                // Skip outgoing, reactions, membership events
+                // Skip outgoing and membership events. Reactions and deletions are
+                // allowed through so the user is notified ("Alice reacted 👍" / "Deleted message").
                 if message.isOutgoing(in: chat) { continue }
-                if !message.isDisplayable { continue }
+                if message.isMembershipEvent { continue }
                 // Skip stale messages (older than 60s) to avoid notifying for old chat history
                 if Date().timeIntervalSince(message.timestamp) > 60 { continue }
 

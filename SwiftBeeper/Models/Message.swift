@@ -104,7 +104,7 @@ struct Message: Identifiable, Decodable, Equatable {
             return "Sent \(attachments.count > 1 ? "\(attachments.count) attachments" : "an \(first.typeLabel)")"
         }
 
-        return "(No text)"
+        return "Deleted message"
     }
 
     var isEmptyDeleted: Bool {
