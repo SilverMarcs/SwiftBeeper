@@ -11,6 +11,7 @@ final class EasyMatrixProcess {
         case idle
         case starting
         case ready
+        case stopping
         case crashed(String)
     }
 
@@ -43,23 +44,30 @@ final class EasyMatrixProcess {
         }
     }
 
-    func stop() {
+    var isRunning: Bool {
+        process?.isRunning ?? false
+    }
+
+    func stop() async {
         guard let process, process.isRunning else {
             cleanup()
+            state = .idle
             return
         }
+        state = .stopping
         logger.info("Terminating EasyMatrix backend (pid \(process.processIdentifier, privacy: .public))")
         process.terminate()
 
         let deadline = Date().addingTimeInterval(2.0)
         while process.isRunning && Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.05)
+            try? await Task.sleep(for: .milliseconds(50))
         }
         if process.isRunning {
             logger.warning("SIGTERM ignored — sending SIGKILL")
             kill(process.processIdentifier, SIGKILL)
         }
         cleanup()
+        state = .idle
     }
 
     private func launch(binary: URL, gomuksRoot: URL) async throws {

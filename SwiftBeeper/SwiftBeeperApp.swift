@@ -51,7 +51,7 @@ struct SwiftBeeperApp: App {
             .frame(minWidth: 900, minHeight: 600)
             .task { await backend.start() }
         }
-        .defaultSize(width: 1100, height: 720)
+        .defaultSize(width: 1100, height: 750)
 
         #if os(macOS)
         Settings {
@@ -63,10 +63,15 @@ struct SwiftBeeperApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationWillTerminate(_ notification: Notification) {
-        MainActor.assumeIsolated {
-            EasyMatrixProcess.shared.stop()
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let backend = EasyMatrixProcess.shared
+        guard backend.isRunning else { return .terminateNow }
+
+        Task { @MainActor in
+            await backend.stop()
+            NSApp.reply(toApplicationShouldTerminate: true)
         }
+        return .terminateLater
     }
 }
 
@@ -75,33 +80,41 @@ private struct BackendGate<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
+        Group {
         switch backend.state {
         case .idle, .starting:
-            VStack(spacing: 16) {
-                ProgressView()
-                Text("Starting backend…")
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView("Starting backend")
+                    .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbar {
+            Color.clear
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .stopping:
+            ProgressView("Quitting")
+                    .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbar {
+            Color.clear
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready:
             content()
         case .crashed(let message):
-            VStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(.orange)
-                Text("Backend failed to start")
-                    .font(.headline)
+            ContentUnavailableView {
+                Label("Backend failed to start", systemImage: "exclamationmark.triangle.fill")
+            } description: {
                 Text(message)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 32)
+            } actions: {
                 Button("Retry") {
                     Task { await backend.start() }
                 }
                 .controlSize(.large)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbar {
+            Color.clear
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 }
