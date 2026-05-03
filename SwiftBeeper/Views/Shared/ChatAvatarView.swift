@@ -7,7 +7,13 @@ struct ChatAvatarView: View {
 
     var body: some View {
         Group {
-            if chat.isGroupChat {
+            if let groupImage = chatImageURL {
+                ProfileAvatarView(
+                    name: chat.displayTitle,
+                    imageURLString: groupImage,
+                    dimension: dimension
+                )
+            } else if chat.isGroupChat {
                 GroupChatAvatarView(
                     title: chat.displayTitle,
                     participants: groupParticipants,
@@ -22,6 +28,11 @@ struct ChatAvatarView: View {
             }
         }
         .frame(width: dimension, height: dimension)
+    }
+
+    private var chatImageURL: String? {
+        guard let url = chat.imgURL?.trimmed, !url.isEmpty else { return nil }
+        return url
     }
 
     private var primaryParticipantName: String {

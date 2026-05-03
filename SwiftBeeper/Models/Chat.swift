@@ -71,6 +71,7 @@ struct Chat: Identifiable, Decodable, Equatable {
     let accountID: String?
     let lastActivity: Date?
     let lastReadMessageSortKey: String?
+    let imgURL: String?
 
     var isSingleChat: Bool { type == .single }
     var isGroupChat: Bool { type == .group }
@@ -113,7 +114,8 @@ struct Chat: Identifiable, Decodable, Equatable {
             isArchived: detail.isArchived ?? isArchived,
             accountID: detail.accountID ?? accountID,
             lastActivity: detail.lastActivity ?? lastActivity,
-            lastReadMessageSortKey: detail.lastReadMessageSortKey ?? lastReadMessageSortKey
+            lastReadMessageSortKey: detail.lastReadMessageSortKey ?? lastReadMessageSortKey,
+            imgURL: detail.imgURL ?? imgURL
         )
     }
 

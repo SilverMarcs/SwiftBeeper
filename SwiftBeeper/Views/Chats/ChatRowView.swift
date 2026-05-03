@@ -143,7 +143,8 @@ struct ChatRowView: View {
             isArchived: nil,
             accountID: nil,
             lastActivity: .now.addingTimeInterval(-3600),
-            lastReadMessageSortKey: nil
+            lastReadMessageSortKey: nil,
+            imgURL: nil
         ))
 
         ChatRowView(chat: Chat(
@@ -172,7 +173,8 @@ struct ChatRowView: View {
             isArchived: nil,
             accountID: nil,
             lastActivity: .now.addingTimeInterval(-86400),
-            lastReadMessageSortKey: nil
+            lastReadMessageSortKey: nil,
+            imgURL: nil
         ))
     }
     .environment(ChatStore())
