@@ -7,21 +7,20 @@ final class SessionStore {
     private let keychain = KeychainManager.shared
     private let accessTokenKey = "beeperAccessToken"
 
+    enum RefreshState {
+        case idle
+        case refreshing
+        case failed
+    }
+
     var accessToken: String {
         didSet {
             persistAccessToken(accessToken)
-            refreshFailed = false
+            refreshState = .idle
         }
     }
 
-    /// True while a token refresh is in flight. UI can show a ProgressView
-    /// instead of a 401 error during the brief refresh window.
-    var isRefreshingToken: Bool = false
-
-    /// Set when the most recent refresh attempt threw. UI can show a
-    /// "Session Expired — Reconnect" affordance instead of dumping the user
-    /// back to the missing-token state.
-    var refreshFailed: Bool = false
+    var refreshState: RefreshState = .idle
 
     init() {
         accessToken = keychain.load(key: accessTokenKey) ?? ""
@@ -36,15 +35,14 @@ final class SessionStore {
     /// outlives individual access tokens, so refresh succeeds as long as the
     /// user hasn't actually signed out of Matrix.
     func refreshAccessToken() async throws -> String {
-        isRefreshingToken = true
-        defer { isRefreshingToken = false }
+        refreshState = .refreshing
         do {
             let response = try await APIClient.mintAccessToken()
             accessToken = response.accessToken
             APIClient.accessToken = response.accessToken
             return response.accessToken
         } catch {
-            refreshFailed = true
+            refreshState = .failed
             throw error
         }
     }

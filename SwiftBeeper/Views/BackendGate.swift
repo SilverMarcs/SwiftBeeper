@@ -38,16 +38,3 @@ struct BackendGate<Content: View>: View {
         .modifier(HiddenToolbarModifier())
     }
 }
-
-private struct HiddenToolbarModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-            .toolbar {
-                ToolbarItem {
-                    Color.clear
-                }
-                .sharedBackgroundVisibility(.hidden)
-            }
-    }
-}

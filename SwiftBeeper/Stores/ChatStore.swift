@@ -180,6 +180,10 @@ final class ChatStore {
     }
 
     func loadChats() async {
+        await performLoadChats(retriesRemaining: 1)
+    }
+
+    private func performLoadChats(retriesRemaining: Int) async {
         guard !APIClient.accessToken.isEmpty else {
             chatListState = .empty
             return
@@ -187,6 +191,7 @@ final class ChatStore {
 
         let snapshot = chatListState
         let shouldPreserveExistingChats = lastLoadedInboxFilter == selectedInboxFilter
+        let tokenAtStart = APIClient.accessToken
 
         isLoadingChats = true
         defer { isLoadingChats = false }
@@ -235,6 +240,15 @@ final class ChatStore {
                 selectedChatID = chats.first?.id
             }
         } catch {
+            // sendRaw retried internally with a fresh token but still saw 401
+            // (server hadn't yet activated the new token). The token has since
+            // been minted — try once more before surfacing the error.
+            if retriesRemaining > 0,
+               case APIError.http(401, _) = error,
+               APIClient.accessToken != tokenAtStart {
+                await performLoadChats(retriesRemaining: retriesRemaining - 1)
+                return
+            }
             chatListState = snapshot
             chatsError = error.localizedDescription
         }

@@ -15,23 +15,9 @@ struct ChatSidebarView: View {
                     description: "Open Settings and add your Beeper bearer token."
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if sessionStore.isRefreshingToken && chatStore.chats.isEmpty {
+            } else if chatStore.isLoadingChats && chatStore.chats.isEmpty {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if sessionStore.refreshFailed && chatStore.chats.isEmpty {
-                ContentUnavailableView {
-                    Label("Session Expired", systemImage: "arrow.clockwise.circle")
-                } description: {
-                    Text("Couldn't reconnect to Beeper.")
-                } actions: {
-                    Button("Reconnect") {
-                        Task {
-                            guard (try? await sessionStore.refreshAccessToken()) != nil else { return }
-                            await chatStore.loadChats()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
             } else if let chatsError = chatStore.chatsError, chatStore.chats.isEmpty {
                 ContentUnavailableView(
                     "Could Not Load Chats",

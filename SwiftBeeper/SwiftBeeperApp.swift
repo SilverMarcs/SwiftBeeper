@@ -39,14 +39,16 @@ struct SwiftBeeperApp: App {
     var body: some Scene {
         WindowGroup {
             BackendGate(backend: backend) {
-                ContentView()
-                    .environment(sessionStore)
-                    .environment(chatStore)
-                    .environment(messageStore)
-                    .environment(coordinator)
-                    .task {
-                        await notificationService.requestAuthorization()
-                    }
+                SessionRefreshGate {
+                    ContentView()
+                        .task {
+                            await notificationService.requestAuthorization()
+                        }
+                }
+                .environment(sessionStore)
+                .environment(chatStore)
+                .environment(messageStore)
+                .environment(coordinator)
             }
             .frame(minWidth: 900, minHeight: 600)
             .task { await backend.start() }
