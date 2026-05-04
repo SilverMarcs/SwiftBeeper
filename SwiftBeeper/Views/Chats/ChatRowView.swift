@@ -10,7 +10,7 @@ struct ChatRowView: View {
     /// over the server's `preview`, which lags realtime and excludes reactions.
     private var subtitleText: String? {
         let serverPreview = chat.preview
-        let localLatest = messageStore.latestKnownMessage(for: chat.id)
+        let localLatest = messageStore.latestKnownMessage(for: chat.id, in: chat)
         switch (serverPreview, localLatest) {
         case (nil, nil): return nil
         case (let preview?, nil): return preview.displayText

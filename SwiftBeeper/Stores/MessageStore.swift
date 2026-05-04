@@ -26,11 +26,26 @@ final class MessageStore {
         (messagesByChatID[chatID] ?? []).filter(\.isDisplayable)
     }
 
-    /// Most recent locally-known message for a chat, including reactions and tombstoned
-    /// (empty/deleted) messages. Used by the sidebar to keep its subtitle in sync with
-    /// realtime updates that the server's chat-list `preview` field doesn't include.
-    func latestKnownMessage(for chatID: String) -> Message? {
-        (messagesByChatID[chatID] ?? []).filter { !$0.isMembershipEvent }.last
+    /// Most recent locally-known message for a chat, including reactions to the user's
+    /// own messages and tombstoned (empty/deleted) messages. Reactions to other people's
+    /// messages and membership events are skipped — the sidebar should not surface those.
+    func latestKnownMessage(for chatID: String, in chat: Chat) -> Message? {
+        (messagesByChatID[chatID] ?? [])
+            .filter { !$0.isMembershipEvent }
+            .filter { !$0.isReaction || isReactionToOwnMessage($0, in: chat) }
+            .last
+    }
+
+    /// True when `message` is a reaction whose target was sent by the local user.
+    /// Returns false for non-reactions and for reactions whose target can't be found
+    /// locally (we don't want to notify on third-party reactions we can't classify).
+    func isReactionToOwnMessage(_ message: Message, in chat: Chat) -> Bool {
+        guard message.isReaction else { return false }
+        guard let targetID = message.linkedMessageID,
+              let target = messagesByChatID[chat.id]?.first(where: { $0.id == targetID }) else {
+            return false
+        }
+        return target.isOutgoing(in: chat)
     }
 
     func message(byID messageID: String, in chatID: String) -> Message? {
