@@ -38,6 +38,14 @@ struct MessageRowView: View {
                         .bold()
                 }
 
+                if let linkedMessageID = message.linkedMessageID, !linkedMessageID.isEmpty {
+                    ReplyPreviewView(
+                        linkedMessageID: linkedMessageID,
+                        chatID: message.chatID,
+                        isOutgoing: message.isOutgoing(in: chat)
+                    )
+                }
+
                 messageContent
                     .overlay(alignment: message.isOutgoing(in: chat) ? .bottomLeading : .bottomTrailing) {
                         reactionsView
@@ -139,14 +147,6 @@ struct MessageRowView: View {
     @ViewBuilder
     private var messageContent: some View {
         VStack(alignment: message.isOutgoing(in: chat) ? .trailing : .leading, spacing: 4) {
-            if let linkedMessageID = message.linkedMessageID, !linkedMessageID.isEmpty {
-                ReplyPreviewView(
-                    linkedMessageID: linkedMessageID,
-                    chatID: message.chatID,
-                    isOutgoing: message.isOutgoing(in: chat)
-                )
-            }
-
             if let attachments = message.attachments, attachments.isEmpty == false {
                 ForEach(attachments) { attachment in
                     AttachmentView(attachment: attachment, isOutgoing: message.isOutgoing(in: chat))
