@@ -18,6 +18,15 @@ struct ChatSidebarView: View {
             } else if chatStore.isLoadingChats && chatStore.chats.isEmpty {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if chatStore.isRecoveringAuth && chatStore.chats.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if chatStore.chatsErrorIsAuth, chatStore.chats.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .task {
+                        await chatStore.recoverAuthAndReload()
+                    }
             } else if let chatsError = chatStore.chatsError, chatStore.chats.isEmpty {
                 ContentUnavailableView(
                     "Could Not Load Chats",

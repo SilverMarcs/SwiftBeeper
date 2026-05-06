@@ -31,6 +31,8 @@ final class ChatStore {
     private(set) var isLoadingMoreChats = false
     private(set) var isLoadingChats = false
     private(set) var chatsError: String?
+    private(set) var chatsErrorIsAuth: Bool = false
+    private(set) var isRecoveringAuth: Bool = false
     var selectedChatID: String?
     var selectedInboxFilter: InboxFilter = .primary
     var searchQuery: String = ""
@@ -225,6 +227,7 @@ final class ChatStore {
             chatsCursor = refreshedCursor
             hasMoreChats = refreshedHasMoreChats
             chatsError = nil
+            chatsErrorIsAuth = false
             lastLoadedInboxFilter = selectedInboxFilter
 
             // Only restore selection from snapshot if the user hasn't switched
@@ -251,7 +254,26 @@ final class ChatStore {
             }
             chatListState = snapshot
             chatsError = error.localizedDescription
+            if case APIError.http(401, _) = error {
+                chatsErrorIsAuth = true
+            } else {
+                chatsErrorIsAuth = false
+            }
         }
+    }
+
+    func recoverAuthAndReload() async {
+        guard !isRecoveringAuth, let refresher = APIClient.tokenRefresher else { return }
+        isRecoveringAuth = true
+        defer { isRecoveringAuth = false }
+        do {
+            _ = try await refresher()
+        } catch {
+            chatsErrorIsAuth = false
+            chatsError = "Session expired. Please sign in again."
+            return
+        }
+        await loadChats()
     }
 
     func loadMoreChats() async {

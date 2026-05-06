@@ -7,20 +7,9 @@ final class SessionStore {
     private let keychain = KeychainManager.shared
     private let accessTokenKey = "beeperAccessToken"
 
-    enum RefreshState {
-        case idle
-        case refreshing
-        case failed
-    }
-
     var accessToken: String {
-        didSet {
-            persistAccessToken(accessToken)
-            refreshState = .idle
-        }
+        didSet { persistAccessToken(accessToken) }
     }
-
-    var refreshState: RefreshState = .idle
 
     init() {
         accessToken = keychain.load(key: accessTokenKey) ?? ""
@@ -35,16 +24,10 @@ final class SessionStore {
     /// outlives individual access tokens, so refresh succeeds as long as the
     /// user hasn't actually signed out of Matrix.
     func refreshAccessToken() async throws -> String {
-        refreshState = .refreshing
-        do {
-            let response = try await APIClient.mintAccessToken()
-            accessToken = response.accessToken
-            APIClient.accessToken = response.accessToken
-            return response.accessToken
-        } catch {
-            refreshState = .failed
-            throw error
-        }
+        let response = try await APIClient.mintAccessToken()
+        accessToken = response.accessToken
+        APIClient.accessToken = response.accessToken
+        return response.accessToken
     }
 
     private func persistAccessToken(_ value: String) {
