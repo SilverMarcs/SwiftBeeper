@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "0865737C2F58F64E0084BD91"
-               BuildableName = "SwiftBeeper.app"
-               BlueprintName = "SwiftBeeper"
-               ReferencedContainer = "container:SwiftBeeper.xcodeproj">
+               BuildableName = "Relay.app"
+               BlueprintName = "Relay"
+               ReferencedContainer = "container:Relay.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -45,9 +45,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0865737C2F58F64E0084BD91"
-            BuildableName = "SwiftBeeper.app"
-            BlueprintName = "SwiftBeeper"
-            ReferencedContainer = "container:SwiftBeeper.xcodeproj">
+            BuildableName = "Relay.app"
+            BlueprintName = "Relay"
+            ReferencedContainer = "container:Relay.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0865737C2F58F64E0084BD91"
-            BuildableName = "SwiftBeeper.app"
-            BlueprintName = "SwiftBeeper"
-            ReferencedContainer = "container:SwiftBeeper.xcodeproj">
+            BuildableName = "Relay.app"
+            BlueprintName = "Relay"
+            ReferencedContainer = "container:Relay.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

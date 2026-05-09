@@ -12,14 +12,14 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0865737D2F58F64E0084BD91 /* SwiftBeeper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftBeeper.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0865737D2F58F64E0084BD91 /* Relay.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		0865737F2F58F64E0084BD91 /* SwiftBeeper */ = {
+		0865737F2F58F64E0084BD91 /* Relay */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SwiftBeeper;
+			path = Relay;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -40,7 +40,7 @@
 		086573742F58F64E0084BD91 = {
 			isa = PBXGroup;
 			children = (
-				0865737F2F58F64E0084BD91 /* SwiftBeeper */,
+				0865737F2F58F64E0084BD91 /* Relay */,
 				08A6E00E2F5975A200A2ECF4 /* Frameworks */,
 				0865737E2F58F64E0084BD91 /* Products */,
 			);
@@ -49,7 +49,7 @@
 		0865737E2F58F64E0084BD91 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				0865737D2F58F64E0084BD91 /* SwiftBeeper.app */,
+				0865737D2F58F64E0084BD91 /* Relay.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -65,9 +65,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		0865737C2F58F64E0084BD91 /* SwiftBeeper */ = {
+		0865737C2F58F64E0084BD91 /* Relay */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "SwiftBeeper" */;
+			buildConfigurationList = 086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "Relay" */;
 			buildPhases = (
 				086573792F58F64E0084BD91 /* Sources */,
 				0865737A2F58F64E0084BD91 /* Frameworks */,
@@ -79,14 +79,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				0865737F2F58F64E0084BD91 /* SwiftBeeper */,
+				0865737F2F58F64E0084BD91 /* Relay */,
 			);
-			name = SwiftBeeper;
+			name = Relay;
 			packageProductDependencies = (
 				08974BBC2F665F1B00950962 /* SwiftOGG */,
 			);
-			productName = SwiftBeeper;
-			productReference = 0865737D2F58F64E0084BD91 /* SwiftBeeper.app */;
+			productName = Relay;
+			productReference = 0865737D2F58F64E0084BD91 /* Relay.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -104,7 +104,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 086573782F58F64E0084BD91 /* Build configuration list for PBXProject "SwiftBeeper" */;
+			buildConfigurationList = 086573782F58F64E0084BD91 /* Build configuration list for PBXProject "Relay" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -121,7 +121,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				0865737C2F58F64E0084BD91 /* SwiftBeeper */,
+				0865737C2F58F64E0084BD91 /* Relay */,
 			);
 		};
 /* End PBXProject section */
@@ -154,7 +154,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "\"$SRCROOT/SwiftBeeper/Helpers/build-and-embed-easymatrix.sh\"\n";
+			shellScript = "\"$SRCROOT/Relay/Helpers/build-and-embed-easymatrix.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -410,7 +410,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		086573782F58F64E0084BD91 /* Build configuration list for PBXProject "SwiftBeeper" */ = {
+		086573782F58F64E0084BD91 /* Build configuration list for PBXProject "Relay" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				086573862F58F64F0084BD91 /* Debug */,
@@ -419,7 +419,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "SwiftBeeper" */ = {
+		086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "Relay" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				086573892F58F64F0084BD91 /* Debug */,

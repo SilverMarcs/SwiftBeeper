@@ -252,6 +252,12 @@ final class ChatStore {
                 await performLoadChats(retriesRemaining: retriesRemaining - 1)
                 return
             }
+            // The outer `.task(id: accessToken)` cancels in-flight loads when the
+            // token rotates after a refresh. Don't surface that as a user-visible
+            // error — the next .task firing will reload with the new token.
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                return
+            }
             chatListState = snapshot
             chatsError = error.localizedDescription
             if case APIError.http(401, _) = error {

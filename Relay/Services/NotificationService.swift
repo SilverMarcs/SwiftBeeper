@@ -8,7 +8,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     private static let messageCategory = "MESSAGE"
     private static let replyAction = "REPLY_ACTION"
 
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "NotificationService")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Relay", category: "NotificationService")
     private(set) var isAuthorized = false
     var messageStore: MessageStore?
     var chatStore: ChatStore?

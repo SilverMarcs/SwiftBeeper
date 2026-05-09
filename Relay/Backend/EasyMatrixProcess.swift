@@ -18,7 +18,7 @@ final class EasyMatrixProcess {
     private(set) var state: State = .idle
     let manageSecret: String = UUID().uuidString
 
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SwiftBeeper", category: "EasyMatrixProcess")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Relay", category: "EasyMatrixProcess")
     private var process: Process?
     private var stderrPipe: Pipe?
 

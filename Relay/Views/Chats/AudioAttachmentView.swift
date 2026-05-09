@@ -3,7 +3,7 @@ import OSLog
 import SwiftOGG
 import SwiftUI
 
-private let logger = Logger(subsystem: "SwiftBeeper", category: "AudioAttachment")
+private let logger = Logger(subsystem: "Relay", category: "AudioAttachment")
 
 struct AudioAttachmentView: View {
     let attachment: Attachment

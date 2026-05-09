@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct SwiftBeeperApp: App {
+struct RelayApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var sessionStore = SessionStore()
     @State private var chatStore = ChatStore()
