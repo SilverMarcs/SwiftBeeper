@@ -58,7 +58,7 @@ struct ChatRowView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(chat.isMuted == true ? AnyShapeStyle(.background.secondary) : AnyShapeStyle(Color.accentColor), in: Capsule())
+                            .background(chat.isMuted == true ? AnyShapeStyle(Color.secondary.opacity(0.25)) : AnyShapeStyle(Color.accentColor), in: Capsule())
                     }
                 }
             }
