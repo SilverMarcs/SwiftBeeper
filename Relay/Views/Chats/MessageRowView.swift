@@ -16,6 +16,8 @@ struct MessageRowView: View {
     var isFirstInGroup: Bool = true
     var isLastInGroup: Bool = true
 
+    @State private var profileSheetParticipant: ChatParticipant?
+
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     var body: some View {
@@ -24,7 +26,14 @@ struct MessageRowView: View {
                 Spacer(minLength: 100)
             } else if showIncomingIdentity {
                 if isLastInGroup {
-                    ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
+                    Button {
+                        if let participant = chat.participant(with: message.senderID) {
+                            profileSheetParticipant = participant
+                        }
+                    } label: {
+                        ProfileAvatarView(name: message.senderDisplayName, imageURLString: senderAvatarImageURL, dimension: 28)
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     Color.clear
                         .frame(width: 28, height: 1)
@@ -122,6 +131,9 @@ struct MessageRowView: View {
             if !message.isOutgoing(in: chat) {
                 Spacer(minLength: 100)
             }
+        }
+        .sheet(item: $profileSheetParticipant) { participant in
+            ParticipantProfileSheet(participant: participant)
         }
     }
 

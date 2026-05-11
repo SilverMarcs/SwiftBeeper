@@ -9,6 +9,7 @@ struct ChatDetailView: View {
     @State private var showingChatInfo = false
     @State private var isPreparingInitialScroll = false
     @State private var firstUnreadID: String?
+    @State private var profileSheetParticipant: ChatParticipant?
     private let bottomAnchorID = "bottom-id"
 
     var body: some View {
@@ -136,7 +137,16 @@ struct ChatDetailView: View {
                 .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
                 .toolbar {
                     ToolbarItem(placement: .navigation) {
-                        ChatAvatarView(chat: selectedChat, dimension: 28)
+                        if selectedChat.isSingleChat, let other = selectedChat.otherParticipant {
+                            Button {
+                                profileSheetParticipant = other
+                            } label: {
+                                ChatAvatarView(chat: selectedChat, dimension: 28)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            ChatAvatarView(chat: selectedChat, dimension: 28)
+                        }
                     }
                     .sharedBackgroundVisibility(.hidden)
 
@@ -150,6 +160,9 @@ struct ChatDetailView: View {
                 }
                 .sheet(isPresented: $showingChatInfo) {
                     ChatInfoSheet(chat: selectedChat)
+                }
+                .sheet(item: $profileSheetParticipant) { participant in
+                    ParticipantProfileSheet(participant: participant)
                 }
                 .overlay {
                     if isPreparingInitialScroll {

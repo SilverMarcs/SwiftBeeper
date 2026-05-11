@@ -3,6 +3,9 @@ import SwiftUI
 struct ChatInfoSheet: View {
     let chat: Chat
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedParticipant: ChatParticipant?
+
+    private static let participantPreviewLimit = 15
 
     var body: some View {
         NavigationStack {
@@ -36,34 +39,50 @@ struct ChatInfoSheet: View {
 //                }
 
                 if let participants = chat.participants {
-                    Section("Participants (\(participants.total ?? participants.items.count))") {
-                        ForEach(participants.items) { participant in
-                            HStack(spacing: 10) {
-                                ProfileAvatarView(
-                                    name: participant.displayName,
-                                    imageURLString: participant.imgURL,
-                                    dimension: 32
-                                )
+                    let totalCount = participants.total ?? participants.items.count
+                    let visibleParticipants = Array(participants.items.prefix(Self.participantPreviewLimit))
+                    let remaining = max(0, totalCount - visibleParticipants.count)
 
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(participant.displayName)
-                                        .fontWeight(.medium)
+                    Section("Participants (\(totalCount))") {
+                        ForEach(visibleParticipants) { participant in
+                            Button {
+                                selectedParticipant = participant
+                            } label: {
+                                HStack(spacing: 10) {
+                                    ProfileAvatarView(
+                                        name: participant.displayName,
+                                        imageURLString: participant.imgURL,
+                                        dimension: 32
+                                    )
 
-                                    if let username = participant.username, username != participant.displayName {
-                                        Text(username)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(participant.displayName)
+                                            .fontWeight(.medium)
+                                            .foregroundStyle(.primary)
+
+                                        if let username = participant.username, username != participant.displayName {
+                                            Text(username)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    if participant.isSelf == true {
+                                        Text("You")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
                                 }
-
-                                Spacer()
-
-                                if participant.isSelf == true {
-                                    Text("You")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                                .contentShape(.rect)
                             }
+                            .buttonStyle(.plain)
+                        }
+
+                        if remaining > 0 {
+                            Text("^[\(remaining) more member](inflect: true)")
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -81,6 +100,9 @@ struct ChatInfoSheet: View {
             }
         }
         .frame(minWidth: 400, minHeight: 350)
+        .sheet(item: $selectedParticipant) { participant in
+            ParticipantProfileSheet(participant: participant)
+        }
     }
 
     private func row(_ label: String, value: String, monospaced: Bool = false) -> some View {
