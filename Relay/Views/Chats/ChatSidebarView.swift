@@ -15,44 +15,30 @@ struct ChatSidebarView: View {
                     description: "Open Settings and add your Beeper bearer token."
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if chatStore.isLoadingChats && chatStore.chats.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if chatStore.isRecoveringAuth && chatStore.chats.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if chatStore.chatsErrorIsAuth, chatStore.chats.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .task {
-                        await chatStore.recoverAuthAndReload()
-                    }
-            } else if let chatsError = chatStore.chatsError, chatStore.chats.isEmpty {
-                ContentUnavailableView(
-                    "Could Not Load Chats",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(chatsError)
-                )
             } else {
                 chatList
-                .searchable(text: $chatStore.searchQuery, placement: .sidebar, prompt: "Search chats")
-                .task(id: chatStore.searchQuery) {
-                    try? await Task.sleep(for: .milliseconds(300))
-                    await chatStore.searchChats()
-                }
-                .onChange(of: chatStore.searchQuery) {
-                    if chatStore.searchQuery.isBlank {
-                        chatStore.searchResults = nil
-                        chatStore.isSearching = false
+                    .searchable(text: $chatStore.searchQuery, placement: .sidebar, prompt: "Search chats")
+                    .task(id: chatStore.searchQuery) {
+                        if chatStore.searchQuery.isBlank {
+                            chatStore.searchResults = nil
+                            chatStore.isSearching = false
+                            return
+                        }
+                        try? await Task.sleep(for: .milliseconds(300))
+                        await chatStore.searchChats()
                     }
-                }
+                    .task(id: chatStore.chatsErrorIsAuth) {
+                        if chatStore.chatsErrorIsAuth {
+                            await chatStore.recoverAuthAndReload()
+                        }
+                    }
             }
         }
         .navigationTitle("Chats")
         .toolbar(removing: .sidebarToggle)
         .toolbar {
             ToolbarSpacer()
-            
+
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     ForEach(InboxFilter.allCases, id: \.self) { filter in
@@ -102,7 +88,21 @@ struct ChatSidebarView: View {
             }
         }
         .overlay {
-            if chatStore.isSearching {
+            if chatStore.chats.isEmpty {
+                if chatStore.isSearching
+                    || chatStore.isLoadingChats
+                    || chatStore.isRecoveringAuth
+                    || chatStore.chatsErrorIsAuth {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let chatsError = chatStore.chatsError {
+                    ContentUnavailableView(
+                        "Could Not Load Chats",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(chatsError)
+                    )
+                }
+            } else if chatStore.isSearching {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
