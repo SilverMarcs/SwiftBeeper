@@ -18,7 +18,7 @@ struct ContentView: View {
                 }
             }
         }
-        .task(id: sessionStore.accessToken) {
+        .task(id: sessionStore.accessToken.isEmpty) {
             await coordinator.updateAccessToken(sessionStore.accessToken)
         }
     }
