@@ -73,20 +73,23 @@ struct MessageRowView: View {
                     Text(message.timestampText)
                 }
 
-                ControlGroup {
-                    ForEach(Self.commonReactions, id: \.self) { emoji in
-                        Button {
-                            Task {
-                                if hasOwnReaction(for: emoji) {
-                                    await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: emoji)
-                                } else {
-                                    await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: emoji)
-                                }
+                Picker(selection: Binding<String?>(
+                    get: { ownReactionKey },
+                    set: { newValue in
+                        let old = ownReactionKey
+                        Task {
+                            if let old, old != newValue {
+                                await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: old)
                             }
-                        } label: {
-                            let label = hasOwnReaction(for: emoji) ? "Remove \(emoji)" : emoji
-                            Text(label)
+                            if let newValue, newValue != old {
+                                await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: newValue)
+                            }
                         }
+                    }
+                )) {
+                    Text("None").tag(String?.none)
+                    ForEach(Self.commonReactions, id: \.self) { emoji in
+                        Text(emoji).tag(String?.some(emoji))
                     }
                 } label: {
                     Label("Reactions", systemImage: "face.smiling.inverse")
@@ -213,6 +216,11 @@ struct MessageRowView: View {
     private func hasOwnReaction(for reactionKey: String) -> Bool {
         guard let participantID = currentParticipant?.id else { return false }
         return message.reactions?.contains(where: { $0.reactionKey == reactionKey && $0.participantID == participantID }) == true
+    }
+
+    private var ownReactionKey: String? {
+        guard let participantID = currentParticipant?.id else { return nil }
+        return message.reactions?.first(where: { $0.participantID == participantID })?.reactionKey
     }
 
     private func copyMessageText() {
