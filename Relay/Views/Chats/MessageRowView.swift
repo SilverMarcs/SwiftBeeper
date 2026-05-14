@@ -1,9 +1,4 @@
 import SwiftUI
-#if canImport(AppKit)
-import AppKit
-#elseif canImport(UIKit)
-import UIKit
-#endif
 
 struct MessageRowView: View {
     @Environment(MessageStore.self) private var messageStore
@@ -126,6 +121,16 @@ struct MessageRowView: View {
                     }
                 }
 
+                if let attachments = message.attachments, !attachments.isEmpty {
+                    Divider()
+                    ForEach(attachments) { attachment in
+                        Button {
+                            Task { await saveAttachmentToDownloads(attachment) }
+                        } label: {
+                            Label(saveLabel(for: attachment, totalCount: attachments.count), systemImage: "arrow.down")
+                        }
+                    }
+                }
             }
 
             if !message.isOutgoing(in: chat) {
@@ -211,11 +216,58 @@ struct MessageRowView: View {
     }
 
     private func copyMessageText() {
-#if canImport(AppKit)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(message.displayText, forType: .string)
-#elseif canImport(UIKit)
-        UIPasteboard.general.string = message.displayText
-#endif
+    }
+
+    private func saveLabel(for attachment: Attachment, totalCount: Int) -> String {
+        // if totalCount > 1, let name = attachment.fileName, !name.isEmpty {
+            // return "Save \"\(name)\" to Downloads"
+        // }
+        // return "Save \(attachment.typeLabel) to Downloads"
+        return "Save to Downloads"
+    }
+
+    private func saveAttachmentToDownloads(_ attachment: Attachment) async {
+        guard let urlString = attachment.resolvedURL,
+              let request = AuthenticatedImageLoader.buildRequest(for: urlString) else { return }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return }
+
+            guard let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
+
+            let destination = uniqueDestination(in: downloadsDir, for: attachment)
+            try data.write(to: destination)
+        } catch {
+            // Silently ignore; user can retry.
+        }
+    }
+
+    private func uniqueDestination(in directory: URL, for attachment: Attachment) -> URL {
+        let proposedName = attachment.fileName?.isEmpty == false
+            ? attachment.fileName!
+            : defaultFileName(for: attachment)
+
+        let baseURL = directory.appending(path: proposedName)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: baseURL.path) else { return baseURL }
+
+        let stem = baseURL.deletingPathExtension().lastPathComponent
+        let ext = baseURL.pathExtension
+        var index = 2
+        while true {
+            let candidateName = ext.isEmpty ? "\(stem) (\(index))" : "\(stem) (\(index)).\(ext)"
+            let candidate = directory.appending(path: candidateName)
+            if !fm.fileExists(atPath: candidate.path) { return candidate }
+            index += 1
+        }
+    }
+
+    private func defaultFileName(for attachment: Attachment) -> String {
+        let ext = (attachment.resolvedURL.flatMap(URL.init(string:))?.pathExtension) ?? ""
+        let base = "beeper-\(attachment.typeLabel)-\(Int(Date().timeIntervalSince1970))"
+        return ext.isEmpty ? base : "\(base).\(ext)"
     }
 }

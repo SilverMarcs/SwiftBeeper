@@ -1,5 +1,6 @@
 import QuickLook
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct FileAttachmentView: View {
     let attachment: Attachment
@@ -18,9 +19,7 @@ struct FileAttachmentView: View {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    Image(systemName: "doc")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                    fileIcon
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -58,6 +57,27 @@ struct FileAttachmentView: View {
         ) else { return }
 
         previewURL = localURL
+    }
+
+    private var fileIcon: some View {
+        Image(nsImage: NSWorkspace.shared.icon(for: utType))
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 32, height: 32)
+    }
+
+    private var utType: UTType {
+        if let mime = attachment.mimeType,
+           let type = UTType(mimeType: mime) {
+            return type
+        }
+        let ext = (attachment.fileName as NSString?)?.pathExtension
+            ?? attachment.resolvedURL.flatMap(URL.init(string:))?.pathExtension
+            ?? ""
+        if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
+            return type
+        }
+        return .data
     }
 
     private func formattedFileSize(_ bytes: Int) -> String {
