@@ -55,7 +55,7 @@ struct ChatRowView: View {
                         Text(chat.unreadCount > 99 ? "99+" : "\(chat.unreadCount)")
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(chat.isMuted == true ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(chat.isMuted == true ? AnyShapeStyle(Color.secondary.opacity(0.25)) : AnyShapeStyle(Color.accentColor), in: Capsule())

@@ -143,7 +143,11 @@ struct Message: Identifiable, Decodable, Equatable {
     }
 
     var timestampText: String {
-        timestamp.formatted(date: .abbreviated, time: .shortened)
+        let calendar = Calendar.current
+        if calendar.component(.year, from: timestamp) == calendar.component(.year, from: Date()) {
+            return timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+        }
+        return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 
     func isOutgoing(in chat: Chat) -> Bool {

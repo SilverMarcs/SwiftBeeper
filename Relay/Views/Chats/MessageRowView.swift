@@ -51,13 +51,6 @@ struct MessageRowView: View {
                 }
 
                 messageContent
-                    .overlay(alignment: message.isOutgoing(in: chat) ? .bottomLeading : .bottomTrailing) {
-                        reactionsView
-                            .offset(
-                                x: message.isOutgoing(in: chat) ? -15 : 15,
-                                y: 1
-                            )
-                    }
 
                 if message.isOutgoing(in: chat) && showReadIndicator {
                    Text("Read")
@@ -164,39 +157,85 @@ struct MessageRowView: View {
         }
     }
 
+    private enum BubbleSlot: Equatable {
+        case attachment(String?)
+        case textWithUrls
+        case linkPill(String)
+        case text
+    }
+
+    private var lastBubbleSlot: BubbleSlot? {
+        if let urls = message.extractedURLs, let last = urls.last {
+            return .linkPill(last.absoluteString)
+        }
+        if message.hasText { return .text }
+        if let attachments = message.attachments, let last = attachments.last {
+            return .attachment(last.id)
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private func reactionsOverlay(if slot: BubbleSlot) -> some View {
+        if slot == lastBubbleSlot {
+            reactionsView
+                .offset(
+                    x: message.isOutgoing(in: chat) ? -15 : 15,
+                    y: 1
+                )
+        }
+    }
+
+    private var reactionsAlignment: Alignment {
+        message.isOutgoing(in: chat) ? .bottomLeading : .bottomTrailing
+    }
+
     @ViewBuilder
     private var messageContent: some View {
-        VStack(alignment: message.isOutgoing(in: chat) ? .trailing : .leading, spacing: 4) {
+        let isOutgoing = message.isOutgoing(in: chat)
+        VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
             if let attachments = message.attachments, attachments.isEmpty == false {
                 ForEach(attachments) { attachment in
-                    AttachmentView(attachment: attachment, isOutgoing: message.isOutgoing(in: chat))
+                    AttachmentView(attachment: attachment, isOutgoing: isOutgoing)
+                        .overlay(alignment: reactionsAlignment) {
+                            reactionsOverlay(if: .attachment(attachment.id))
+                        }
                 }
             }
 
             if let urls = message.extractedURLs, !urls.isEmpty {
                 if message.textWithoutURLs?.isEmpty == false {
                     Text(message.textWithoutURLs!.markdownAttributed)
-                        .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                        .foregroundStyle(isOutgoing ? .white : .primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
+                        .bubbleBackground(isOutgoing: isOutgoing)
                         .clipShape(.rect(cornerRadius: 15))
+                        .overlay(alignment: reactionsAlignment) {
+                            reactionsOverlay(if: .textWithUrls)
+                        }
                 }
 
                 ForEach(urls, id: \.absoluteString) { url in
                     LinkPillView(url: url)
+                        .overlay(alignment: reactionsAlignment) {
+                            reactionsOverlay(if: .linkPill(url.absoluteString))
+                        }
                 }
             } else if message.hasText {
                 Text(message.displayText.markdownAttributed)
-                    .foregroundStyle(message.isOutgoing(in: chat) ? .white : .primary)
+                    .foregroundStyle(isOutgoing ? .white : .primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .bubbleBackground(isOutgoing: message.isOutgoing(in: chat))
+                    .bubbleBackground(isOutgoing: isOutgoing)
                     .clipShape(.rect(cornerRadius: 15))
+                    .overlay(alignment: reactionsAlignment) {
+                        reactionsOverlay(if: .text)
+                    }
             }
         }
     }
