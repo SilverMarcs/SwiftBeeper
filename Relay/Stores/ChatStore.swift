@@ -122,11 +122,18 @@ final class ChatStore {
         existingChats: [Chat],
         shouldPreserveExistingChats: Bool
     ) -> [Chat] {
-        guard shouldPreserveExistingChats else { return refreshedChats }
+        let existingByID = Dictionary(existingChats.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // The list endpoint omits detail-only fields like `participants`. Merge each
+        // refreshed row into the existing one so hydrated data (avatars, etc.) survives.
+        let mergedRefreshed = refreshedChats.map { refreshed in
+            existingByID[refreshed.id]?.merging(detail: refreshed) ?? refreshed
+        }
+
+        guard shouldPreserveExistingChats else { return mergedRefreshed }
 
         let refreshedIDs = Set(refreshedChats.map(\.id))
         let preservedExistingChats = existingChats.filter { !refreshedIDs.contains($0.id) }
-        return refreshedChats + preservedExistingChats
+        return mergedRefreshed + preservedExistingChats
     }
 
     func searchChats() async {
@@ -348,23 +355,23 @@ final class ChatStore {
     // MARK: - Mute / Unmute
 
     func muteChat(_ chatID: String) async {
-        guard !APIClient.accessToken.isEmpty else { return }
-
-        do {
-            try await APIClient.muteChat(chatID: chatID, muted: true)
-            await loadChats()
-        } catch {
-            chatsError = error.localizedDescription
-        }
+        await setChatMuted(chatID, muted: true)
     }
 
     func unmuteChat(_ chatID: String) async {
+        await setChatMuted(chatID, muted: false)
+    }
+
+    private func setChatMuted(_ chatID: String, muted: Bool) async {
         guard !APIClient.accessToken.isEmpty else { return }
 
+        let previous = chatsByID[chatID]
+        updateChat(chatID) { $0.with(isMuted: muted) }
+
         do {
-            try await APIClient.muteChat(chatID: chatID, muted: false)
-            await loadChats()
+            try await APIClient.muteChat(chatID: chatID, muted: muted)
         } catch {
+            if let previous { updateChat(chatID) { _ in previous } }
             chatsError = error.localizedDescription
         }
     }
@@ -374,11 +381,27 @@ final class ChatStore {
     func markChatAsRead(_ chatID: String) async {
         guard !APIClient.accessToken.isEmpty else { return }
 
+        let previous = chatsByID[chatID]
+        updateChat(chatID) { $0.with(unreadCount: 0) }
+
         do {
             try await APIClient.markChatAsRead(chatID: chatID)
-            await loadChats()
         } catch {
+            if let previous { updateChat(chatID) { _ in previous } }
             chatsError = error.localizedDescription
+        }
+    }
+
+    private func updateChat(_ chatID: String, transform: (Chat) -> Chat) {
+        if let index = chats.firstIndex(where: { $0.id == chatID }) {
+            let updated = transform(chats[index])
+            chats[index] = updated
+            chatsByID[chatID] = updated
+        }
+        if let searchIndex = searchResults?.firstIndex(where: { $0.id == chatID }),
+           var updated = searchResults {
+            updated[searchIndex] = transform(updated[searchIndex])
+            searchResults = updated
         }
     }
 }

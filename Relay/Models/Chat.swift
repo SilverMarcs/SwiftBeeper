@@ -102,11 +102,25 @@ struct Chat: Identifiable, Decodable, Equatable {
     }
 
     func merging(detail: Chat) -> Chat {
-        Chat(
+        // Prefer the side with more participants. The list endpoint can return a
+        // non-nil but truncated `participants` (it doesn't pass `maxParticipantCount=-1`),
+        // so a naive `detail.participants ?? participants` would clobber fully-hydrated
+        // data with the truncated list-version, blanking out group avatars.
+        let mergedParticipants: ChatParticipants?
+        switch (detail.participants, participants) {
+        case (nil, let existing):
+            mergedParticipants = existing
+        case (let new?, nil):
+            mergedParticipants = new
+        case (let new?, let existing?):
+            mergedParticipants = new.items.count >= existing.items.count ? new : existing
+        }
+
+        return Chat(
             id: id,
             title: detail.title,
             unreadCount: detail.unreadCount,
-            participants: detail.participants ?? participants,
+            participants: mergedParticipants,
             preview: preview ?? detail.preview,
             isMuted: detail.isMuted ?? isMuted,
             type: detail.type ?? type,
@@ -116,6 +130,24 @@ struct Chat: Identifiable, Decodable, Equatable {
             lastActivity: detail.lastActivity ?? lastActivity,
             lastReadMessageSortKey: detail.lastReadMessageSortKey ?? lastReadMessageSortKey,
             imgURL: detail.imgURL ?? imgURL
+        )
+    }
+
+    func with(unreadCount: Int? = nil, isMuted: Bool? = nil) -> Chat {
+        Chat(
+            id: id,
+            title: title,
+            unreadCount: unreadCount ?? self.unreadCount,
+            participants: participants,
+            preview: preview,
+            isMuted: isMuted ?? self.isMuted,
+            type: type,
+            isPinned: isPinned,
+            isArchived: isArchived,
+            accountID: accountID,
+            lastActivity: lastActivity,
+            lastReadMessageSortKey: lastReadMessageSortKey,
+            imgURL: imgURL
         )
     }
 

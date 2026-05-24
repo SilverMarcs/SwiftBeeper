@@ -37,7 +37,7 @@ struct RelayApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        Window("Relay", id: "main") {
             BackendGate(backend: backend) {
                 ContentView()
                     .task {
