@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatRowView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(MessageStore.self) private var messageStore
+    @Environment(\.appearsActive) private var appearsActive
 
     let chat: Chat
 
@@ -29,6 +30,7 @@ struct ChatRowView: View {
                     Text(chat.displayTitle)
                         .font(.body)
                         .fontWeight(chat.unreadCount > 0 ? .bold : .regular)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     Spacer()
@@ -44,7 +46,7 @@ struct ChatRowView: View {
                     if let previewText = subtitleText {
                         Text(previewText)
                             .font(.body)
-                            .foregroundStyle(chat.unreadCount > 0 ? .primary : .secondary)
+                            .foregroundStyle(.secondary)
                             .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
                             .lineLimit(1)
                     }

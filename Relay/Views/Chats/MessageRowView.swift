@@ -10,6 +10,7 @@ struct MessageRowView: View {
     var showReadIndicator: Bool = false
     var isFirstInGroup: Bool = true
     var isLastInGroup: Bool = true
+    var onTapLinkedMessage: ((String) -> Void)? = nil
 
     @State private var profileSheetParticipant: ChatParticipant?
 
@@ -46,7 +47,8 @@ struct MessageRowView: View {
                     ReplyPreviewView(
                         linkedMessageID: linkedMessageID,
                         chatID: message.chatID,
-                        isOutgoing: message.isOutgoing(in: chat)
+                        isOutgoing: message.isOutgoing(in: chat),
+                        onTap: { onTapLinkedMessage?(linkedMessageID) }
                     )
                 }
 

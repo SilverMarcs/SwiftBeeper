@@ -59,7 +59,10 @@ struct ChatDetailView: View {
                             chat: selectedChat,
                             showReadIndicator: entry.message.id == readIndicatorMessageID,
                             isFirstInGroup: entry.isFirstInGroup,
-                            isLastInGroup: entry.isLastInGroup
+                            isLastInGroup: entry.isLastInGroup,
+                            onTapLinkedMessage: { linkedID in
+                                scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                            }
                         )
                         .modifier(
                             TimelineFocusEffect(
@@ -225,6 +228,15 @@ struct ChatDetailView: View {
             }
         } else {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
+    }
+
+    private func scrollToLinkedMessage(_ linkedID: String, chatID: String, proxy: ScrollViewProxy) {
+        let messages = messageStore.messages(for: chatID)
+        guard let target = messages.first(where: { $0.id == linkedID }) else { return }
+
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo(target.timelineKey, anchor: .center)
         }
     }
 

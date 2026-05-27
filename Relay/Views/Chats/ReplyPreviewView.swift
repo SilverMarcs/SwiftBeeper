@@ -6,6 +6,7 @@ struct ReplyPreviewView: View {
     let linkedMessageID: String
     let chatID: String
     let isOutgoing: Bool
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
         let linkedMessage = messageStore.message(byID: linkedMessageID, in: chatID)
@@ -31,5 +32,9 @@ struct ReplyPreviewView: View {
         .padding(.vertical, 4)
         .background(ChatVisualStyle.replyPreviewFill(isOutgoing: isOutgoing))
         .clipShape(.rect(cornerRadius: 8))
+        .contentShape(.rect(cornerRadius: 8))
+        .onTapGesture {
+            onTap?()
+        }
     }
 }
