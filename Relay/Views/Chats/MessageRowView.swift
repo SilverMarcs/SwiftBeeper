@@ -101,7 +101,7 @@ struct MessageRowView: View {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                 }
 
-                if message.hasText {
+                if message.hasText || message.isEmptyDeleted {
                     Button {
                         copyMessageText()
                     } label: {
@@ -170,7 +170,7 @@ struct MessageRowView: View {
         if let urls = message.extractedURLs, let last = urls.last {
             return .linkPill(last.absoluteString)
         }
-        if message.hasText { return .text }
+        if message.hasText || message.isEmptyDeleted { return .text }
         if let attachments = message.attachments, let last = attachments.last {
             return .attachment(last.id)
         }
@@ -226,18 +226,25 @@ struct MessageRowView: View {
                             reactionsOverlay(if: .linkPill(url.absoluteString))
                         }
                 }
-            } else if message.hasText {
-                Text(message.displayText.markdownAttributed)
-                    .foregroundStyle(isOutgoing ? .white : .primary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .bubbleBackground(isOutgoing: isOutgoing)
-                    .clipShape(.rect(cornerRadius: 15))
-                    .overlay(alignment: reactionsAlignment) {
-                        reactionsOverlay(if: .text)
+            } else if message.hasText || message.isEmptyDeleted {
+                Group {
+                    if message.isEmptyDeleted {
+                        Label(message.displayText, systemImage: "trash")
+                            .italic()
+                    } else {
+                        Text(message.displayText.markdownAttributed)
                     }
+                }
+                .foregroundStyle(isOutgoing ? .white : .primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .bubbleBackground(isOutgoing: isOutgoing)
+                .clipShape(.rect(cornerRadius: 15))
+                .overlay(alignment: reactionsAlignment) {
+                    reactionsOverlay(if: .text)
+                }
             }
         }
     }

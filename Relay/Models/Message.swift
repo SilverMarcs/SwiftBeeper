@@ -111,9 +111,10 @@ struct Message: Identifiable, Decodable, Equatable {
         !hasText && (attachments ?? []).isEmpty
     }
 
-    /// Whether this message represents real user content (not a reaction, membership event, or empty/deleted message).
+    /// Whether this message represents real user content (not a reaction or membership event).
+    /// Deleted (empty) messages are still displayable — they show a "deleted" tombstone in the timeline.
     var isDisplayable: Bool {
-        !isReaction && !isMembershipEvent && !isEmptyDeleted
+        !isReaction && !isMembershipEvent
     }
 
     var hasText: Bool {
