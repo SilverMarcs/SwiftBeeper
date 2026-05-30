@@ -79,7 +79,16 @@ struct ChatDetailView: View {
                             .tint(.accentColor)
                             .labelStyle(.iconOnly)
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if !entry.message.isEmptyDeleted && entry.message.isOutgoing(in: selectedChat) {
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    Task {
+                                        await messageStore.deleteMessage(entry.message.id, in: selectedChat.id)
+                                    }
+                                }
+                                .labelStyle(.iconOnly)
+                            }
+
                             if messageStore.canEdit(entry.message, in: selectedChat) {
                                 Button("Edit", systemImage: "pencil") {
                                     withAnimation {

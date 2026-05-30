@@ -55,6 +55,18 @@ extension APIClient {
 
         return try await delete(url: url)
     }
+
+    static func deleteMessage(chatID: String, messageID: String) async throws -> DeleteMessageOutput {
+        guard let url = URL(string: "/v1/chats/\(chatID)/messages/\(messageID)", relativeTo: APIConfiguration.baseURL) else {
+            throw APIError.invalidURL("/v1/chats/\(chatID)/messages/\(messageID)")
+        }
+
+        return try await delete(url: url)
+    }
+}
+
+struct DeleteMessageOutput: Decodable {
+    let success: Bool
 }
 
 private struct SendMessageRequest: Encodable {

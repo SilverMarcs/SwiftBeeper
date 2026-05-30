@@ -405,4 +405,14 @@ final class MessageStore {
             handleMessageError(error, context: "removing reaction from \(messageID)")
         }
     }
+
+    func deleteMessage(_ messageID: String, in chatID: String) async {
+        guard !APIClient.accessToken.isEmpty else { return }
+
+        do {
+            _ = try await APIClient.deleteMessage(chatID: chatID, messageID: messageID)
+        } catch {
+            handleMessageError(error, context: "deleting message \(messageID)")
+        }
+    }
 }

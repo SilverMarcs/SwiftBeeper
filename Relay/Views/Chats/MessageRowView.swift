@@ -129,6 +129,17 @@ struct MessageRowView: View {
                         }
                     }
                 }
+
+                if !message.isEmptyDeleted && message.isOutgoing(in: chat) {
+                    Divider()
+                    Button(role: .destructive) {
+                        Task {
+                            await messageStore.deleteMessage(message.id, in: message.chatID)
+                        }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
 
             if !message.isOutgoing(in: chat) {
