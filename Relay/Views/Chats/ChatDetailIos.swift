@@ -1,8 +1,9 @@
+#if !os(macOS)
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 
-struct ChatDetailView: View {
+struct ChatDetailIos: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
     @Environment(MessageStore.self) private var messageStore
@@ -114,6 +115,7 @@ struct ChatDetailView: View {
             }
             .task(id: selectedChat.id) {
                 isPreparingInitialScroll = true
+                defer { isPreparingInitialScroll = false }
                 firstUnreadID = nil
                 coordinator.setSelectedChatID(selectedChat.id)
                 messageStore.setReplyTo(nil)
@@ -125,8 +127,6 @@ struct ChatDetailView: View {
                 try? await Task.sleep(for: .milliseconds(50))
                 scrollToBottom(with: proxy, animated: false)
                 try? await Task.sleep(for: .milliseconds(100))
-                guard !Task.isCancelled else { return }
-                isPreparingInitialScroll = false
                 await detail
             }
             .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
@@ -179,17 +179,6 @@ struct ChatDetailView: View {
             }
             .sheet(item: $profileSheetParticipant) { participant in
                 ParticipantProfileSheet(participant: participant)
-            }
-            .overlay {
-                if isPreparingInitialScroll {
-                    ZStack {
-                        Rectangle()
-                            .fill(.background)
-                        ProgressView()
-                            .controlSize(.large)
-                    }
-                    .ignoresSafeArea(edges: .vertical)
-                }
             }
             .onDrop(of: [.item], isTargeted: nil) { providers in
                 handleDrop(providers)
@@ -301,7 +290,6 @@ struct ChatDetailView: View {
                     }
             }
         } else {
-
             ContentUnavailableView(
                 "Pick a Chat",
                 systemImage: "list.bullet",
@@ -361,13 +349,13 @@ struct ChatDetailView: View {
     private func sendiPhoneMessage(chatID: String) {
         let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let attachments = messageStore.pendingAttachments
-        
+
         guard !text.isEmpty || !attachments.isEmpty else { return }
-        
+
         searchText = ""
         isSearchActive = false
         messageStore.clearPendingAttachments()
-        
+
         Task {
             let didSend = await messageStore.sendMessage(text: text, attachments: attachments, to: chatID)
             if didSend {
@@ -482,13 +470,7 @@ struct ChatDetailView: View {
         return messages.first(where: { $0.isUnread == true })?.id
     }
 
-    /// Returns the ID of the outgoing message that should show the "Read" indicator.
-    /// Rules:
-    /// - Only the last outgoing message that the other side has read gets the indicator.
-    /// - If there's an incoming message AFTER that outgoing message, don't show
-    ///   the indicator — the reply itself proves they read it.
     private func lastReadOutgoingMessageID(messages: [Message], chat: Chat) -> String? {
-        // Find the last outgoing message that the other side has read.
         var lastReadOutgoing: Message?
         for message in messages {
             guard message.isOutgoing(in: chat) else { continue }
@@ -497,8 +479,6 @@ struct ChatDetailView: View {
         }
         guard let target = lastReadOutgoing else { return nil }
 
-        // If there's any incoming message after the target, the reply proves
-        // reading — no need for an explicit indicator.
         let hasIncomingAfter = messages.contains { msg in
             !msg.isOutgoing(in: chat) && msg.numericSortKey > target.numericSortKey
         }
@@ -523,7 +503,6 @@ struct ChatDetailView: View {
             let sameSenderAsPrev = prev.map { $0.senderID == message.senderID } ?? false
             let sameSenderAsNext = next.map { $0.senderID == message.senderID } ?? false
 
-            // A timestamp break or unread divider resets the group
             let nextShowsTimestamp = next.map { shouldShowTimestamp(before: $0, previousMessage: message) } ?? false
             let nextIsUnread = next.map { $0.id == firstUnreadID } ?? false
 
@@ -569,7 +548,6 @@ private struct TimelineFocusEffect: ViewModifier {
             .animation(.easeInOut(duration: 0.2), value: isFocused)
     }
 }
-
 
 private struct NavigationBarFocusVisibilityModifier: ViewModifier {
     let isFocusedOnComposerMessage: Bool
@@ -641,3 +619,4 @@ private struct TimestampDividerView: View {
         return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 }
+#endif

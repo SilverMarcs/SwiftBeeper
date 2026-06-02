@@ -146,8 +146,15 @@ final class EasyMatrixFFI {
             return nil
         }
         
-        // Execute CGo in-memory HTTP handle
-        guard let responseCString = EasyMatrixHandleRequest(handle, requestJSON) else {
+        // Execute CGo in-memory HTTP handle on a background thread to prevent blocking Swift cooperative thread pool
+        let responseCString = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let res = EasyMatrixHandleRequest(handle, requestJSON)
+                continuation.resume(returning: res)
+            }
+        }
+        
+        guard let responseCString else {
             return nil
         }
         
