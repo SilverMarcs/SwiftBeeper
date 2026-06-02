@@ -4,8 +4,6 @@ import UniformTypeIdentifiers
 struct ChatDetailView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
-    @Environment(MessageStore.self) private var messageStore
-    @Environment(RealtimeCoordinator.self) private var coordinator
     @State private var showingChatInfo = false
     @State private var isPreparingInitialScroll = false
     @State private var firstUnreadID: String?
@@ -20,21 +18,21 @@ struct ChatDetailView: View {
                 description: "Add a token in Settings first."
             )
         } else if let selectedChat = chatStore.selectedChat {
-            let messages = messageStore.messages(for: selectedChat.id)
+            let messages = chatStore.messages(for: selectedChat.id)
             let timelineEntries = timelineEntries(for: messages)
-            let activeComposerMessageID = messageStore.activeComposerMessage?.id
+            let activeComposerMessageID = chatStore.activeComposerMessage?.id
             let readIndicatorMessageID = lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
 
             ScrollViewReader { proxy in
                 List {
-                    if messageStore.hasMoreMessages(for: selectedChat.id) {
+                    if chatStore.hasMoreMessages(for: selectedChat.id) {
                         ProgressView()
                             .controlSize(.small)
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
                             .onAppear {
-                                guard !messageStore.isLoadingOlderMessages else { return }
+                                guard !chatStore.isLoadingOlderMessages else { return }
                                 loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
                             }
                     }
@@ -73,7 +71,7 @@ struct ChatDetailView: View {
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button("Reply", systemImage: "arrowshape.turn.up.left") {
                                 withAnimation {
-                                    messageStore.setReplyTo(entry.message)
+                                    chatStore.setReplyTo(entry.message)
                                 }
                             }
                             .tint(.accentColor)
@@ -83,16 +81,16 @@ struct ChatDetailView: View {
                             if !entry.message.isEmptyDeleted && entry.message.isOutgoing(in: selectedChat) {
                                 Button("Delete", systemImage: "trash", role: .destructive) {
                                     Task {
-                                        await messageStore.deleteMessage(entry.message.id, in: selectedChat.id)
+                                        await chatStore.deleteMessage(entry.message.id, in: selectedChat.id)
                                     }
                                 }
                                 .labelStyle(.iconOnly)
                             }
 
-                            if messageStore.canEdit(entry.message, in: selectedChat) {
+                            if chatStore.canEdit(entry.message, in: selectedChat) {
                                 Button("Edit", systemImage: "pencil") {
                                     withAnimation {
-                                        messageStore.startEditing(entry.message, in: selectedChat)
+                                        chatStore.startEditing(entry.message, in: selectedChat)
                                     }
                                 }
                                 .tint(.orange)
@@ -111,13 +109,12 @@ struct ChatDetailView: View {
                 .task(id: selectedChat.id) {
                     isPreparingInitialScroll = true
                     firstUnreadID = nil
-                    coordinator.setSelectedChatID(selectedChat.id)
-                    messageStore.setReplyTo(nil)
-                    messageStore.cancelEditing()
+                    chatStore.setReplyTo(nil)
+                    chatStore.cancelEditing()
                     async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
-                    async let messagesLoad = messageStore.loadMessages(for: selectedChat.id)
+                    async let messagesLoad = chatStore.loadMessages(for: selectedChat.id)
                     let _ = await messagesLoad
-                    firstUnreadID = firstUnreadMessageID(messages: messageStore.messages(for: selectedChat.id), chat: selectedChat)
+                    firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: selectedChat.id), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
                     try? await Task.sleep(for: .milliseconds(100))
@@ -201,7 +198,7 @@ struct ChatDetailView: View {
                 description: Text("Select a chat from the sidebar to view messages.")
             )
             .task {
-                coordinator.setSelectedChatID(nil)
+                chatStore.selectedChatID = nil
                 isPreparingInitialScroll = false
             }
         }
@@ -218,7 +215,7 @@ struct ChatDetailView: View {
                 let mimeType = url.mimeType
 
                 Task { @MainActor in
-                    messageStore.pendingAttachments.append(PendingAttachment(
+                    chatStore.pendingAttachments.append(PendingAttachment(
                         fileData: data,
                         fileName: fileName,
                         mimeType: mimeType
@@ -241,7 +238,7 @@ struct ChatDetailView: View {
     }
 
     private func scrollToLinkedMessage(_ linkedID: String, chatID: String, proxy: ScrollViewProxy) {
-        let messages = messageStore.messages(for: chatID)
+        let messages = chatStore.messages(for: chatID)
         guard let target = messages.first(where: { $0.id == linkedID }) else { return }
 
         withAnimation(.easeInOut(duration: 0.3)) {
@@ -250,9 +247,9 @@ struct ChatDetailView: View {
     }
 
     private func loadOlderMessages(chatID: String, proxy: ScrollViewProxy) {
-        let anchorMessageID = messageStore.messages(for: chatID).first?.timelineKey
+        let anchorMessageID = chatStore.messages(for: chatID).first?.timelineKey
         Task { @MainActor in
-            _ = await messageStore.loadOlderMessages(for: chatID)
+            _ = await chatStore.loadOlderMessages(for: chatID)
             if let anchorMessageID {
                 try? await Task.sleep(for: .milliseconds(1))
                 proxy.scrollTo(anchorMessageID, anchor: .top)
@@ -281,7 +278,7 @@ struct ChatDetailView: View {
         var lastReadOutgoing: Message?
         for message in messages {
             guard message.isOutgoing(in: chat) else { continue }
-            guard messageStore.isReadByOther(message: message) else { continue }
+            guard chatStore.isReadByOther(message: message) else { continue }
             lastReadOutgoing = message
         }
         guard let target = lastReadOutgoing else { return nil }

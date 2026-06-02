@@ -2,9 +2,14 @@ import Foundation
 import Observation
 
 @MainActor protocol RealtimeEventHandler: AnyObject {
+    /// The socket (re)connected — a good time to resync, since events may have
+    /// been missed while disconnected.
+    func realtimeDidConnect()
     func realtimeDidUpsertChat(chatID: String?)
     func realtimeDidDeleteChat(chatID: String?)
-    func realtimeDidUpsertMessage(chatID: String?)
+    /// Carries the fully-hydrated messages from the event payload, so the handler
+    /// can apply them directly without refetching.
+    func realtimeDidUpsertMessages(chatID: String?, messages: [Message])
     func realtimeDidDeleteMessage(chatID: String?)
     func realtimeDidUpdateReceipt(chatID: String?, entries: [[String: String]]?)
     func realtimeDidReceiveError(_ message: String)
@@ -81,6 +86,7 @@ final class RealtimeService {
         switch envelope.type {
         case "ready":
             await sendSubscriptionsAllChats()
+            eventHandler?.realtimeDidConnect()
         case "subscriptions.updated":
             break
         case "error":
@@ -92,7 +98,10 @@ final class RealtimeService {
         case "chat.deleted":
             eventHandler?.realtimeDidDeleteChat(chatID: envelope.chatID)
         case "message.upserted":
-            eventHandler?.realtimeDidUpsertMessage(chatID: envelope.chatID)
+            // The event payload already contains the hydrated message(s); apply
+            // them directly rather than refetching the chat's history.
+            let messages = (try? JSONDecoder.beeper.decode(MessageEntriesPayload.self, from: data))?.entries ?? []
+            eventHandler?.realtimeDidUpsertMessages(chatID: envelope.chatID, messages: messages)
         case "message.deleted":
             eventHandler?.realtimeDidDeleteMessage(chatID: envelope.chatID)
         case "receipt.updated":
@@ -160,6 +169,10 @@ private struct WebSocketEnvelope: Decodable {
         // only receipt events use this field, so fall back to nil on type mismatch.
         entries = try? container.decodeIfPresent([[String: String]].self, forKey: .entries)
     }
+}
+
+private struct MessageEntriesPayload: Decodable {
+    let entries: [Message]?
 }
 
 private struct SubscriptionsSetCommand: Encodable {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MessageRowView: View {
-    @Environment(MessageStore.self) private var messageStore
+    @Environment(ChatStore.self) private var chatStore
 
     let message: Message
     let chat: Chat
@@ -75,10 +75,10 @@ struct MessageRowView: View {
                         let old = ownReactionKey
                         Task {
                             if let old, old != newValue {
-                                await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: old)
+                                await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: old)
                             }
                             if let newValue, newValue != old {
-                                await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: newValue)
+                                await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: newValue)
                             }
                         }
                     }
@@ -96,7 +96,7 @@ struct MessageRowView: View {
                 
                 Button {
                     withAnimation {
-                        messageStore.setReplyTo(message)
+                        chatStore.setReplyTo(message)
                     }
                 } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
@@ -110,10 +110,10 @@ struct MessageRowView: View {
                     }
                 }
 
-                if messageStore.canEdit(message, in: chat) {
+                if chatStore.canEdit(message, in: chat) {
                     Button {
                         withAnimation {
-                            messageStore.startEditing(message, in: chat)
+                            chatStore.startEditing(message, in: chat)
                         }
                     } label: {
                         Label("Edit", systemImage: "pencil")
@@ -135,7 +135,7 @@ struct MessageRowView: View {
                     Divider()
                     Button(role: .destructive) {
                         Task {
-                            await messageStore.deleteMessage(message.id, in: message.chatID)
+                            await chatStore.deleteMessage(message.id, in: message.chatID)
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -161,9 +161,9 @@ struct MessageRowView: View {
                 onToggle: { reactionKey, isOwn in
                     Task {
                         if isOwn {
-                            await messageStore.removeReaction(from: message.id, in: message.chatID, reactionKey: reactionKey)
+                            await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: reactionKey)
                         } else {
-                            await messageStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey)
+                            await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey)
                         }
                     }
                 }

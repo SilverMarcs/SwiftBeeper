@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ReplyPreviewView: View {
-    @Environment(MessageStore.self) private var messageStore
+    @Environment(ChatStore.self) private var chatStore
 
     let linkedMessageID: String
     let chatID: String
@@ -9,7 +9,7 @@ struct ReplyPreviewView: View {
     var onTap: (() -> Void)? = nil
 
     var body: some View {
-        let linkedMessage = messageStore.message(byID: linkedMessageID, in: chatID)
+        let linkedMessage = chatStore.message(byID: linkedMessageID, in: chatID)
 
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 1.5)

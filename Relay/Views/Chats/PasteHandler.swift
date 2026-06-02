@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 #if os(macOS)
 struct PasteHandler: ViewModifier {
-    @Environment(MessageStore.self) private var messageStore
+    @Environment(ChatStore.self) private var chatStore
     @State private var eventMonitor: Any?
     @State private var hostingView: NSView?
 
@@ -54,19 +54,19 @@ struct PasteHandler: ViewModifier {
             guard let data = try? Data(contentsOf: fileURL) else { return }
             let fileName = fileURL.lastPathComponent
             let mimeType = fileURL.mimeType
-            messageStore.pendingAttachments.append(PendingAttachment(
+            chatStore.pendingAttachments.append(PendingAttachment(
                 fileData: data,
                 fileName: fileName,
                 mimeType: mimeType
             ))
         } else if let imageData = item.data(forType: .png) {
-            messageStore.pendingAttachments.append(PendingAttachment(
+            chatStore.pendingAttachments.append(PendingAttachment(
                 fileData: imageData,
                 fileName: "Pasted_Image_\(UUID().uuidString.prefix(8)).png",
                 mimeType: "image/png"
             ))
         } else if let imageData = item.data(forType: .tiff) {
-            messageStore.pendingAttachments.append(PendingAttachment(
+            chatStore.pendingAttachments.append(PendingAttachment(
                 fileData: imageData,
                 fileName: "Pasted_Image_\(UUID().uuidString.prefix(8)).tiff",
                 mimeType: "image/tiff"

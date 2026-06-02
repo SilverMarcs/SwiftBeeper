@@ -10,8 +10,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Relay", category: "NotificationService")
     private(set) var isAuthorized = false
-    var messageStore: MessageStore?
-    var chatStore: ChatStore?
+    weak var store: ChatStore?
 
     func requestAuthorization() async {
         let center = UNUserNotificationCenter.current()
@@ -87,11 +86,11 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 return
             }
             Task { @MainActor in
-                _ = await messageStore?.sendMessage(text: replyText, attachments: [], to: chatID)
+                _ = await store?.sendMessage(text: replyText, attachments: [], to: chatID)
             }
         } else if !chatID.isEmpty {
             Task { @MainActor in
-                chatStore?.selectedChatID = chatID
+                store?.selectedChatID = chatID
             }
         }
 

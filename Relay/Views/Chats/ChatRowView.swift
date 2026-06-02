@@ -165,6 +165,5 @@ struct ChatRowView: View {
         ))
     }
     .environment(ChatStore())
-    .environment(MessageStore())
     .environment(SessionStore())
 }

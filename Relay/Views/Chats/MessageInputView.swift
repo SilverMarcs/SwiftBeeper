@@ -4,8 +4,6 @@ import UniformTypeIdentifiers
 
 struct MessageInputView: View {
     @Environment(ChatStore.self) private var chatStore
-    @Environment(MessageStore.self) private var messageStore
-    @Environment(RealtimeCoordinator.self) private var coordinator
 
     @State private var draftMessagesByChatID: [String: String] = [:]
     @State private var showingFilePicker = false
@@ -59,18 +57,18 @@ struct MessageInputView: View {
     private var inputView: some View {
         GlassEffectContainer {
             VStack(spacing: 0) {
-                if let messagesError = messageStore.messagesError {
+                if let messagesError = chatStore.messagesError {
                     ComposerErrorBanner(message: messagesError)
                 }
 
-                if !messageStore.pendingAttachments.isEmpty {
+                if !chatStore.pendingAttachments.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(messageStore.pendingAttachments) { pending in
+                            ForEach(chatStore.pendingAttachments) { pending in
                                 PendingAttachmentPreview(
                                     pending: pending,
-                                    isSending: messageStore.isSendingMessage,
-                                    onRemove: { messageStore.removePendingAttachment(id: pending.id) }
+                                    isSending: chatStore.isSendingMessage,
+                                    onRemove: { chatStore.removePendingAttachment(id: pending.id) }
                                 )
                             }
                         }
@@ -107,7 +105,7 @@ struct MessageInputView: View {
                     if hasActiveComposerAction {
                         Button {
                             withAnimation {
-                                messageStore.cancelComposerAction()
+                                chatStore.cancelComposerAction()
                                 if isEditing {
                                     draftMessage = ""
                                 }
@@ -141,8 +139,8 @@ struct MessageInputView: View {
                         .onSubmit {
                             handleSubmit()
                         }
-                        .onChange(of: messageStore.editingMessage?.id) { _, newValue in
-                            if let editingMessage = messageStore.editingMessage {
+                        .onChange(of: chatStore.editingMessage?.id) { _, newValue in
+                            if let editingMessage = chatStore.editingMessage {
                                 draftMessage = editingMessage.text ?? ""
                             } else if newValue == nil {
                                 draftMessage = ""
@@ -153,7 +151,7 @@ struct MessageInputView: View {
                         handleSubmit()
                     } label: {
                         Group {
-                            if messageStore.isSendingMessage {
+                            if chatStore.isSendingMessage {
                                 ProgressView()
                                     .controlSize(.small)
                             } else {
@@ -204,7 +202,7 @@ struct MessageInputView: View {
         .onChange(of: chatStore.selectedChat?.id) { _, _ in
             focusMessageField()
         }
-        .onChange(of: messageStore.activeComposerMessage?.id) { _, _ in
+        .onChange(of: chatStore.activeComposerMessage?.id) { _, _ in
             focusMessageField()
         }
         .toolbar {
@@ -225,27 +223,27 @@ struct MessageInputView: View {
     }
 
     private var isEditing: Bool {
-        messageStore.editingMessage != nil
+        chatStore.editingMessage != nil
     }
 
     private var hasActiveComposerAction: Bool {
-        messageStore.activeComposerMessage != nil
+        chatStore.activeComposerMessage != nil
     }
 
     private var messageFieldPrompt: String {
         if isEditing {
             return "Edit message"
         }
-        if messageStore.replyingToMessage != nil {
+        if chatStore.replyingToMessage != nil {
             return "Reply message"
         }
         return "Message"
     }
 
     private var sendButtonDisabled: Bool {
-        if messageStore.isSendingMessage { return true }
+        if chatStore.isSendingMessage { return true }
         if selectedChat == nil { return true }
-        return trimmedDraftMessage.isEmpty && messageStore.pendingAttachments.isEmpty
+        return trimmedDraftMessage.isEmpty && chatStore.pendingAttachments.isEmpty
     }
 
     private var trimmedDraftMessage: String {
@@ -255,8 +253,8 @@ struct MessageInputView: View {
     private var mostRecentEditableOutgoingMessage: Message? {
         guard let selectedChat else { return nil }
 
-        return messageStore.messages(for: selectedChat.id).last { message in
-            messageStore.canEdit(message, in: selectedChat)
+        return chatStore.messages(for: selectedChat.id).last { message in
+            chatStore.canEdit(message, in: selectedChat)
         }
     }
 
@@ -271,23 +269,23 @@ struct MessageInputView: View {
     private func sendMessage() {
         guard let chatID = chatStore.selectedChat?.id else { return }
         let text = trimmedDraftMessage
-        let attachments = messageStore.pendingAttachments
+        let attachments = chatStore.pendingAttachments
 
         guard !text.isEmpty || !attachments.isEmpty else { return }
         let previousDraft = draftMessage
         clearDraft(for: chatID)
-        messageStore.clearPendingAttachments()
+        chatStore.clearPendingAttachments()
 
         Task {
-            let didSend = await messageStore.sendMessage(text: text, attachments: attachments, to: chatID)
+            let didSend = await chatStore.sendMessage(text: text, attachments: attachments, to: chatID)
             if didSend {
-                await coordinator.refreshAfterMessageMutation(chatID: chatID)
+                await chatStore.refreshAfterMessageMutation(chatID: chatID)
             } else {
                 if (draftMessagesByChatID[chatID] ?? "").isEmpty {
                     draftMessagesByChatID[chatID] = previousDraft
                 }
-                if messageStore.pendingAttachments.isEmpty {
-                    messageStore.pendingAttachments = attachments
+                if chatStore.pendingAttachments.isEmpty {
+                    chatStore.pendingAttachments = attachments
                 }
             }
         }
@@ -295,20 +293,20 @@ struct MessageInputView: View {
 
     private func saveEdit() {
         let text = trimmedDraftMessage
-        let editingChatID = messageStore.editingMessage?.chatID
+        let editingChatID = chatStore.editingMessage?.chatID
         let previousDraft = draftMessage
         if let editingChatID {
             clearDraft(for: editingChatID)
         }
 
         Task {
-            let didSave = await messageStore.saveEdit(newText: text)
+            let didSave = await chatStore.saveEdit(newText: text)
             if didSave {
                 if let chatID = chatStore.selectedChat?.id {
                     clearDraft(for: chatID)
                 }
                 if let chatID = chatStore.selectedChat?.id {
-                    await coordinator.refreshAfterMessageMutation(chatID: chatID)
+                    await chatStore.refreshAfterMessageMutation(chatID: chatID)
                 }
             } else if
                 let editingChatID,
@@ -334,7 +332,7 @@ struct MessageInputView: View {
     private func editMostRecentOutgoingMessage() {
         guard let selectedChat, let message = mostRecentEditableOutgoingMessage else { return }
         withAnimation {
-            messageStore.startEditing(message, in: selectedChat)
+            chatStore.startEditing(message, in: selectedChat)
         }
         focusMessageField()
     }
@@ -349,7 +347,7 @@ struct MessageInputView: View {
             let fileName = url.lastPathComponent
             let mimeType = url.mimeType
 
-            messageStore.pendingAttachments.append(PendingAttachment(
+            chatStore.pendingAttachments.append(PendingAttachment(
                 fileData: data,
                 fileName: fileName,
                 mimeType: mimeType
@@ -374,7 +372,7 @@ struct MessageInputView: View {
             fileName = "photo.jpg"
         }
 
-        messageStore.pendingAttachments.append(PendingAttachment(
+        chatStore.pendingAttachments.append(PendingAttachment(
             fileData: data,
             fileName: fileName,
             mimeType: mimeType
