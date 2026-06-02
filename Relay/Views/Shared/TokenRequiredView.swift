@@ -5,6 +5,10 @@ struct TokenRequiredView: View {
     let systemImage: String
     let description: String
 
+    #if !os(macOS)
+    @State private var showingSettings = false
+    #endif
+
     var body: some View {
         VStack(spacing: 12) {
             ContentUnavailableView(
@@ -13,9 +17,21 @@ struct TokenRequiredView: View {
                 description: Text(description)
             )
 
+            #if os(macOS)
             SettingsLink {
                 Text("Open Settings")
             }
+            #else
+            // iOS has no Settings scene; present settings in a sheet instead.
+            Button("Open Settings") {
+                showingSettings = true
+            }
+            .sheet(isPresented: $showingSettings) {
+                NavigationStack {
+                    SettingsView()
+                }
+            }
+            #endif
         }
     }
 }

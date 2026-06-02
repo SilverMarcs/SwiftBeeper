@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct MessageRowView: View {
     @Environment(ChatStore.self) private var chatStore
@@ -284,8 +287,12 @@ struct MessageRowView: View {
     }
 
     private func copyMessageText() {
+        #if os(macOS)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(message.displayText, forType: .string)
+        #else
+        UIPasteboard.general.string = message.displayText
+        #endif
     }
 
     private func saveLabel(for attachment: Attachment, totalCount: Int) -> String {

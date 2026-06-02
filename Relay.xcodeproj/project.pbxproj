@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBC2F665F1B00950962 /* SwiftOGG */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
+		08F100000000000000000002 /* EasyMatrix.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08F100000000000000000001 /* EasyMatrix.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0865737D2F58F64E0084BD91 /* Relay.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
+		08F100000000000000000001 /* EasyMatrix.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EasyMatrix.xcframework; path = Frameworks/EasyMatrix.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -29,6 +31,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				08F100000000000000000002 /* EasyMatrix.xcframework in Frameworks */,
 				08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */,
 				08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */,
 			);
@@ -57,6 +60,7 @@
 		08A6E00E2F5975A200A2ECF4 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				08F100000000000000000001 /* EasyMatrix.xcframework */,
 				08A6E00F2F5975A200A2ECF4 /* AVKit.framework */,
 			);
 			name = Frameworks;
@@ -72,7 +76,7 @@
 				086573792F58F64E0084BD91 /* Sources */,
 				0865737A2F58F64E0084BD91 /* Frameworks */,
 				0865737B2F58F64E0084BD91 /* Resources */,
-				08E4517A1A2B3C4D5E6F0001 /* Embed EasyMatrix */,
+				08E4517A1A2B3C4D5E6F0001 /* Ensure EasyMatrix xcframework */,
 			);
 			buildRules = (
 			);
@@ -137,7 +141,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		08E4517A1A2B3C4D5E6F0001 /* Embed EasyMatrix */ = {
+		08E4517A1A2B3C4D5E6F0001 /* Ensure EasyMatrix xcframework */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -147,14 +151,14 @@
 			);
 			inputPaths = (
 			);
-			name = "Embed EasyMatrix";
+			name = "Ensure EasyMatrix xcframework";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "\"$SRCROOT/Relay/Helpers/build-and-embed-easymatrix.sh\"\n";
+			shellScript = "# The Go backend ships as a prebuilt static-library xcframework. Build it\n# once if missing; regenerate manually after Go changes with:\n#   Relay/Helpers/build-easymatrix-xcframework.sh\nif [ ! -d \"$SRCROOT/Frameworks/EasyMatrix.xcframework\" ]; then\n  \"$SRCROOT/Relay/Helpers/build-easymatrix-xcframework.sh\" all\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -338,11 +342,13 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Relay/Relay-Bridging-Header.h";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				XROS_DEPLOYMENT_TARGET = 26.2;
@@ -398,11 +404,13 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Relay/Relay-Bridging-Header.h";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				XROS_DEPLOYMENT_TARGET = 26.2;

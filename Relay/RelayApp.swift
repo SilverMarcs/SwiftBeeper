@@ -2,11 +2,13 @@ import SwiftUI
 
 @main
 struct RelayApp: App {
+    #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
     @State private var sessionStore = SessionStore()
     @State private var chatStore: ChatStore
     @State private var notificationService = NotificationService()
-    @State private var backend = EasyMatrixProcess.shared
+    @State private var backend = EasyMatrixBackend.shared
 
     init() {
         let sessionStore = SessionStore()
@@ -19,31 +21,36 @@ struct RelayApp: App {
         _sessionStore = State(initialValue: sessionStore)
         _notificationService = State(initialValue: notificationService)
         _chatStore = State(initialValue: chatStore)
-        APIClient.manageSecret = EasyMatrixProcess.shared.manageSecret
+        APIClient.manageSecret = EasyMatrixBackend.shared.manageSecret
         APIClient.tokenRefresher = { [sessionStore] in
             try await sessionStore.refreshAccessToken()
         }
     }
 
+    private var root: RootView {
+        RootView(
+            backend: backend,
+            sessionStore: sessionStore,
+            chatStore: chatStore,
+            notificationService: notificationService
+        )
+    }
+
     var body: some Scene {
+        #if os(macOS)
         Window("Relay", id: "main") {
-            BackendGate(backend: backend) {
-                ContentView()
-                    .task {
-                        await notificationService.requestAuthorization()
-                    }
-                    .environment(sessionStore)
-                    .environment(chatStore)
-            }
-            .frame(minWidth: 900, minHeight: 600)
-            .task { await backend.start() }
+            root
+                .frame(minWidth: 900, minHeight: 600)
         }
         .defaultSize(width: 1100, height: 750)
 
-        #if os(macOS)
         Settings {
             SettingsView()
                 .environment(sessionStore)
+        }
+        #else
+        WindowGroup {
+            root
         }
         #endif
     }

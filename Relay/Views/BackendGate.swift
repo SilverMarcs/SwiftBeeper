@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct BackendGate<Content: View>: View {
-    let backend: EasyMatrixProcess
+    let backend: EasyMatrixBackend
     @ViewBuilder var content: () -> Content
 
     var body: some View {

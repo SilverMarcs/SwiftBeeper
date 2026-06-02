@@ -60,11 +60,31 @@ struct FileAttachmentView: View {
     }
 
     private var fileIcon: some View {
+        #if os(macOS)
         Image(nsImage: NSWorkspace.shared.icon(for: utType))
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 32, height: 32)
+        #else
+        // iOS has no NSWorkspace file-type icon API; map the UTType to an SF Symbol.
+        Image(systemName: symbolName(for: utType))
+            .font(.title)
+            .frame(width: 32, height: 32)
+            .foregroundStyle(.secondary)
+        #endif
     }
+
+    #if !os(macOS)
+    private func symbolName(for type: UTType) -> String {
+        if type.conforms(to: .image) { return "photo" }
+        if type.conforms(to: .movie) || type.conforms(to: .video) { return "film" }
+        if type.conforms(to: .audio) { return "music.note" }
+        if type.conforms(to: .pdf) { return "doc.richtext" }
+        if type.conforms(to: .archive) || type.conforms(to: .zip) { return "doc.zipper" }
+        if type.conforms(to: .text) { return "doc.text" }
+        return "doc"
+    }
+    #endif
 
     private var utType: UTType {
         if let mime = attachment.mimeType,

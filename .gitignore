@@ -2,3 +2,7 @@ SwiftTerminal/Claude/Bridge/node_modules/
 node_modules
 run.sh
 build.sh
+
+# EasyMatrix Go backend — large prebuilt artifact, regenerate with
+# Relay/Helpers/build-easymatrix-xcframework.sh
+Frameworks/EasyMatrix.xcframework/
