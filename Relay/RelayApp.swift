@@ -2,7 +2,9 @@ import SwiftUI
 
 @main
 struct RelayApp: App {
+    #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
     @State private var sessionStore = SessionStore()
     @State private var chatStore = ChatStore()
     @State private var messageStore = MessageStore()
@@ -37,21 +39,16 @@ struct RelayApp: App {
     }
 
     var body: some Scene {
+        #if os(macOS)
         Window("Relay", id: "main") {
-            BackendGate(backend: backend) {
-                ContentView()
-                    .task {
-                        await notificationService.requestAuthorization()
-                    }
-                    .environment(sessionStore)
-                    .environment(chatStore)
-                    .environment(messageStore)
-                    .environment(coordinator)
-            }
-            .frame(minWidth: 900, minHeight: 600)
-            .task { await backend.start() }
+            mainView
         }
         .defaultSize(width: 1100, height: 750)
+        #else
+        WindowGroup {
+            mainView
+        }
+        #endif
 
         #if os(macOS)
         Settings {
@@ -60,4 +57,23 @@ struct RelayApp: App {
         }
         #endif
     }
+
+    @ViewBuilder
+    private var mainView: some View {
+        BackendGate(backend: backend) {
+            ContentView()
+                .task {
+                    await notificationService.requestAuthorization()
+                }
+                .environment(sessionStore)
+                .environment(chatStore)
+                .environment(messageStore)
+                .environment(coordinator)
+        }
+        #if os(macOS)
+        .frame(minWidth: 900, minHeight: 600)
+        #endif
+        .task { await backend.start() }
+    }
 }
+

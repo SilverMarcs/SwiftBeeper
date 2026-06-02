@@ -1,5 +1,5 @@
 {
-  "originHash" : "0aca42927c408606bdd3e9f6d268653e5937105435374fe27ca91938bc50d571",
+  "originHash" : "a5527d73cb09d2dcc6bc6e45759e0d112fe557a006edfbac0c14650d5d99f7a8",
   "pins" : [
     {
       "identity" : "ogg-swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "9d82ed838404f10b607a1a1689f404563e9115c3",
         "version" : "0.8.3"
+      }
+    },
+    {
+      "identity" : "olm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://gitlab.matrix.org/matrix-org/olm.git",
+      "state" : {
+        "revision" : "7e0c8277032e40308987257b711b38af8d77cc69",
+        "version" : "3.2.16"
       }
     },
     {

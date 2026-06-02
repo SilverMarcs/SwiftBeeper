@@ -101,6 +101,39 @@ enum APIClient {
 
     @discardableResult
     static func sendRaw(_ request: URLRequest) async throws -> Data {
+        #if !os(macOS)
+        if EasyMatrixFFI.shared.isStarted {
+            guard let (data, response) = await EasyMatrixFFI.shared.handleRequest(request) else {
+                throw APIError.invalidResponse
+            }
+            
+            if response.statusCode == 401,
+               request.url?.path.hasPrefix("/v1/") == true,
+               let refresher = tokenRefresher {
+                do {
+                    let newToken = try await refresher()
+                    var retry = request
+                    retry.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                    guard let (retryData, retryResponse) = await EasyMatrixFFI.shared.handleRequest(retry) else {
+                        throw APIError.invalidResponse
+                    }
+                    guard (200 ... 299).contains(retryResponse.statusCode) else {
+                        throw APIError.http(statusCode: retryResponse.statusCode, details: parseErrorMessage(from: retryData))
+                    }
+                    return retryData
+                } catch {
+                    // refresh failed — fall through and surface the original 401
+                }
+            }
+            
+            guard (200 ... 299).contains(response.statusCode) else {
+                throw APIError.http(statusCode: response.statusCode, details: parseErrorMessage(from: data))
+            }
+            
+            return data
+        }
+        #endif
+
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {

@@ -38,6 +38,45 @@ if [ -z "$LIBOLM_PREFIX" ] || [ ! -f "$LIBOLM_PREFIX/include/olm/olm.h" ]; then
 fi
 
 EASYMATRIX_DIR="$SRCROOT/../EasyMatrix"
+
+if [ "${PLATFORM_NAME:-macosx}" = "iphonesimulator" ] || [ "${PLATFORM_NAME:-macosx}" = "iphoneos" ]; then
+    echo "Platform is iOS ($PLATFORM_NAME) — compiling in-process static Go FFI library..."
+    
+    ARCH="${CURRENT_ARCH:-arm64}"
+    if [ "$ARCH" = "undefined_arch" ] || [ -z "$ARCH" ]; then
+        # fallback to standard architecture
+        if [ "$PLATFORM_NAME" = "iphonesimulator" ]; then
+            ARCH="x86_64" # default simulator arch on some Intel Macs or universal
+        else
+            ARCH="arm64"
+        fi
+    fi
+    
+    # Check if target is arm64 simulator on Apple Silicon
+    if [ "$PLATFORM_NAME" = "iphonesimulator" ] && [ "$(uname -m)" = "arm64" ]; then
+        ARCH="arm64"
+    fi
+    
+    export CGO_ENABLED=1
+    export SDK_PATH="$(xcrun --sdk "$PLATFORM_NAME" --show-sdk-path)"
+    
+    if [ "$PLATFORM_NAME" = "iphonesimulator" ]; then
+        TARGET_FLAG="-target ${ARCH}-apple-ios15.0-simulator"
+    else
+        TARGET_FLAG="-target ${ARCH}-apple-ios15.0"
+    fi
+    
+    export CGO_CFLAGS="-isysroot $SDK_PATH -miphoneos-version-min=15.0 $TARGET_FLAG -I${LIBOLM_PREFIX}/include"
+    export CGO_LDFLAGS="-isysroot $SDK_PATH -miphoneos-version-min=15.0 $TARGET_FLAG -L${LIBOLM_PREFIX}/lib -lolm"
+    
+    cd "$EASYMATRIX_DIR"
+    echo "Executing Go FFI compile for iOS ($PLATFORM_NAME, $ARCH) into $TARGET_BUILD_DIR..."
+    GOOS=ios GOARCH="$ARCH" "$GO_BIN" build -buildmode=c-archive -o "$TARGET_BUILD_DIR/libeasymatrix.a" ./cmd/ffi
+    
+    echo "Static FFI library successfully built for iOS!"
+    exit 0
+fi
+
 HELPERS_DIR="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
 FRAMEWORKS_DIR="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Frameworks"
 

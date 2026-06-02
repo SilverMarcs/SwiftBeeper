@@ -25,6 +25,7 @@ final class RealtimeService {
         stop()
         realtimeConnectionID = UUID()
 
+        #if os(macOS)
         let webSocketTask = APIClient.makeWebSocketTask()
         self.webSocketTask = webSocketTask
         webSocketTask.resume()
@@ -34,9 +35,23 @@ final class RealtimeService {
             guard let self else { return }
             await self.listenForEvents(connectionID: connectionID)
         }
+        #else
+        EasyMatrixFFI.realtimeCallback = { [weak self] payload in
+            guard let self else { return }
+            guard let data = payload.data(using: .utf8) else { return }
+            Task { @MainActor in
+                await self.handleWebSocketPayload(data)
+            }
+        }
+        
+        Task { @MainActor in
+            await self.handleWebSocketPayload("{\"type\":\"ready\"}".data(using: .utf8))
+        }
+        #endif
     }
 
     func stop() {
+        #if os(macOS)
         webSocketListenerTask?.cancel()
         reconnectTask?.cancel()
 
@@ -45,6 +60,9 @@ final class RealtimeService {
 
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
+        #else
+        EasyMatrixFFI.realtimeCallback = nil
+        #endif
     }
 
     // MARK: - Private
@@ -103,8 +121,6 @@ final class RealtimeService {
     }
 
     private func sendSubscriptionsAllChats() async {
-        guard let webSocketTask else { return }
-
         let command = SubscriptionsSetCommand(
             requestID: "subscriptions-\(UUID().uuidString)",
             chatIDs: ["*"]
@@ -112,7 +128,14 @@ final class RealtimeService {
 
         do {
             let payload = try JSONEncoder().encode(command)
+            #if os(macOS)
+            guard let webSocketTask else { return }
             try await webSocketTask.send(.data(payload))
+            #else
+            if let payloadString = String(data: payload, encoding: .utf8) {
+                _ = EasyMatrixFFI.shared.sendRealtimeCommand(payloadString)
+            }
+            #endif
         } catch {
             eventHandler?.realtimeDidReceiveError("Could not set realtime subscriptions: \(error.localizedDescription)")
         }

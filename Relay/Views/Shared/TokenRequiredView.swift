@@ -13,9 +13,11 @@ struct TokenRequiredView: View {
                 description: Text(description)
             )
 
+            #if os(macOS)
             SettingsLink {
                 Text("Open Settings")
             }
+            #endif
         }
     }
 }

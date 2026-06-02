@@ -20,7 +20,9 @@ struct BackendGate<Content: View>: View {
     private func loadingView(_ title: String) -> some View {
         ProgressView(title)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #if os(macOS)
             .modifier(HiddenToolbarModifier())
+        #endif
     }
 
     private func crashedView(message: String) -> some View {
@@ -35,6 +37,8 @@ struct BackendGate<Content: View>: View {
             .controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(HiddenToolbarModifier())
+        #if os(macOS)
+            .modifier(HiddenToolbarModifier())
+        #endif
     }
 }

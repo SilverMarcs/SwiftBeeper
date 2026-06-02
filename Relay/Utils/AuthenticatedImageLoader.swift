@@ -30,10 +30,7 @@ enum AuthenticatedImageLoader {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                return nil
-            }
+            let data = try await APIClient.sendRaw(request)
             return makeImage(from: data)
         } catch {
             return nil
@@ -44,10 +41,7 @@ enum AuthenticatedImageLoader {
         guard let request = buildRequest(for: urlString) else { return nil }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                return nil
-            }
+            let data = try await APIClient.sendRaw(request)
 
             let tempDir = FileManager.default.temporaryDirectory
             let fileName = "beeper-\(UUID().uuidString).\(fileExtension)"

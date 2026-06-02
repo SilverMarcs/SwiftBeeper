@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Observation
 import OSLog
@@ -248,3 +249,71 @@ enum BackendError: LocalizedError {
         }
     }
 }
+#else
+import Foundation
+import Observation
+import OSLog
+
+@MainActor
+@Observable
+final class EasyMatrixProcess {
+    static let shared = EasyMatrixProcess()
+
+    enum State: Equatable {
+        case idle
+        case starting
+        case ready
+        case stopping
+        case crashed(String)
+    }
+
+    private(set) var state: State = .idle
+    let manageSecret: String = UUID().uuidString
+
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Relay", category: "EasyMatrixProcess")
+
+    private init() {}
+
+    func start() async {
+        if state == .ready || state == .starting { return }
+        state = .starting
+        
+        let success = await EasyMatrixFFI.shared.start()
+        if success {
+            state = .ready
+        } else {
+            state = .crashed("Failed to start in-process EasyMatrix FFI engine.")
+        }
+    }
+
+    var isRunning: Bool {
+        EasyMatrixFFI.shared.isStarted
+    }
+
+    func stop() async {
+        EasyMatrixFFI.shared.stop()
+        state = .idle
+    }
+}
+
+enum BackendError: LocalizedError {
+    case binaryMissing(String)
+    case exited(status: Int32)
+    case timeout(String?)
+
+    var errorDescription: String? {
+        switch self {
+        case .binaryMissing(let path):
+            return "Embedded backend not found at \(path)."
+        case .exited(let status):
+            return "Backend exited before becoming ready (status \(status))."
+        case .timeout(let detail):
+            if let detail, !detail.isEmpty {
+                return "Backend did not respond within 15 s: \(detail)"
+            }
+            return "Backend did not respond within 15 s."
+        }
+    }
+}
+#endif
+

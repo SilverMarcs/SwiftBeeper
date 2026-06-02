@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import UniformTypeIdentifiers
 
 struct ChatDetailView: View {
@@ -11,6 +12,190 @@ struct ChatDetailView: View {
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
     private let bottomAnchorID = "bottom-id"
+
+    // iPhone Searchable Input View States
+    @State private var searchText = ""
+    @State private var isSearchActive = false
+    @State private var draftsByChatID: [String: String] = [:]
+    @State private var showingFilePicker = false
+    @State private var showingPhotoPicker = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+
+    @ViewBuilder
+    private func makeMainContent(
+        selectedChat: Chat,
+        messages: [Message],
+        timelineEntries: [TimelineEntry],
+        activeComposerMessageID: String?,
+        readIndicatorMessageID: String?
+    ) -> some View {
+        ScrollViewReader { proxy in
+            List {
+                if messageStore.hasMoreMessages(for: selectedChat.id) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+                        .onAppear {
+                            guard !messageStore.isLoadingOlderMessages else { return }
+                            loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
+                        }
+                }
+
+                ForEach(timelineEntries) { entry in
+                    if entry.message.id == firstUnreadID {
+                        UnreadDividerView()
+                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
+                    }
+
+                    if entry.showsTimestamp {
+                        TimestampDividerView(timestamp: entry.message.timestamp)
+                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 6, trailing: 10))
+                    }
+
+                    MessageRowView(
+                        message: entry.message,
+                        chat: selectedChat,
+                        showReadIndicator: entry.message.id == readIndicatorMessageID,
+                        isFirstInGroup: entry.isFirstInGroup,
+                        isLastInGroup: entry.isLastInGroup,
+                        onTapLinkedMessage: { linkedID in
+                            scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                        }
+                    )
+                    .modifier(
+                        TimelineFocusEffect(
+                            isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
+                        )
+                    )
+                    .id(entry.message.id)
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button("Reply", systemImage: "arrowshape.turn.up.left") {
+                            withAnimation {
+                                messageStore.setReplyTo(entry.message)
+                            }
+                        }
+                        .tint(.accentColor)
+                        .labelStyle(.iconOnly)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !entry.message.isEmptyDeleted && entry.message.isOutgoing(in: selectedChat) {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                Task {
+                                    await messageStore.deleteMessage(entry.message.id, in: selectedChat.id)
+                                }
+                            }
+                            .labelStyle(.iconOnly)
+                        }
+
+                        if messageStore.canEdit(entry.message, in: selectedChat) {
+                            Button("Edit", systemImage: "pencil") {
+                                withAnimation {
+                                    messageStore.startEditing(entry.message, in: selectedChat)
+                                }
+                            }
+                            .tint(.orange)
+                            .labelStyle(.iconOnly)
+                        }
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2  , trailing: 10))
+                }
+
+                Color.clear
+                    .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                    .listRowInsets(.init())
+                    .id(bottomAnchorID)
+            }
+            .task(id: selectedChat.id) {
+                isPreparingInitialScroll = true
+                firstUnreadID = nil
+                coordinator.setSelectedChatID(selectedChat.id)
+                messageStore.setReplyTo(nil)
+                messageStore.cancelEditing()
+                async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
+                async let messagesLoad = messageStore.loadMessages(for: selectedChat.id)
+                let _ = await messagesLoad
+                firstUnreadID = firstUnreadMessageID(messages: messageStore.messages(for: selectedChat.id), chat: selectedChat)
+                try? await Task.sleep(for: .milliseconds(50))
+                scrollToBottom(with: proxy, animated: false)
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled else { return }
+                isPreparingInitialScroll = false
+                await detail
+            }
+            .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
+                guard !isPreparingInitialScroll else { return }
+                guard newTracker.count > oldTracker.count else { return }
+                guard newTracker.lastID != oldTracker.lastID else { return }
+
+                firstUnreadID = nil
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(50))
+                    scrollToBottom(with: proxy, animated: true)
+                }
+            }
+            .onChange(of: activeComposerMessageID) { _, newValue in
+                guard let newValue else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(newValue, anchor: .center)
+                }
+            }
+            .listStyle(.plain)
+            .animation(.default, value: activeComposerMessageID)
+            .navigationTitle(selectedChat.displayTitle)
+            .navigationSubtitle(navigationSubtitle(for: selectedChat))
+            .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    if selectedChat.isSingleChat, let other = selectedChat.otherParticipant {
+                        Button {
+                            profileSheetParticipant = other
+                        } label: {
+                            ChatAvatarView(chat: selectedChat, dimension: 28)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        ChatAvatarView(chat: selectedChat, dimension: 28)
+                    }
+                }
+                .sharedBackgroundVisibility(.hidden)
+
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingChatInfo = true
+                    } label: {
+                        Label("Chat Info", systemImage: "info")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingChatInfo) {
+                ChatInfoSheet(chat: selectedChat)
+            }
+            .sheet(item: $profileSheetParticipant) { participant in
+                ParticipantProfileSheet(participant: participant)
+            }
+            .overlay {
+                if isPreparingInitialScroll {
+                    ZStack {
+                        Rectangle()
+                            .fill(.background)
+                        ProgressView()
+                            .controlSize(.large)
+                    }
+                    .ignoresSafeArea(edges: .vertical)
+                }
+            }
+            .onDrop(of: [.item], isTargeted: nil) { providers in
+                handleDrop(providers)
+            }
+        }
+    }
 
     var body: some View {
         if sessionStore.accessToken.isEmpty {
@@ -25,176 +210,98 @@ struct ChatDetailView: View {
             let activeComposerMessageID = messageStore.activeComposerMessage?.id
             let readIndicatorMessageID = lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
 
-            ScrollViewReader { proxy in
-                List {
-                    if messageStore.hasMoreMessages(for: selectedChat.id) {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
-                            .onAppear {
-                                guard !messageStore.isLoadingOlderMessages else { return }
-                                loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
-                            }
+            let mainContent = makeMainContent(
+                selectedChat: selectedChat,
+                messages: messages,
+                timelineEntries: timelineEntries,
+                activeComposerMessageID: activeComposerMessageID,
+                readIndicatorMessageID: readIndicatorMessageID
+            )
+
+            if isIPhone {
+                mainContent
+                    .searchable(
+                        text: $searchText,
+                        isPresented: $isSearchActive,
+                        prompt: "Message"
+                    )
+                    .searchPresentationToolbarBehavior(.avoidHidingContent)
+                    .onSubmit(of: .search) {
+                        sendiPhoneMessage(chatID: selectedChat.id)
                     }
-
-                    ForEach(timelineEntries) { entry in
-                        if entry.message.id == firstUnreadID {
-                            UnreadDividerView()
-                                .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
-                        }
-
-                        if entry.showsTimestamp {
-                            TimestampDividerView(timestamp: entry.message.timestamp)
-                                .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 6, trailing: 10))
-                        }
-
-                        MessageRowView(
-                            message: entry.message,
-                            chat: selectedChat,
-                            showReadIndicator: entry.message.id == readIndicatorMessageID,
-                            isFirstInGroup: entry.isFirstInGroup,
-                            isLastInGroup: entry.isLastInGroup,
-                            onTapLinkedMessage: { linkedID in
-                                scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
-                            }
-                        )
-                        .modifier(
-                            TimelineFocusEffect(
-                                isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
-                            )
-                        )
-                        .id(entry.message.id)
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            Button("Reply", systemImage: "arrowshape.turn.up.left") {
-                                withAnimation {
-                                    messageStore.setReplyTo(entry.message)
+                    .toolbar {
+                        if isSearchActive && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Send") {
+                                    sendiPhoneMessage(chatID: selectedChat.id)
                                 }
-                            }
-                            .tint(.accentColor)
-                            .labelStyle(.iconOnly)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if !entry.message.isEmptyDeleted && entry.message.isOutgoing(in: selectedChat) {
-                                Button("Delete", systemImage: "trash", role: .destructive) {
-                                    Task {
-                                        await messageStore.deleteMessage(entry.message.id, in: selectedChat.id)
-                                    }
-                                }
-                                .labelStyle(.iconOnly)
-                            }
-
-                            if messageStore.canEdit(entry.message, in: selectedChat) {
-                                Button("Edit", systemImage: "pencil") {
-                                    withAnimation {
-                                        messageStore.startEditing(entry.message, in: selectedChat)
-                                    }
-                                }
-                                .tint(.orange)
-                                .labelStyle(.iconOnly)
+                                .bold()
                             }
                         }
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2  , trailing: 10))
-                    }
 
-                    Color.clear
-                        .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-                        .listRowInsets(.init())
-                        .id(bottomAnchorID)
-                }
-                .task(id: selectedChat.id) {
-                    isPreparingInitialScroll = true
-                    firstUnreadID = nil
-                    coordinator.setSelectedChatID(selectedChat.id)
-                    messageStore.setReplyTo(nil)
-                    messageStore.cancelEditing()
-                    async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
-                    async let messagesLoad = messageStore.loadMessages(for: selectedChat.id)
-                    let _ = await messagesLoad
-                    firstUnreadID = firstUnreadMessageID(messages: messageStore.messages(for: selectedChat.id), chat: selectedChat)
-                    try? await Task.sleep(for: .milliseconds(50))
-                    scrollToBottom(with: proxy, animated: false)
-                    try? await Task.sleep(for: .milliseconds(100))
-                    guard !Task.isCancelled else { return }
-                    isPreparingInitialScroll = false
-                    await detail
-                }
-                .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
-                    guard !isPreparingInitialScroll else { return }
-                    guard newTracker.count > oldTracker.count else { return }
-                    guard newTracker.lastID != oldTracker.lastID else { return }
+                        ToolbarItem(placement: .bottomBar) {
+                            Menu {
+                                Button {
+                                    showingPhotoPicker = true
+                                } label: {
+                                    Label("Photos Library", systemImage: "photo.on.rectangle.angled")
+                                }
 
-                    firstUnreadID = nil
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(50))
-                        scrollToBottom(with: proxy, animated: true)
-                    }
-                }
-                .onChange(of: activeComposerMessageID) { _, newValue in
-                    guard let newValue else { return }
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(newValue, anchor: .center)
-                    }
-                }
-                .listStyle(.plain)
-                .animation(.default, value: activeComposerMessageID)
-                .navigationTitle(selectedChat.displayTitle)
-                .navigationSubtitle(navigationSubtitle(for: selectedChat))
-                .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
-                .toolbar {
-                    ToolbarItem(placement: .navigation) {
-                        if selectedChat.isSingleChat, let other = selectedChat.otherParticipant {
-                            Button {
-                                profileSheetParticipant = other
+                                Button {
+                                    showingFilePicker = true
+                                } label: {
+                                    Label("Attach Files", systemImage: "paperclip")
+                                }
                             } label: {
-                                ChatAvatarView(chat: selectedChat, dimension: 28)
+                                Image(systemName: "plus")
                             }
-                            .buttonStyle(.plain)
-                        } else {
-                            ChatAvatarView(chat: selectedChat, dimension: 28)
                         }
-                    }
-                    .sharedBackgroundVisibility(.hidden)
 
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            showingChatInfo = true
-                        } label: {
-                            Label("Chat Info", systemImage: "info")
+                        ToolbarSpacer(.fixed, placement: .bottomBar)
+
+                        DefaultToolbarItem(kind: .search, placement: .bottomBar)
+
+                        ToolbarSpacer(.fixed, placement: .bottomBar)
+                    }
+                    .fileImporter(
+                        isPresented: $showingFilePicker,
+                        allowedContentTypes: [.item]
+                    ) { result in
+                        handleFileImport(result)
+                    }
+                    .photosPicker(
+                        isPresented: $showingPhotoPicker,
+                        selection: $selectedPhotoItems,
+                        matching: .any(of: [.images, .videos])
+                    )
+                    .onChange(of: selectedPhotoItems) { _, newItems in
+                        guard !newItems.isEmpty else { return }
+                        Task {
+                            for item in newItems {
+                                await handlePhotoPick(item)
+                            }
+                        }
+                        selectedPhotoItems = []
+                    }
+                    .onChange(of: selectedChat.id) { oldID, newID in
+                        draftsByChatID[oldID] = searchText
+                        searchText = draftsByChatID[newID] ?? ""
+                    }
+                    .safeAreaBar(edge: .bottom, spacing: 0) {
+                        if selectedChat.cannotMessage == true {
+                            cannotMessageView
+                        } else {
+                            iPhonePendingAttachmentsView
                         }
                     }
-                }
-                .sheet(isPresented: $showingChatInfo) {
-                    ChatInfoSheet(chat: selectedChat)
-                }
-                .sheet(item: $profileSheetParticipant) { participant in
-                    ParticipantProfileSheet(participant: participant)
-                }
-                .overlay {
-                    if isPreparingInitialScroll {
-                        ZStack {
-                            Rectangle()
-                                .fill(.background)
-                            ProgressView()
-                                .controlSize(.large)
-                        }
-                        .ignoresSafeArea(edges: .vertical)
+            } else {
+                mainContent
+                    .safeAreaBar(edge: .bottom, spacing: 0) {
+                        MessageInputView()
                     }
-                }
-                .onDrop(of: [.item], isTargeted: nil) { providers in
-                    handleDrop(providers)
-                }
-                .safeAreaBar(edge: .bottom, spacing: 0) {
-                    MessageInputView()
-                }
             }
         } else {
+
             ContentUnavailableView(
                 "Pick a Chat",
                 systemImage: "list.bullet",
@@ -205,6 +312,110 @@ struct ChatDetailView: View {
                 isPreparingInitialScroll = false
             }
         }
+    }
+
+    private var cannotMessageView: some View {
+        Text("You can't message this person")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .glassEffect()
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var iPhonePendingAttachmentsView: some View {
+        if !messageStore.pendingAttachments.isEmpty {
+            HStack {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(messageStore.pendingAttachments) { pending in
+                            PendingAttachmentPreview(
+                                pending: pending,
+                                isSending: messageStore.isSendingMessage,
+                                onRemove: { messageStore.removePendingAttachment(id: pending.id) }
+                            )
+                        }
+                    }
+                }
+
+                if let selectedChatID = chatStore.selectedChat?.id {
+                    Button {
+                        sendiPhoneMessage(chatID: selectedChatID)
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .glassEffect()
+        }
+    }
+
+    private func sendiPhoneMessage(chatID: String) {
+        let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachments = messageStore.pendingAttachments
+        
+        guard !text.isEmpty || !attachments.isEmpty else { return }
+        
+        searchText = ""
+        isSearchActive = false
+        messageStore.clearPendingAttachments()
+        
+        Task {
+            let didSend = await messageStore.sendMessage(text: text, attachments: attachments, to: chatID)
+            if didSend {
+                await coordinator.refreshAfterMessageMutation(chatID: chatID)
+            }
+        }
+    }
+
+    private func handleFileImport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            guard url.startAccessingSecurityScopedResource() else { return }
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            guard let data = try? Data(contentsOf: url) else { return }
+            let fileName = url.lastPathComponent
+            let mimeType = url.mimeType
+
+            messageStore.pendingAttachments.append(PendingAttachment(
+                fileData: data,
+                fileName: fileName,
+                mimeType: mimeType
+            ))
+        case .failure:
+            break
+        }
+    }
+
+    private func handlePhotoPick(_ item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+
+        let mimeType: String
+        let fileName: String
+
+        if let contentType = item.supportedContentTypes.first {
+            mimeType = contentType.preferredMIMEType ?? "application/octet-stream"
+            let ext = contentType.preferredFilenameExtension ?? "bin"
+            fileName = "photo.\(ext)"
+        } else {
+            mimeType = "image/jpeg"
+            fileName = "photo.jpg"
+        }
+
+        messageStore.pendingAttachments.append(PendingAttachment(
+            fileData: data,
+            fileName: fileName,
+            mimeType: mimeType
+        ))
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {

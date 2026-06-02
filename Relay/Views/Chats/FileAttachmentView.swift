@@ -60,11 +60,31 @@ struct FileAttachmentView: View {
     }
 
     private var fileIcon: some View {
+        #if os(macOS)
         Image(nsImage: NSWorkspace.shared.icon(for: utType))
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 32, height: 32)
+        #else
+        Image(systemName: systemIconName(for: utType))
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 32, height: 32)
+            .foregroundStyle(.secondary)
+        #endif
     }
+
+    #if !os(macOS)
+    private func systemIconName(for type: UTType) -> String {
+        if type.conforms(to: .pdf) { return "doc.richtext" }
+        if type.conforms(to: .zip) { return "doc.zipper" }
+        if type.conforms(to: .text) { return "doc.plaintext" }
+        if type.conforms(to: .audio) { return "waveform" }
+        if type.conforms(to: .image) { return "photo" }
+        if type.conforms(to: .movie) { return "video" }
+        return "doc.fill"
+    }
+    #endif
 
     private var utType: UTType {
         if let mime = attachment.mimeType,

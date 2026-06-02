@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBC2F665F1B00950962 /* SwiftOGG */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
+		08B981832FCE1A1300276CAA /* libolm in Frameworks */ = {isa = PBXBuildFile; productRef = 08E4517B1A2B3C4D5E6F0002 /* libolm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -16,9 +17,23 @@
 		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		08C5C2DD2FCE8F4B0002F97A /* Exceptions for "Relay" folder in "Relay" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			platformFiltersByRelativePath = {
+				AppDelegate.swift = (macos, );
+				Views/Shared/HiddenToolbarModifier.swift = (macos, );
+			};
+			target = 0865737C2F58F64E0084BD91 /* Relay */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0865737F2F58F64E0084BD91 /* Relay */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				08C5C2DD2FCE8F4B0002F97A /* Exceptions for "Relay" folder in "Relay" target */,
+			);
 			path = Relay;
 			sourceTree = "<group>";
 		};
@@ -29,6 +44,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				08B981832FCE1A1300276CAA /* libolm in Frameworks */,
 				08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */,
 				08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */,
 			);
@@ -69,10 +85,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "Relay" */;
 			buildPhases = (
+				08E4517A1A2B3C4D5E6F0001 /* Embed EasyMatrix */,
 				086573792F58F64E0084BD91 /* Sources */,
 				0865737A2F58F64E0084BD91 /* Frameworks */,
 				0865737B2F58F64E0084BD91 /* Resources */,
-				08E4517A1A2B3C4D5E6F0001 /* Embed EasyMatrix */,
 			);
 			buildRules = (
 			);
@@ -84,6 +100,7 @@
 			name = Relay;
 			packageProductDependencies = (
 				08974BBC2F665F1B00950962 /* SwiftOGG */,
+				08E4517B1A2B3C4D5E6F0002 /* libolm */,
 			);
 			productName = Relay;
 			productReference = 0865737D2F58F64E0084BD91 /* Relay.app */;
@@ -115,6 +132,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */,
+				08E4517A1A2B3C4D5E6F0002 /* XCRemoteSwiftPackageReference "olm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0865737E2F58F64E0084BD91 /* Products */;
@@ -176,7 +194,7 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
@@ -240,7 +258,7 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
@@ -298,8 +316,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = J52QUTREBS;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -312,7 +330,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Relay;
@@ -333,18 +351,21 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = "-leasymatrix";
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-leasymatrix";
 				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.SwiftBeeper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Debug;
@@ -358,8 +379,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = J52QUTREBS;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -372,7 +393,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Relay;
@@ -393,18 +414,21 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = "-leasymatrix";
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-leasymatrix";
 				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.SwiftBeeper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Release;
@@ -441,6 +465,14 @@
 				minimumVersion = 0.0.3;
 			};
 		};
+		08E4517A1A2B3C4D5E6F0002 /* XCRemoteSwiftPackageReference "olm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://gitlab.matrix.org/matrix-org/olm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.2.16;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -448,6 +480,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */;
 			productName = SwiftOGG;
+		};
+		08E4517B1A2B3C4D5E6F0002 /* libolm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 08E4517A1A2B3C4D5E6F0002 /* XCRemoteSwiftPackageReference "olm" */;
+			productName = libolm;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

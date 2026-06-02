@@ -283,8 +283,12 @@ struct MessageRowView: View {
     }
 
     private func copyMessageText() {
+        #if os(macOS)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(message.displayText, forType: .string)
+        #else
+        UIPasteboard.general.string = message.displayText
+        #endif
     }
 
     private func saveLabel(for attachment: Attachment, totalCount: Int) -> String {
@@ -300,9 +304,7 @@ struct MessageRowView: View {
               let request = AuthenticatedImageLoader.buildRequest(for: urlString) else { return }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return }
-
+            let data = try await APIClient.sendRaw(request)
             guard let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
 
             let destination = uniqueDestination(in: downloadsDir, for: attachment)
