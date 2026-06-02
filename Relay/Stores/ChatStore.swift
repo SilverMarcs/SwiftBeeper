@@ -79,27 +79,26 @@ final class ChatStore {
         )
     }
 
-    private var chatListState: ChatListState {
-        get {
-            ChatListState(
-                chats: chats,
-                selectedChatID: selectedChatID,
-                chatsCursor: chatsCursor,
-                hasMoreChats: hasMoreChats,
-                lowPriorityChatIDs: lowPriorityChatIDs,
-                lastLoadedInboxFilter: lastLoadedInboxFilter,
-                chatsError: chatsError
-            )
-        }
-        set {
-            setChats(newValue.chats)
-            selectedChatID = newValue.selectedChatID
-            chatsCursor = newValue.chatsCursor
-            hasMoreChats = newValue.hasMoreChats
-            lowPriorityChatIDs = newValue.lowPriorityChatIDs
-            lastLoadedInboxFilter = newValue.lastLoadedInboxFilter
-            chatsError = newValue.chatsError
-        }
+    private func captureListState() -> ChatListState {
+        ChatListState(
+            chats: chats,
+            selectedChatID: selectedChatID,
+            chatsCursor: chatsCursor,
+            hasMoreChats: hasMoreChats,
+            lowPriorityChatIDs: lowPriorityChatIDs,
+            lastLoadedInboxFilter: lastLoadedInboxFilter,
+            chatsError: chatsError
+        )
+    }
+
+    private func restoreListState(_ state: ChatListState) {
+        setChats(state.chats)
+        selectedChatID = state.selectedChatID
+        chatsCursor = state.chatsCursor
+        hasMoreChats = state.hasMoreChats
+        lowPriorityChatIDs = state.lowPriorityChatIDs
+        lastLoadedInboxFilter = state.lastLoadedInboxFilter
+        chatsError = state.chatsError
     }
 
     private func setChats(_ newChats: [Chat]) {
@@ -185,7 +184,20 @@ final class ChatStore {
     }
 
     func clearState() {
-        chatListState = .empty
+        restoreListState(.empty)
+    }
+
+    /// Removes a chat locally in response to a realtime `chat.deleted` event,
+    /// without refetching the whole list.
+    func removeChatLocally(_ chatID: String) {
+        setChats(chats.filter { $0.id != chatID })
+        if var results = searchResults {
+            results.removeAll { $0.id == chatID }
+            searchResults = results
+        }
+        if selectedChatID == chatID {
+            selectedChatID = chats.first?.id
+        }
     }
 
     func loadChats() async {
@@ -194,11 +206,11 @@ final class ChatStore {
 
     private func performLoadChats(retriesRemaining: Int) async {
         guard !APIClient.accessToken.isEmpty else {
-            chatListState = .empty
+            restoreListState(.empty)
             return
         }
 
-        let snapshot = chatListState
+        let snapshot = captureListState()
         let shouldPreserveExistingChats = lastLoadedInboxFilter == selectedInboxFilter
         let tokenAtStart = APIClient.accessToken
 
@@ -265,7 +277,7 @@ final class ChatStore {
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
                 return
             }
-            chatListState = snapshot
+            restoreListState(snapshot)
             chatsError = error.localizedDescription
             if case APIError.http(401, _) = error {
                 chatsErrorIsAuth = true
@@ -366,12 +378,12 @@ final class ChatStore {
         guard !APIClient.accessToken.isEmpty else { return }
 
         let previous = chatsByID[chatID]
-        updateChat(chatID) { $0.with(isMuted: muted) }
+        updateChat(chatID) { $0.isMuted = muted }
 
         do {
             try await APIClient.muteChat(chatID: chatID, muted: muted)
         } catch {
-            if let previous { updateChat(chatID) { _ in previous } }
+            if let previous { updateChat(chatID) { $0 = previous } }
             chatsError = error.localizedDescription
         }
     }
@@ -382,26 +394,25 @@ final class ChatStore {
         guard !APIClient.accessToken.isEmpty else { return }
 
         let previous = chatsByID[chatID]
-        updateChat(chatID) { $0.with(unreadCount: 0) }
+        updateChat(chatID) { $0.unreadCount = 0 }
 
         do {
             try await APIClient.markChatAsRead(chatID: chatID)
         } catch {
-            if let previous { updateChat(chatID) { _ in previous } }
+            if let previous { updateChat(chatID) { $0 = previous } }
             chatsError = error.localizedDescription
         }
     }
 
-    private func updateChat(_ chatID: String, transform: (Chat) -> Chat) {
+    private func updateChat(_ chatID: String, _ mutate: (inout Chat) -> Void) {
         if let index = chats.firstIndex(where: { $0.id == chatID }) {
-            let updated = transform(chats[index])
-            chats[index] = updated
-            chatsByID[chatID] = updated
+            mutate(&chats[index])
+            chatsByID[chatID] = chats[index]
         }
-        if let searchIndex = searchResults?.firstIndex(where: { $0.id == chatID }),
-           var updated = searchResults {
-            updated[searchIndex] = transform(updated[searchIndex])
-            searchResults = updated
+        if var results = searchResults,
+           let searchIndex = results.firstIndex(where: { $0.id == chatID }) {
+            mutate(&results[searchIndex])
+            searchResults = results
         }
     }
 }

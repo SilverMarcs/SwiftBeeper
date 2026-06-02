@@ -2,24 +2,9 @@ import SwiftUI
 
 struct ChatRowView: View {
     @Environment(ChatStore.self) private var chatStore
-    @Environment(MessageStore.self) private var messageStore
     @Environment(\.appearsActive) private var appearsActive
 
     let chat: Chat
-
-    /// Prefer the latest locally-known message (including reactions and deletions)
-    /// over the server's `preview`, which lags realtime and excludes reactions.
-    private var subtitleText: String? {
-        let serverPreview = chat.preview
-        let localLatest = messageStore.latestKnownMessage(for: chat.id, in: chat)
-        switch (serverPreview, localLatest) {
-        case (nil, nil): return nil
-        case (let preview?, nil): return preview.displayText
-        case (nil, let latest?): return latest.displayText
-        case (let preview?, let latest?):
-            return latest.numericSortKey >= preview.numericSortKey ? latest.displayText : preview.displayText
-        }
-    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -43,7 +28,7 @@ struct ChatRowView: View {
                 }
 
                 HStack {
-                    if let previewText = subtitleText {
+                    if let previewText = chat.previewText {
                         Text(previewText)
                             .font(.body)
                             .foregroundStyle(.secondary)

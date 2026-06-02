@@ -144,7 +144,7 @@ struct Message: Identifiable, Decodable, Equatable {
     }
 
     var timestampText: String {
-        let calendar = Calendar.current
+        let calendar = Calendar.app
         if calendar.component(.year, from: timestamp) == calendar.component(.year, from: Date()) {
             return timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute())
         }

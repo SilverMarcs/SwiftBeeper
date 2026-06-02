@@ -60,18 +60,18 @@ enum ChatKind: RawRepresentable, Decodable, Equatable {
 
 struct Chat: Identifiable, Decodable, Equatable {
     let id: String
-    let title: String
-    let unreadCount: Int
-    let participants: ChatParticipants?
-    let preview: Message?
-    let isMuted: Bool?
-    let type: ChatKind?
-    let isPinned: Bool?
-    let isArchived: Bool?
-    let accountID: String?
-    let lastActivity: Date?
-    let lastReadMessageSortKey: String?
-    let imgURL: String?
+    var title: String
+    var unreadCount: Int
+    var participants: ChatParticipants?
+    var preview: Message?
+    var isMuted: Bool?
+    var type: ChatKind?
+    var isPinned: Bool?
+    var isArchived: Bool?
+    var accountID: String?
+    var lastActivity: Date?
+    var lastReadMessageSortKey: String?
+    var imgURL: String?
 
     var isSingleChat: Bool { type == .single }
     var isGroupChat: Bool { type == .group }
@@ -101,59 +101,42 @@ struct Chat: Identifiable, Decodable, Equatable {
         participants?.items.first(where: { $0.id == id })
     }
 
+    /// Merges a freshly-fetched copy (`detail`) into this one. `detail` wins for
+    /// most fields, but we preserve richer data this copy may already hold.
     func merging(detail: Chat) -> Chat {
-        // Prefer the side with more participants. The list endpoint can return a
-        // non-nil but truncated `participants` (it doesn't pass `maxParticipantCount=-1`),
-        // so a naive `detail.participants ?? participants` would clobber fully-hydrated
-        // data with the truncated list-version, blanking out group avatars.
-        let mergedParticipants: ChatParticipants?
-        switch (detail.participants, participants) {
-        case (nil, let existing):
-            mergedParticipants = existing
-        case (let new?, nil):
-            mergedParticipants = new
-        case (let new?, let existing?):
-            mergedParticipants = new.items.count >= existing.items.count ? new : existing
+        var result = detail
+
+        // The list endpoint can return a non-nil but truncated `participants`
+        // (it doesn't pass `maxParticipantCount=-1`), so keep whichever side has
+        // more so fully-hydrated group avatars survive a list refresh.
+        if let existing = participants,
+           (detail.participants?.items.count ?? 0) < existing.items.count {
+            result.participants = existing
         }
 
-        return Chat(
-            id: id,
-            title: detail.title,
-            unreadCount: detail.unreadCount,
-            participants: mergedParticipants,
-            preview: preview ?? detail.preview,
-            isMuted: detail.isMuted ?? isMuted,
-            type: detail.type ?? type,
-            isPinned: detail.isPinned ?? isPinned,
-            isArchived: detail.isArchived ?? isArchived,
-            accountID: detail.accountID ?? accountID,
-            lastActivity: detail.lastActivity ?? lastActivity,
-            lastReadMessageSortKey: detail.lastReadMessageSortKey ?? lastReadMessageSortKey,
-            imgURL: detail.imgURL ?? imgURL
-        )
-    }
+        // Keep the newest preview by sort key so the sidebar always reflects the
+        // most recent activity, regardless of which fetch arrived last.
+        if let existing = preview,
+           (detail.preview?.numericSortKey ?? .min) < existing.numericSortKey {
+            result.preview = existing
+        }
 
-    func with(unreadCount: Int? = nil, isMuted: Bool? = nil) -> Chat {
-        Chat(
-            id: id,
-            title: title,
-            unreadCount: unreadCount ?? self.unreadCount,
-            participants: participants,
-            preview: preview,
-            isMuted: isMuted ?? self.isMuted,
-            type: type,
-            isPinned: isPinned,
-            isArchived: isArchived,
-            accountID: accountID,
-            lastActivity: lastActivity,
-            lastReadMessageSortKey: lastReadMessageSortKey,
-            imgURL: imgURL
-        )
+        // Fall back to existing values for optional fields the refresh omitted.
+        result.isMuted = detail.isMuted ?? isMuted
+        result.type = detail.type ?? type
+        result.isPinned = detail.isPinned ?? isPinned
+        result.isArchived = detail.isArchived ?? isArchived
+        result.accountID = detail.accountID ?? accountID
+        result.lastActivity = detail.lastActivity ?? lastActivity
+        result.lastReadMessageSortKey = detail.lastReadMessageSortKey ?? lastReadMessageSortKey
+        result.imgURL = detail.imgURL ?? imgURL
+
+        return result
     }
 
     var lastActivityText: String? {
         guard let lastActivity else { return nil }
-        let calendar = Calendar.current
+        let calendar = Calendar.app
         if calendar.isDateInToday(lastActivity) {
             return lastActivity.formatted(date: .omitted, time: .shortened)
         }

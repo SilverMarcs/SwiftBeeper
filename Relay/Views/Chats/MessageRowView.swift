@@ -17,8 +17,9 @@ struct MessageRowView: View {
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     var body: some View {
+        let isOutgoing = message.isOutgoing(in: chat)
         HStack(alignment: .bottom, spacing: 6) {
-            if message.isOutgoing(in: chat) {
+            if isOutgoing {
                 Spacer(minLength: 100)
             } else if showIncomingIdentity {
                 if isLastInGroup {
@@ -36,8 +37,8 @@ struct MessageRowView: View {
                 }
             }
 
-            VStack(alignment: message.isOutgoing(in: chat) ? .trailing : .leading, spacing: 4) {
-                if !message.isOutgoing(in: chat) && showIncomingIdentity && isFirstInGroup {
+            VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+                if !isOutgoing && showIncomingIdentity && isFirstInGroup {
                     Text(message.senderDisplayName)
                         .font(.subheadline)
                         .bold()
@@ -47,14 +48,14 @@ struct MessageRowView: View {
                     ReplyPreviewView(
                         linkedMessageID: linkedMessageID,
                         chatID: message.chatID,
-                        isOutgoing: message.isOutgoing(in: chat),
+                        isOutgoing: isOutgoing,
                         onTap: { onTapLinkedMessage?(linkedMessageID) }
                     )
                 }
 
                 messageContent
 
-                if message.isOutgoing(in: chat) && showReadIndicator {
+                if isOutgoing && showReadIndicator {
                    Text("Read")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -142,7 +143,7 @@ struct MessageRowView: View {
                 }
             }
 
-            if !message.isOutgoing(in: chat) {
+            if !isOutgoing {
                 Spacer(minLength: 100)
             }
         }

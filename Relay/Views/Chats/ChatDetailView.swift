@@ -328,7 +328,7 @@ struct ChatDetailView: View {
     private func shouldShowTimestamp(before message: Message, previousMessage: Message?) -> Bool {
         guard let previousMessage else { return true }
 
-        let calendar = Calendar.current
+        let calendar = Calendar.app
         if calendar.isDate(message.timestamp, inSameDayAs: previousMessage.timestamp) == false {
             return true
         }
@@ -346,32 +346,6 @@ struct ChatDetailView: View {
     }
 }
 
-private struct TimelineFocusEffect: ViewModifier {
-    let isFocused: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(isFocused ? 1 : 0.35)
-            .blur(radius: isFocused ? 0 : 4)
-            .scaleEffect(isFocused ? 1 : 0.992)
-            .allowsHitTesting(isFocused)
-            .animation(.easeInOut(duration: 0.2), value: isFocused)
-    }
-}
-
-
-private struct NavigationBarFocusVisibilityModifier: ViewModifier {
-    let isFocusedOnComposerMessage: Bool
-
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        content.toolbarVisibility(isFocusedOnComposerMessage ? .hidden : .visible, for: .navigationBar)
-        #else
-        content
-        #endif
-    }
-}
-
 private struct MessageListTracker: Equatable {
     let count: Int
     let lastID: String?
@@ -384,49 +358,4 @@ private struct TimelineEntry: Identifiable {
     let isLastInGroup: Bool
 
     var id: String { message.timelineKey }
-}
-
-private struct UnreadDividerView: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            line
-            Text("New Messages")
-                .font(.caption)
-                .bold()
-                .foregroundStyle(.secondary)
-            line
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var line: some View {
-        Rectangle()
-            .fill(.background.quinary)
-            .frame(height: 1)
-    }
-}
-
-private struct TimestampDividerView: View {
-    let timestamp: Date
-
-    var body: some View {
-        Text(displayText)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity)
-    }
-
-    private var displayText: String {
-        let calendar = Calendar.current
-
-        if calendar.isDateInToday(timestamp) {
-            return timestamp.formatted(date: .omitted, time: .shortened)
-        }
-
-        if calendar.isDateInYesterday(timestamp) {
-            return "Yesterday at \(timestamp.formatted(date: .omitted, time: .shortened))"
-        }
-
-        return timestamp.formatted(date: .abbreviated, time: .shortened)
-    }
 }
