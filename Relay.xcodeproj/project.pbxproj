@@ -10,6 +10,7 @@
 		08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBC2F665F1B00950962 /* SwiftOGG */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
 		08B981832FCE1A1300276CAA /* libolm in Frameworks */ = {isa = PBXBuildFile; productRef = 08E4517B1A2B3C4D5E6F0002 /* libolm */; };
+		08C5C2E82FCEA0490002F97A /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = 08C5C2E72FCEA0490002F97A /* SwiftMediaViewer */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +48,7 @@
 				08B981832FCE1A1300276CAA /* libolm in Frameworks */,
 				08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */,
 				08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */,
+				08C5C2E82FCEA0490002F97A /* SwiftMediaViewer in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +103,7 @@
 			packageProductDependencies = (
 				08974BBC2F665F1B00950962 /* SwiftOGG */,
 				08E4517B1A2B3C4D5E6F0002 /* libolm */,
+				08C5C2E72FCEA0490002F97A /* SwiftMediaViewer */,
 			);
 			productName = Relay;
 			productReference = 0865737D2F58F64E0084BD91 /* Relay.app */;
@@ -133,6 +136,7 @@
 			packageReferences = (
 				08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */,
 				08E4517A1A2B3C4D5E6F0002 /* XCRemoteSwiftPackageReference "olm" */,
+				08C5C2E62FCEA0490002F97A /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0865737E2F58F64E0084BD91 /* Products */;
@@ -465,6 +469,14 @@
 				minimumVersion = 0.0.3;
 			};
 		};
+		08C5C2E62FCEA0490002F97A /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SilverMarcs/SwiftMediaViewer";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		08E4517A1A2B3C4D5E6F0002 /* XCRemoteSwiftPackageReference "olm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://gitlab.matrix.org/matrix-org/olm.git";
@@ -480,6 +492,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */;
 			productName = SwiftOGG;
+		};
+		08C5C2E72FCEA0490002F97A /* SwiftMediaViewer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 08C5C2E62FCEA0490002F97A /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */;
+			productName = SwiftMediaViewer;
 		};
 		08E4517B1A2B3C4D5E6F0002 /* libolm */ = {
 			isa = XCSwiftPackageProductDependency;

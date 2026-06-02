@@ -6,6 +6,34 @@ import UIKit
 #endif
 
 enum AuthenticatedImageLoader {
+    /// In-memory image cache (keyed by URL string) to avoid redundant network fetches
+    /// for avatars and images that repeat across views.
+    private static let imageCache = NSCache<NSString, ImageWrapper>()
+
+    private static func cachedImage(for urlString: String) -> Image? {
+        if let wrapper = imageCache.object(forKey: urlString as NSString),
+           let platformImage = wrapper.platformImage {
+            #if os(macOS)
+            return Image(nsImage: platformImage)
+            #else
+            return Image(uiImage: platformImage)
+            #endif
+        }
+        return nil
+    }
+
+    private static func cacheImageData(_ data: Data, for urlString: String) {
+        #if os(macOS)
+        if let nsImage = NSImage(data: data) {
+            imageCache.setObject(ImageWrapper(image: nsImage), forKey: urlString as NSString)
+        }
+        #else
+        if let uiImage = UIImage(data: data) {
+            imageCache.setObject(ImageWrapper(image: uiImage), forKey: urlString as NSString)
+        }
+        #endif
+    }
+
     static func buildRequest(for urlString: String) -> URLRequest? {
         guard let sourceURL = URL(string: urlString) else { return nil }
 
@@ -25,12 +53,17 @@ enum AuthenticatedImageLoader {
     }
 
     static func loadImage(urlString: String) async -> Image? {
+        if let cached = cachedImage(for: urlString) {
+            return cached
+        }
+
         guard let request = buildRequest(for: urlString) else {
             return nil
         }
 
         do {
             let data = try await APIClient.sendRaw(request)
+            cacheImageData(data, for: urlString)
             return makeImage(from: data)
         } catch {
             return nil
@@ -72,6 +105,22 @@ enum AuthenticatedImageLoader {
         #else
         guard let uiImage = UIImage(data: data) else { return nil }
         return Image(uiImage: uiImage)
+        #endif
+    }
+
+    // MARK: - Image cache helpers
+
+    private final class ImageWrapper {
+        #if os(macOS)
+        let platformImage: NSImage?
+        #else
+        let platformImage: UIImage?
+        #endif
+
+        #if os(macOS)
+        init(image: NSImage) { platformImage = image }
+        #else
+        init(image: UIImage) { platformImage = image }
         #endif
     }
 }

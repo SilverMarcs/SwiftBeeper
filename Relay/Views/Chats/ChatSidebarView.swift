@@ -87,6 +87,7 @@ struct ChatSidebarView: View {
                 .listRowSeparator(.hidden)
             }
         }
+        .listStyle(.sidebar)
         .overlay {
             if chatStore.chats.isEmpty {
                 if chatStore.isSearching

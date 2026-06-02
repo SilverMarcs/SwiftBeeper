@@ -29,12 +29,6 @@ final class MessageStore {
     /// Most recent locally-known message for a chat, including reactions to the user's
     /// own messages and tombstoned (empty/deleted) messages. Reactions to other people's
     /// messages and membership events are skipped — the sidebar should not surface those.
-    func latestKnownMessage(for chatID: String, in chat: Chat) -> Message? {
-        (messagesByChatID[chatID] ?? [])
-            .filter { !$0.isMembershipEvent }
-            .filter { !$0.isReaction || isReactionToOwnMessage($0, in: chat) }
-            .last
-    }
 
     /// True when `message` is a reaction whose target was sent by the local user.
     /// Returns false for non-reactions and for reactions whose target can't be found
@@ -74,6 +68,13 @@ final class MessageStore {
         editingMessage = nil
         pendingAttachments = []
         uploadProgress = nil
+    }
+
+    /// Frees in-memory messages for a chat that is no longer selected.
+    func evictMessages(for chatID: String) {
+        messagesByChatID[chatID] = nil
+        hasMoreMessagesByChatID[chatID] = nil
+        latestLoadRequestIDByChatID[chatID] = nil
     }
 
     // MARK: - Loading
@@ -124,7 +125,7 @@ final class MessageStore {
 
             if refreshedMessages != existingMessages {
                 messagesByChatID[chatID] = refreshedMessages
-            }
+                    }
             hasMoreMessagesByChatID[chatID] = response.hasMore
             return newMessages
         } catch {

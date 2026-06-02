@@ -17,9 +17,10 @@ struct MessageRowView: View {
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     var body: some View {
+        let outgoing = message.isOutgoing(in: chat)
         HStack(alignment: .bottom, spacing: 6) {
-            if message.isOutgoing(in: chat) {
-                Spacer(minLength: 100)
+            if outgoing {
+                Spacer(minLength: 50)
             } else if showIncomingIdentity {
                 if isLastInGroup {
                     Button {
@@ -36,8 +37,8 @@ struct MessageRowView: View {
                 }
             }
 
-            VStack(alignment: message.isOutgoing(in: chat) ? .trailing : .leading, spacing: 4) {
-                if !message.isOutgoing(in: chat) && showIncomingIdentity && isFirstInGroup {
+            VStack(alignment: outgoing ? .trailing : .leading, spacing: 4) {
+                if !outgoing && showIncomingIdentity && isFirstInGroup {
                     Text(message.senderDisplayName)
                         .font(.subheadline)
                         .bold()
@@ -47,14 +48,14 @@ struct MessageRowView: View {
                     ReplyPreviewView(
                         linkedMessageID: linkedMessageID,
                         chatID: message.chatID,
-                        isOutgoing: message.isOutgoing(in: chat),
+                        isOutgoing: outgoing,
                         onTap: { onTapLinkedMessage?(linkedMessageID) }
                     )
                 }
 
                 messageContent
 
-                if message.isOutgoing(in: chat) && showReadIndicator {
+                if outgoing && showReadIndicator {
                    Text("Read")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -130,7 +131,7 @@ struct MessageRowView: View {
                     }
                 }
 
-                if !message.isEmptyDeleted && message.isOutgoing(in: chat) {
+                if !message.isEmptyDeleted && outgoing {
                     Divider()
                     Button(role: .destructive) {
                         Task {
@@ -142,8 +143,8 @@ struct MessageRowView: View {
                 }
             }
 
-            if !message.isOutgoing(in: chat) {
-                Spacer(minLength: 100)
+            if !outgoing {
+                Spacer(minLength: 50)
             }
         }
         .sheet(item: $profileSheetParticipant) { participant in
@@ -189,29 +190,29 @@ struct MessageRowView: View {
     }
 
     @ViewBuilder
-    private func reactionsOverlay(if slot: BubbleSlot) -> some View {
+    private func reactionsOverlay(if slot: BubbleSlot, outgoing: Bool) -> some View {
         if slot == lastBubbleSlot {
             reactionsView
                 .offset(
-                    x: message.isOutgoing(in: chat) ? -15 : 15,
+                    x: outgoing ? -15 : 15,
                     y: 1
                 )
         }
     }
 
-    private var reactionsAlignment: Alignment {
-        message.isOutgoing(in: chat) ? .bottomLeading : .bottomTrailing
+    private func reactionsAlignment(outgoing: Bool) -> Alignment {
+        outgoing ? .bottomLeading : .bottomTrailing
     }
 
     @ViewBuilder
     private var messageContent: some View {
-        let isOutgoing = message.isOutgoing(in: chat)
-        VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+        let outgoing = message.isOutgoing(in: chat)
+        VStack(alignment: outgoing ? .trailing : .leading, spacing: 4) {
             if let attachments = message.attachments, attachments.isEmpty == false {
                 ForEach(attachments) { attachment in
-                    AttachmentView(attachment: attachment, isOutgoing: isOutgoing)
-                        .overlay(alignment: reactionsAlignment) {
-                            reactionsOverlay(if: .attachment(attachment.id))
+                    AttachmentView(attachment: attachment, isOutgoing: outgoing)
+                        .overlay(alignment: reactionsAlignment(outgoing: outgoing)) {
+                            reactionsOverlay(if: .attachment(attachment.id), outgoing: outgoing)
                         }
                 }
             }
@@ -219,22 +220,22 @@ struct MessageRowView: View {
             if let urls = message.extractedURLs, !urls.isEmpty {
                 if message.textWithoutURLs?.isEmpty == false {
                     Text(message.textWithoutURLs!.markdownAttributed)
-                        .foregroundStyle(isOutgoing ? .white : .primary)
+                        .foregroundStyle(outgoing ? .white : .primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .bubbleBackground(isOutgoing: isOutgoing)
+                        .bubbleBackground(isOutgoing: outgoing)
                         .clipShape(.rect(cornerRadius: 15))
-                        .overlay(alignment: reactionsAlignment) {
-                            reactionsOverlay(if: .textWithUrls)
+                        .overlay(alignment: reactionsAlignment(outgoing: outgoing)) {
+                            reactionsOverlay(if: .textWithUrls, outgoing: outgoing)
                         }
                 }
 
                 ForEach(urls, id: \.absoluteString) { url in
                     LinkPillView(url: url)
-                        .overlay(alignment: reactionsAlignment) {
-                            reactionsOverlay(if: .linkPill(url.absoluteString))
+                        .overlay(alignment: reactionsAlignment(outgoing: outgoing)) {
+                            reactionsOverlay(if: .linkPill(url.absoluteString), outgoing: outgoing)
                         }
                 }
             } else if message.hasText || message.isEmptyDeleted {
@@ -246,15 +247,15 @@ struct MessageRowView: View {
                         Text(message.displayText.markdownAttributed)
                     }
                 }
-                .foregroundStyle(isOutgoing ? .white : .primary)
+                .foregroundStyle(outgoing ? .white : .primary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .bubbleBackground(isOutgoing: isOutgoing)
+                .bubbleBackground(isOutgoing: outgoing)
                 .clipShape(.rect(cornerRadius: 15))
-                .overlay(alignment: reactionsAlignment) {
-                    reactionsOverlay(if: .text)
+                .overlay(alignment: reactionsAlignment(outgoing: outgoing)) {
+                    reactionsOverlay(if: .text, outgoing: outgoing)
                 }
             }
         }

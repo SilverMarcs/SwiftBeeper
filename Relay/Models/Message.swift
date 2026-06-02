@@ -155,10 +155,10 @@ struct Message: Identifiable, Decodable, Equatable {
         if let isSender {
             return isSender
         }
-        guard let currentParticipantID = chat.participants?.items.first(where: { $0.isSelf == true })?.id else {
+        guard let ownID = chat.ownParticipantID else {
             return false
         }
-        return senderID == currentParticipantID
+        return senderID == ownID
     }
 
     var groupedReactions: [GroupedReaction]? {

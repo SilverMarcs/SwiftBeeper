@@ -38,6 +38,7 @@ final class ChatStore {
     var searchQuery: String = ""
     var searchResults: [Chat]?
     var isSearching = false
+    private var hasCompletedInitialLoad = false
     private var lowPriorityChatIDs: Set<String> = []
     private var chatsCursor: String?
     private var lastLoadedInboxFilter: InboxFilter?
@@ -186,6 +187,7 @@ final class ChatStore {
 
     func clearState() {
         chatListState = .empty
+        hasCompletedInitialLoad = false
     }
 
     func loadChats() async {
@@ -237,16 +239,17 @@ final class ChatStore {
             chatsErrorIsAuth = false
             lastLoadedInboxFilter = selectedInboxFilter
 
-            // Only restore selection from snapshot if the user hasn't switched
-            // chats during the async refresh — otherwise we'd override their action.
-            if selectedChatID == snapshot.selectedChatID {
-                if let existingSelectedChatID = snapshot.selectedChatID, chatsByID[existingSelectedChatID] != nil {
-                    selectedChatID = existingSelectedChatID
-                } else if chatsByID[selectedChatID ?? ""] == nil {
-                    selectedChatID = chats.first?.id
-                }
-            } else if chatsByID[selectedChatID ?? ""] == nil {
-                // User switched to a chat that no longer exists in the list
+            // Auto-select first chat on initial load only. Subsequent
+            // background refreshes must not hijack the user's selection.
+            if !hasCompletedInitialLoad, selectedChatID == nil {
+                selectedChatID = chats.first?.id
+                hasCompletedInitialLoad = true
+            } else if hasCompletedInitialLoad, selectedChatID == nil {
+                selectedChatID = snapshot.selectedChatID
+            }
+
+            // If the selected chat disappeared from the list, fall back to first.
+            if let sid = selectedChatID, chatsByID[sid] == nil {
                 selectedChatID = chats.first?.id
             }
         } catch {

@@ -11,9 +11,15 @@ final class RealtimeCoordinator: RealtimeEventHandler {
 
     private var scheduledChatsRefreshTask: Task<Void, Never>?
     private var scheduledMessagesRefreshTasks: [String: Task<Void, Never>] = [:]
+    /// Snapshot of preview sortKeys before a chat-list refresh, used to detect
+    /// which chats received genuinely new messages for notification purposes.
+    private var lastKnownPreviewKeys: [String: String] = [:]
 
     var selectedChatID: String? {
         didSet {
+            if oldValue != selectedChatID, let old = oldValue {
+                evictMessagesIfNotSelected(chatID: old)
+            }
             chatStore.selectedChatID = selectedChatID
         }
     }
@@ -36,10 +42,12 @@ final class RealtimeCoordinator: RealtimeEventHandler {
             selectedChatID = nil
             chatStore.clearState()
             messageStore.reset()
+            lastKnownPreviewKeys = [:]
             return
         }
 
         await chatStore.loadChats()
+        await chatStore.ensureLowPriorityIDsLoaded()
         realtimeService.start()
     }
 
@@ -53,38 +61,34 @@ final class RealtimeCoordinator: RealtimeEventHandler {
         selectedChatID = chatID
     }
 
+    private func evictMessagesIfNotSelected(chatID: String) {
+        guard chatID != selectedChatID else { return }
+        messageStore.evictMessages(for: chatID)
+    }
+
     // MARK: - RealtimeEventHandler
 
     nonisolated func realtimeDidUpsertChat(chatID: String?) {
-        Task { @MainActor in
-            scheduleChatsRefresh()
-        }
+        Task { @MainActor in scheduleChatsRefresh() }
     }
 
     nonisolated func realtimeDidDeleteChat(chatID: String?) {
-        Task { @MainActor in
-            scheduleChatsRefresh()
-        }
+        Task { @MainActor in scheduleChatsRefresh() }
     }
 
     nonisolated func realtimeDidUpsertMessage(chatID: String?) {
         Task { @MainActor in
-            scheduleChatsRefresh()
-            if let chatID {
-                if chatID == selectedChatID {
-                    // Selected chat: refresh messages and check for new ones to notify
-                    scheduleMessagesRefreshWithNotification(chatID: chatID)
-                } else {
-                    // Any other chat: refresh and notify
-                    scheduleMessagesRefreshWithNotification(chatID: chatID)
-                }
+            // Refresh sidebar (chat list) only — preview/unread counts update from the API.
+            scheduleChatsRefreshAndNotify(chatID: chatID)
+            // If this is the open chat, also refresh messages to keep the timeline live.
+            if let chatID, chatID == selectedChatID {
+                scheduleMessagesRefresh(chatID: chatID)
             }
         }
     }
 
     nonisolated func realtimeDidDeleteMessage(chatID: String?) {
         Task { @MainActor in
-            scheduleChatsRefresh()
             if let chatID, chatID == selectedChatID {
                 scheduleMessagesRefresh(chatID: chatID)
             }
@@ -93,12 +97,10 @@ final class RealtimeCoordinator: RealtimeEventHandler {
 
     nonisolated func realtimeDidUpdateReceipt(chatID: String?, entries: [[String: String]]?) {
         Task { @MainActor in
-            // Update read-by-other sort key directly from the WS event entry.
             if let chatID, let entries, let entry = entries.first,
                let readKey = entry["lastReadByOtherSortKey"] {
                 messageStore.lastReadByOtherSortKeyByChatID[chatID] = readKey
             }
-            // Also refresh messages if this is the selected chat to update the UI.
             if let chatID, chatID == selectedChatID {
                 scheduleMessagesRefresh(chatID: chatID)
             }
@@ -111,19 +113,62 @@ final class RealtimeCoordinator: RealtimeEventHandler {
         }
     }
 
-    // MARK: - Debounce
+    // MARK: - Debounced refreshes
 
     private func scheduleChatsRefresh() {
         scheduledChatsRefreshTask?.cancel()
         scheduledChatsRefreshTask = Task { [weak self] in
             guard let self else { return }
-
-            do {
-                try await Task.sleep(for: .milliseconds(250))
-            } catch { return }
-
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
             guard !Task.isCancelled else { return }
             await self.chatStore.loadChats()
+        }
+    }
+
+    /// Refreshes chats and then posts a notification if the target chat received
+    /// a genuinely new incoming message (detected by preview sortKey change).
+    private func scheduleChatsRefreshAndNotify(chatID: String?) {
+        scheduledChatsRefreshTask?.cancel()
+        scheduledChatsRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            guard !Task.isCancelled else { return }
+
+            let previousKey = chatID.flatMap { self.lastKnownPreviewKeys[$0] }
+            await self.chatStore.loadChats()
+
+            guard !Task.isCancelled, let chatID else { return }
+
+            // Update preview-key snapshot for all chats
+            for chat in self.chatStore.chats {
+                if let previewSort = chat.preview?.sortKey {
+                    self.lastKnownPreviewKeys[chat.id] = previewSort
+                }
+            }
+
+            // Post notification only if this chat got a new preview message
+            guard let chat = self.chatStore.chat(byID: chatID),
+                  let currentKey = chat.preview?.sortKey,
+                  currentKey != previousKey else { return }
+
+            // Skip muted, non-primary, and outgoing previews
+            guard chat.isMuted != true,
+                  self.chatStore.isPrimaryInboxChat(chat),
+                  let preview = chat.preview,
+                  !preview.isOutgoing(in: chat),
+                  !preview.isMembershipEvent else { return }
+
+            // Skip reaction previews unless targeting own message
+            if preview.isReaction,
+               !self.messageStore.isReactionToOwnMessage(preview, in: chat) { return }
+
+            // Only notify for recent messages (not history loaded after reconnect)
+            if Date().timeIntervalSince(preview.timestamp) > 60 { return }
+
+            self.notificationService.postNewMessageNotification(
+                message: preview,
+                chatTitle: chat.displayTitle
+            )
         }
     }
 
@@ -131,72 +176,11 @@ final class RealtimeCoordinator: RealtimeEventHandler {
         scheduledMessagesRefreshTasks[chatID]?.cancel()
         scheduledMessagesRefreshTasks[chatID] = Task { [weak self] in
             guard let self else { return }
-
-            do {
-                try await Task.sleep(for: .milliseconds(250))
-            } catch { return }
-
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
             guard !Task.isCancelled else { return }
             await self.messageStore.loadMessages(for: chatID)
-
             if !Task.isCancelled {
                 self.scheduledMessagesRefreshTasks[chatID] = nil
-            }
-        }
-    }
-
-    private func scheduleMessagesRefreshWithNotification(chatID: String) {
-        scheduledMessagesRefreshTasks[chatID]?.cancel()
-        scheduledMessagesRefreshTasks[chatID] = Task { [weak self] in
-            guard let self else { return }
-
-            do {
-                try await Task.sleep(for: .milliseconds(250))
-            } catch { return }
-
-            guard !Task.isCancelled else { return }
-
-            // Track whether this is the first load for this chat
-            let isFirstLoad = self.messageStore.messagesByChatID[chatID] == nil
-            let newMessages = await self.messageStore.loadMessages(for: chatID)
-
-            guard !Task.isCancelled else { return }
-            self.scheduledMessagesRefreshTasks[chatID] = nil
-
-            // For first loads, loadMessages returns [] (by design).
-            // Since a realtime event triggered this, the latest message is the new one.
-            let messagesToNotify: [Message]
-            if isFirstLoad {
-                if let latestMessage = self.messageStore.messagesByChatID[chatID]?.last {
-                    messagesToNotify = [latestMessage]
-                } else {
-                    messagesToNotify = []
-                }
-            } else {
-                messagesToNotify = newMessages
-            }
-
-            // Post notifications for truly new incoming messages
-            await self.chatStore.ensureLowPriorityIDsLoaded()
-            guard let chat = self.chatStore.chat(byID: chatID) else { return }
-            let isMuted = chat.isMuted == true
-            let isPrimary = self.chatStore.isPrimaryInboxChat(chat)
-            guard !isMuted, isPrimary, !messagesToNotify.isEmpty else { return }
-
-            let chatTitle = chat.displayTitle
-            for message in messagesToNotify {
-                // Skip outgoing and membership events. Deletions are allowed through.
-                // Reactions are only surfaced when they target one of the user's own messages.
-                if message.isOutgoing(in: chat) { continue }
-                if message.isMembershipEvent { continue }
-                if message.isReaction, !self.messageStore.isReactionToOwnMessage(message, in: chat) { continue }
-                // Skip stale messages (older than 60s) to avoid notifying for old chat history
-                if Date().timeIntervalSince(message.timestamp) > 60 { continue }
-
-                self.notificationService.postNewMessageNotification(
-                    message: message,
-                    chatTitle: chatTitle
-                )
             }
         }
     }

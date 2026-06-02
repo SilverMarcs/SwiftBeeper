@@ -2,23 +2,13 @@ import SwiftUI
 
 struct ChatRowView: View {
     @Environment(ChatStore.self) private var chatStore
-    @Environment(MessageStore.self) private var messageStore
-    @Environment(\.appearsActive) private var appearsActive
 
     let chat: Chat
 
-    /// Prefer the latest locally-known message (including reactions and deletions)
-    /// over the server's `preview`, which lags realtime and excludes reactions.
+    /// Uses `chat.preview` directly — the server keeps preview current,
+    /// and `loadChats()` refreshes it with every WebSocket event.
     private var subtitleText: String? {
-        let serverPreview = chat.preview
-        let localLatest = messageStore.latestKnownMessage(for: chat.id, in: chat)
-        switch (serverPreview, localLatest) {
-        case (nil, nil): return nil
-        case (let preview?, nil): return preview.displayText
-        case (nil, let latest?): return latest.displayText
-        case (let preview?, let latest?):
-            return latest.numericSortKey >= preview.numericSortKey ? latest.displayText : preview.displayText
-        }
+        chat.preview?.displayText
     }
 
     var body: some View {
@@ -180,6 +170,5 @@ struct ChatRowView: View {
         ))
     }
     .environment(ChatStore())
-    .environment(MessageStore())
     .environment(SessionStore())
 }

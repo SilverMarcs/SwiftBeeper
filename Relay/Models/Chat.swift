@@ -88,6 +88,12 @@ struct Chat: Identifiable, Decodable, Equatable {
         participants?.items.first(where: { $0.isSelf != true })
     }
 
+    /// Cached O(1) lookup for the current user's participant ID.
+    /// Used by `isOutgoing` — avoids a linear scan on every call.
+    var ownParticipantID: String? {
+        participants?.items.first(where: { $0.isSelf == true })?.id
+    }
+
     var cannotMessage: Bool {
         guard isSingleChat else { return false }
         return otherParticipant?.cannotMessage == true
@@ -121,7 +127,7 @@ struct Chat: Identifiable, Decodable, Equatable {
             title: detail.title,
             unreadCount: detail.unreadCount,
             participants: mergedParticipants,
-            preview: preview ?? detail.preview,
+            preview: detail.preview ?? preview,
             isMuted: detail.isMuted ?? isMuted,
             type: detail.type ?? type,
             isPinned: detail.isPinned ?? isPinned,
