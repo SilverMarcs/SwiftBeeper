@@ -25,6 +25,10 @@ struct SettingsView: View {
             } footer: {
                 Text("Removes downloaded media files from the temporary directory.")
             }
+            
+           Section("Cache") {
+               CacheManagerView()
+           }
         }
         .navigationTitle("Settings")
         .toolbarTitleDisplayMode(.inline)

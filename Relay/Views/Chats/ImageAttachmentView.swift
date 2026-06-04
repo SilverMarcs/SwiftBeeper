@@ -8,7 +8,7 @@ struct ImageAttachmentView: View {
     private let maxHeight: CGFloat = 500
     /// Decode size in pixels — large enough that SMV's fullscreen viewer
     /// (which reuses the same cached decode) stays sharp.
-    private let targetSize = 1200
+    private let targetSize = 650
 
     var body: some View {
         Group {

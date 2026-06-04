@@ -7,6 +7,7 @@ struct ChatDetailiOS: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     @State private var showingChatInfo = false
+    @State private var isSearchFocused = false
     @State private var isPreparingInitialScroll = false
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
@@ -97,6 +98,8 @@ struct ChatDetailiOS: View {
                     scrollToBottom(with: proxy, animated: false)
                     try? await Task.sleep(for: .milliseconds(150))
                     scrollToBottom(with: proxy, animated: false)
+                    try? await Task.sleep(for: .milliseconds(250))
+                    scrollToBottom(with: proxy, animated: false)
                     guard !Task.isCancelled else { return }
                     isPreparingInitialScroll = false
                     await detail
@@ -180,10 +183,18 @@ struct ChatDetailiOS: View {
                     $0.onChange(of: chatStore.editingMessage?.id) { _, _ in
                         inputManager.editingMessageDidChange()
                     }
-                    .searchable(text: inputManager.draftBinding, prompt: Text(inputManager.messageFieldPrompt))
+                    .searchable(text: inputManager.draftBinding, isPresented: $isSearchFocused, prompt: Text(inputManager.messageFieldPrompt))
                         .searchPresentationToolbarBehavior(.avoidHidingContent)
                         .onSubmit(of: .search) {
                             inputManager.handleSubmit()
+                            isSearchFocused = false
+                        }
+                        .onChange(of: isSearchFocused) { _, focused in
+                            guard focused else { return }
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(200))
+                                scrollToBottom(with: proxy, animated: true)
+                            }
                         }
                         .safeAreaInset(edge: .bottom) {
                             MessagePendingAttachmentsBar()

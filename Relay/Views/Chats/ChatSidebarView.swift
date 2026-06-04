@@ -20,6 +20,7 @@ struct ChatSidebarView: View {
             } else {
                 chatList
                     .searchable(text: $chatStore.searchQuery, placement: isIPhone ? .automatic : .sidebar, prompt: "Search chats")
+                    .searchPresentationToolbarBehavior(.avoidHidingContent)
                     .task(id: chatStore.searchQuery) {
                         if chatStore.searchQuery.isBlank {
                             chatStore.searchResults = nil
