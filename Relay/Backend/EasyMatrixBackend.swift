@@ -177,6 +177,10 @@ final class EasyMatrixBackend {
             "listenAddr": listenAddr,
             "stateDir": stateDir,
             "manageSecret": manageSecret,
+            // SwiftMediaViewer loads images via plain URLSession (no headers), so
+            // /v1/assets/serve accepts the token as ?dangerouslyUseTokenInQuery=.
+            // Low risk: the server is in-process on localhost only.
+            "allowQueryTokenAuth": true,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: config),
               let json = String(data: data, encoding: .utf8) else {

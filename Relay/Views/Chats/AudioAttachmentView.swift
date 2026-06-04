@@ -87,7 +87,11 @@ struct AudioAttachmentView: View {
         if Self.isOggOpus(mimeType: attachment.mimeType, fileExtension: ext) {
             let m4aURL = fileURL.deletingPathExtension().appendingPathExtension("m4a")
             do {
-                try OGGConverter.convertOpusOGGToM4aFile(src: fileURL, dest: m4aURL)
+                // CPU-bound transcode; the view is MainActor-isolated (project
+                // default), so hop off the main thread to keep the UI responsive.
+                try await Task.detached(priority: .userInitiated) {
+                    try OGGConverter.convertOpusOGGToM4aFile(src: fileURL, dest: m4aURL)
+                }.value
                 playableURL = m4aURL
                 logger.info("Converted OGG Opus to M4A")
             } catch {

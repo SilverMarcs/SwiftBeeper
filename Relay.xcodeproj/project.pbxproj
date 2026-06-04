@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBC2F665F1B00950962 /* SwiftOGG */; };
+		08974BC02F66600000950962 /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBF2F66600000950962 /* SwiftMediaViewer */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
 		08F100000000000000000002 /* EasyMatrix.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08F100000000000000000001 /* EasyMatrix.xcframework */; };
 /* End PBXBuildFile section */
@@ -33,6 +34,7 @@
 			files = (
 				08F100000000000000000002 /* EasyMatrix.xcframework in Frameworks */,
 				08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */,
+				08974BC02F66600000950962 /* SwiftMediaViewer in Frameworks */,
 				08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -88,6 +90,7 @@
 			name = Relay;
 			packageProductDependencies = (
 				08974BBC2F665F1B00950962 /* SwiftOGG */,
+				08974BBF2F66600000950962 /* SwiftMediaViewer */,
 			);
 			productName = Relay;
 			productReference = 0865737D2F58F64E0084BD91 /* Relay.app */;
@@ -119,6 +122,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */,
+				08974BBE2F66600000950962 /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0865737E2F58F64E0084BD91 /* Products */;
@@ -449,6 +453,14 @@
 				minimumVersion = 0.0.3;
 			};
 		};
+		08974BBE2F66600000950962 /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SilverMarcs/SwiftMediaViewer";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -456,6 +468,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 08974BBB2F665F1B00950962 /* XCRemoteSwiftPackageReference "swift-ogg" */;
 			productName = SwiftOGG;
+		};
+		08974BBF2F66600000950962 /* SwiftMediaViewer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 08974BBE2F66600000950962 /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */;
+			productName = SwiftMediaViewer;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1,43 +1,32 @@
-import QuickLook
+import SwiftMediaViewer
 import SwiftUI
 
 struct ImageAttachmentView: View {
     let attachment: Attachment
 
-    @State private var loadedImage: Image?
-    @State private var isLoading = false
-    @State private var previewURL: URL?
-
     private let maxWidth: CGFloat = 330
     private let maxHeight: CGFloat = 500
+    /// Decode size in pixels — large enough that SMV's fullscreen viewer
+    /// (which reuses the same cached decode) stays sharp.
+    private let targetSize = 1200
 
     var body: some View {
-        Button {
-            if loadedImage != nil {
-                Task { await openQuickLook() }
-            }
-        } label: {
-            ZStack {
-                Color.clear
-
-                if let loadedImage {
-                    loadedImage
-                        .resizable()
+        Group {
+            if let url = AuthenticatedImageLoader.displayURL(for: attachment.resolvedURL) {
+                if attachment.isGif == true {
+                    SMVGIFView(url: url, targetSize: targetSize)
+                } else {
+                    SMVImage(url: url, targetSize: targetSize)
                         .scaledToFill()
-                } else if isLoading {
-                    ProgressView()
                 }
+            } else {
+                Color.clear
             }
         }
-        .buttonStyle(.plain)
         .frame(width: imageSize.width, height: imageSize.height)
         .subtleBackground()
         .clipShape(.rect(cornerRadius: 12))
         .contentShape(.rect(cornerRadius: 12))
-        .task(id: attachment.resolvedURL) {
-            await loadImage()
-        }
-        .quickLookPreview($previewURL)
     }
 
     private var imageSize: CGSize {
@@ -56,34 +45,5 @@ struct ImageAttachmentView: View {
         }
 
         return CGSize(width: width, height: height)
-    }
-
-    private func loadImage() async {
-        guard let urlString = attachment.resolvedURL else { return }
-
-        isLoading = true
-        defer { isLoading = false }
-
-        loadedImage = await AuthenticatedImageLoader.loadImage(urlString: urlString)
-    }
-
-    private func openQuickLook() async {
-        guard let urlString = attachment.resolvedURL else { return }
-
-        let fileExtension: String
-        if let fileName = attachment.fileName, let ext = fileName.split(separator: ".").last, !ext.isEmpty {
-            fileExtension = String(ext)
-        } else if attachment.isGif == true {
-            fileExtension = "gif"
-        } else {
-            fileExtension = "png"
-        }
-
-        guard let localURL = await AuthenticatedImageLoader.downloadToTempFile(
-            urlString: urlString,
-            fileExtension: fileExtension
-        ) else { return }
-
-        previewURL = localURL
     }
 }
