@@ -95,7 +95,8 @@ struct ChatDetailiOS: View {
                     firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: selectedChat.id), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
-                    try? await Task.sleep(for: .milliseconds(100))
+                    try? await Task.sleep(for: .milliseconds(150))
+                    scrollToBottom(with: proxy, animated: false)
                     guard !Task.isCancelled else { return }
                     isPreparingInitialScroll = false
                     await detail
