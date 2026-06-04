@@ -76,7 +76,7 @@ struct ChatDetailiOS: View {
 
                     Color.clear
                         .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-                        .frame(height: 1)
+                        .frame(height: 20)
                         .listRowSeparator(.hidden)
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
@@ -118,6 +118,7 @@ struct ChatDetailiOS: View {
                     }
                 }
                 .listStyle(.plain)
+                .environment(\.defaultMinListRowHeight, 1)
                 .animation(.default, value: activeComposerMessageID)
                 .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
                 .toolbar {
@@ -131,7 +132,7 @@ struct ChatDetailiOS: View {
                         } label: {
                             HStack {
                                 ChatAvatarView(chat: selectedChat, dimension: 28)
-                                Text(selectedChat.displayTitle)
+                                Text(String(selectedChat.displayTitle).prefix(12))
                             }
                         }
                     }
@@ -152,6 +153,7 @@ struct ChatDetailiOS: View {
                     ParticipantProfileSheet(participant: participant)
                 }
                 .overlay {
+                    if isIPad {
                     if isPreparingInitialScroll {
                         ZStack {
                             Rectangle()
@@ -161,6 +163,7 @@ struct ChatDetailiOS: View {
                         }
                         .ignoresSafeArea(edges: .vertical)
                         .id(selectedChat.id)
+                    }
                     }
                 }
                 .onDrop(of: [.item], isTargeted: nil) { providers in
