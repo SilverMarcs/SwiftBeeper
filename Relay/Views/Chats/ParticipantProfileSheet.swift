@@ -54,6 +54,8 @@ struct ParticipantProfileSheet: View {
                     row("Participant ID", value: participant.id, monospaced: true)
                 }
             }
+            .navigationTitle("Profile")
+            .toolbarTitleDisplayMode(.inline)
             .formStyle(.grouped)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

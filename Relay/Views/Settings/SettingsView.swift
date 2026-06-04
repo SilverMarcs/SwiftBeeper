@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(SessionStore.self) private var sessionStore
 
     var body: some View {
+        NavigationStack {
         Form {
             Section("Account") {
                 if sessionStore.accessToken.isEmpty {
@@ -24,10 +26,18 @@ struct SettingsView: View {
                 Text("Removes downloaded media files from the temporary directory.")
             }
         }
+        .navigationTitle("Settings")
+        .toolbarTitleDisplayMode(.inline)
         .formStyle(.grouped)
         #if os(macOS)
         .frame(width: 520)
         #endif
+        .toolbar {
+           ToolbarItem(placement: .primaryAction) {
+                Button(role: .close) { dismiss() }
+            }
+        }
+        }
     }
 }
 

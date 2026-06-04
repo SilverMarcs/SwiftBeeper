@@ -60,11 +60,11 @@ struct ChatInfoSheet: View {
                                             .fontWeight(.medium)
                                             .foregroundStyle(.primary)
 
-                                        if let username = participant.username, username != participant.displayName {
-                                            Text(username)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
+                                        // if let username = participant.username, username != participant.displayName {
+                                            // Text(username)
+                                                // .font(.caption)
+                                                // .foregroundStyle(.secondary)
+                                        // }
                                     }
 
                                     Spacer()
@@ -91,7 +91,8 @@ struct ChatInfoSheet: View {
                     row("Chat ID", value: chat.id, monospaced: true)
                 }
             }
-//            .navigationTitle(chat.displayTitle)
+            .navigationTitle("Chat Info")
+            .toolbarTitleDisplayMode(.inline)
             .formStyle(.grouped)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

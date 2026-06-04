@@ -122,7 +122,9 @@ struct ChatDetailiOS: View {
                 .animation(.default, value: activeComposerMessageID)
                 .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
                 .toolbar {
-                    ToolbarItem(placement: .title) {
+                    // iPad: avatar + name lives in the leading (navigation) slot.
+                    // iPhone: stays centered in the title slot.
+                    ToolbarItem(placement: isIPad ? .navigation : .principal) {
                         Button {
                             if selectedChat.isSingleChat, let other = selectedChat.otherParticipant {
                                 profileSheetParticipant = other
@@ -132,7 +134,10 @@ struct ChatDetailiOS: View {
                         } label: {
                             HStack {
                                 ChatAvatarView(chat: selectedChat, dimension: 28)
-                                Text(String(selectedChat.displayTitle).prefix(12))
+                                Text(selectedChat.displayTitle)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .frame(maxWidth: isIPhone ? 180 : nil)
                             }
                         }
                     }
