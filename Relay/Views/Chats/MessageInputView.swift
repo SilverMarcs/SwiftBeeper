@@ -123,7 +123,9 @@ struct MessageInputView: View {
                         Group {
                             if input.isSendingMessage {
                                 ProgressView()
+                                #of os(macOS)
                                     .controlSize(.small)
+                                    #endif
                             } else {
                                 Image(systemName: input.isEditing ? "checkmark" : "arrow.up")
                                     #if os(macOS)
