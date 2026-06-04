@@ -25,7 +25,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        #if os(macOS)
         .frame(width: 520)
+        #endif
     }
 }
 

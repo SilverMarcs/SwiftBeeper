@@ -151,18 +151,18 @@ struct ChatDetailiOS: View {
                 .sheet(item: $profileSheetParticipant) { participant in
                     ParticipantProfileSheet(participant: participant)
                 }
-                // .overlay {
-                    // if isPreparingInitialScroll {
-                        // ZStack {
-                            // Rectangle()
-                                // .fill(.background)
-                            // ProgressView()
-                                // .controlSize(.large)
-                        // }
-                        // .ignoresSafeArea(edges: .vertical)
-                        // .id(selectedChat.id)
-                    // }
-                // }
+                .overlay {
+                    if isPreparingInitialScroll {
+                        ZStack {
+                            Rectangle()
+                                .fill(.background)
+                            ProgressView()
+                                .controlSize(.large)
+                        }
+                        .ignoresSafeArea(edges: .vertical)
+                        .id(selectedChat.id)
+                    }
+                }
                 .onDrop(of: [.item], isTargeted: nil) { providers in
                     inputManager.handleDrop(providers)
                 }

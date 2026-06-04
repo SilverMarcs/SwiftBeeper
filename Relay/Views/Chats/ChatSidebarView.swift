@@ -40,6 +40,7 @@ struct ChatSidebarView: View {
         .toolbarTitleDisplayMode(isIPad ? .inline : .inlineLarge)
         .toolbar(removing: .sidebarToggle)
         .toolbar {
+            #if !os(macOS)
             if isIPhone {
                 // iPhone: gear opens Settings where the filter used to live;
                 // the filter moves to the bottom bar, styled like ChatDetailiOS.
@@ -60,13 +61,14 @@ struct ChatSidebarView: View {
                 ToolbarItem(placement: .primaryAction) {
                     filterMenu
                 }
-            } else {
+            }
+            #else
                 // macOS: unchanged — Settings lives in the app's Settings scene.
                 ToolbarSpacer()
                 ToolbarItem(placement: .primaryAction) {
                     filterMenu
                 }
-            }
+            #endif
         }
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
@@ -107,8 +109,10 @@ struct ChatSidebarView: View {
         List(selection: Bindable(chatStore).selectedChatID) {
             ForEach(chatStore.displayedChats) { chat in
                 ChatRowView(chat: chat)
-                     .listRowSeparator(.hidden, edges: .top)
-                      .listRowSeparator(.visible, edges: .bottom)
+                    .if(isIPhone) {
+                        $0.listRowSeparator(.hidden, edges: .top)
+                            .listRowSeparator(.visible, edges: .bottom)
+                    }
                     .tag(chat.id)
                     .onAppear {
                         if chat.id == chatStore.displayedChats.last?.id,
@@ -131,7 +135,8 @@ struct ChatSidebarView: View {
                 .listRowSeparator(.hidden)
             }
         }
-        .listStyle(.plain)
+        .if(isIPhone) { $0.listStyle(.plain) }
+        // .if(isMacOrPad) { $0.listStyle(.sidebar) }
         .overlay {
             if chatStore.chats.isEmpty {
                 if chatStore.isSearching

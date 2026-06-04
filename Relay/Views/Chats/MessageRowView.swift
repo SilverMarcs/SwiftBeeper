@@ -65,87 +65,6 @@ struct MessageRowView: View {
                         .padding(.trailing, 3)
                 }
             }
-            .contextMenu {
-                Section {
-                    EmptyView()
-                } header: {
-                    Text(message.timestampText)
-                }
-
-                Picker(selection: Binding<String?>(
-                    get: { ownReactionKey },
-                    set: { newValue in
-                        let old = ownReactionKey
-                        Task {
-                            if let old, old != newValue {
-                                await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: old)
-                            }
-                            if let newValue, newValue != old {
-                                await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: newValue)
-                            }
-                        }
-                    }
-                )) {
-                    Text("None").tag(String?.none)
-                    ForEach(Self.commonReactions, id: \.self) { emoji in
-                        Text(emoji).tag(String?.some(emoji))
-                    }
-                } label: {
-                    Label("Reactions", systemImage: "face.smiling.inverse")
-                        .labelStyle(.titleAndIcon)
-                }
-               .pickerStyle(.palette)
-                
-                Divider()
-                
-                Button {
-                    withAnimation {
-                        chatStore.setReplyTo(message)
-                    }
-                } label: {
-                    Label("Reply", systemImage: "arrowshape.turn.up.left")
-                }
-
-                if message.hasText || message.isEmptyDeleted {
-                    Button {
-                        copyMessageText()
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                }
-
-                if chatStore.canEdit(message, in: chat) {
-                    Button {
-                        withAnimation {
-                            chatStore.startEditing(message, in: chat)
-                        }
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                }
-
-                if let attachments = message.attachments, !attachments.isEmpty {
-                    Divider()
-                    ForEach(attachments) { attachment in
-                        Button {
-                            Task { await saveAttachmentToDownloads(attachment) }
-                        } label: {
-                            Label(saveLabel(for: attachment, totalCount: attachments.count), systemImage: "arrow.down")
-                        }
-                    }
-                }
-
-                if !message.isEmptyDeleted && message.isOutgoing(in: chat) {
-                    Divider()
-                    Button(role: .destructive) {
-                        Task {
-                            await chatStore.deleteMessage(message.id, in: message.chatID)
-                        }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
 
             if !isOutgoing {
                 Spacer(minLength: 50)
@@ -227,10 +146,7 @@ struct MessageRowView: View {
                         .foregroundStyle(isOutgoing ? .white : .primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .bubbleBackground(isOutgoing: isOutgoing)
-                        .clipShape(.rect(cornerRadius: 15))
+                        .messageBubbleChrome(isOutgoing: isOutgoing)
                         .overlay(alignment: reactionsAlignment) {
                             reactionsOverlay(if: .textWithUrls)
                         }
@@ -254,13 +170,104 @@ struct MessageRowView: View {
                 .foregroundStyle(isOutgoing ? .white : .primary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .bubbleBackground(isOutgoing: isOutgoing)
-                .clipShape(.rect(cornerRadius: 15))
+                .messageBubbleChrome(isOutgoing: isOutgoing)
                 .overlay(alignment: reactionsAlignment) {
                     reactionsOverlay(if: .text)
                 }
+            }
+        }
+        #if !os(macOS)
+        .contentShape(.contextMenuPreview, .rect(cornerRadius: 16))
+        #endif
+        .contextMenu {
+            contextMenuItems
+        }
+    }
+
+    @ViewBuilder
+    private var contextMenuItems: some View {
+        Section {
+            EmptyView()
+        } header: {
+            Text(message.timestampText)
+        }
+
+        Picker(selection: Binding<String?>(
+            get: { ownReactionKey },
+            set: { newValue in
+                let old = ownReactionKey
+                Task {
+                    if let old, old != newValue {
+                        await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: old)
+                    }
+                    if let newValue, newValue != old {
+                        await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: newValue)
+                    }
+                }
+            }
+        )) {
+           #if os(macOS)
+            Text("None").tag(String?.none)
+            #endif
+            ForEach(Self.commonReactions, id: \.self) { emoji in
+                Text(emoji).tag(String?.some(emoji))
+            }
+        } label: {
+                        #if os(macOS)
+            Label("Reactions", systemImage: "face.smiling.inverse")
+
+                .labelStyle(.titleAndIcon)
+             #endif
+        }
+        .pickerStyle(.palette)
+
+        Divider()
+
+        Button {
+            withAnimation {
+                chatStore.setReplyTo(message)
+            }
+        } label: {
+            Label("Reply", systemImage: "arrowshape.turn.up.left")
+        }
+
+        if message.hasText || message.isEmptyDeleted {
+            Button {
+                copyMessageText()
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+        }
+
+        if chatStore.canEdit(message, in: chat) {
+            Button {
+                withAnimation {
+                    chatStore.startEditing(message, in: chat)
+                }
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+        }
+
+        if let attachments = message.attachments, !attachments.isEmpty {
+            Divider()
+            ForEach(attachments) { attachment in
+                Button {
+                    Task { await saveAttachmentToDownloads(attachment) }
+                } label: {
+                    Label(saveLabel(for: attachment, totalCount: attachments.count), systemImage: "arrow.down")
+                }
+            }
+        }
+
+        if !message.isEmptyDeleted && message.isOutgoing(in: chat) {
+            Divider()
+            Button(role: .destructive) {
+                Task {
+                    await chatStore.deleteMessage(message.id, in: message.chatID)
+                }
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
     }

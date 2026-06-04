@@ -28,6 +28,10 @@ final class EasyMatrixBackend {
     }
 
     private(set) var state: State = .idle
+    /// True once the backend has reached `.ready` at least once this app run.
+    /// Lets `BackendGate` distinguish first launch (full-screen loading view)
+    /// from a foreground-recovery restart (content stays up, silent reconnect).
+    private(set) var hasEverBeenReady = false
     let manageSecret: String = UUID().uuidString
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Relay", category: "EasyMatrixBackend")
@@ -82,6 +86,7 @@ final class EasyMatrixBackend {
         do {
             try await waitUntilReady()
             state = .ready
+            hasEverBeenReady = true
             logger.info("EasyMatrix backend ready on \(APIConfiguration.baseURL.absoluteString, privacy: .public)")
         } catch {
             logger.error("Backend did not become ready: \(error.localizedDescription, privacy: .public)")
@@ -110,7 +115,8 @@ final class EasyMatrixBackend {
     /// process, it tears down the embedded server's listening socket, so requests
     /// fail with "Could not connect to the server" even though `state` still reads
     /// `.ready`. Probe the server and, if it's no longer accepting connections,
-    /// restart it (a brief `BackendGate` flash while it reboots is fine).
+    /// restart it (`BackendGate` keeps the content up during the reboot because
+    /// `hasEverBeenReady` is already set, so the restart is invisible).
     func recoverIfNeeded() async {
         switch state {
         case .idle, .starting, .stopping:

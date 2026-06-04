@@ -6,10 +6,16 @@ struct BackendGate<Content: View>: View {
 
     var body: some View {
         switch backend.state {
-        case .idle, .starting:
-            loadingView("Starting backend")
-        case .stopping:
-            loadingView("Quitting")
+        case .idle, .starting, .stopping:
+            // Only gate the very first startup. Later transitions through these
+            // states (the foreground-recovery restart in `recoverIfNeeded()`,
+            // shutdown on quit) keep the content up — a brief silent reconnect
+            // instead of a full-screen "Quitting"/"Starting backend" takeover.
+            if backend.hasEverBeenReady {
+                content()
+            } else {
+                loadingView("Starting backend")
+            }
         case .ready:
             content()
         case .crashed(let message):

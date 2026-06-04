@@ -80,7 +80,12 @@ struct MessageInputView: View {
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
+                    #if os(macOS)
                     .offset(y: -1)
+                    #else
+                    .scaleEffect(0.97)
+                    #endif
+
 
                     if input.hasActiveComposerAction {
                         Button {
@@ -107,7 +112,7 @@ struct MessageInputView: View {
                         .lineLimit(1 ... 7)
                         .padding(.horizontal, 4)
                         .padding(8)
-                        .glassEffect(in: .rect(cornerRadius: 16))
+                        .glassEffect(in: .rect(cornerRadius: 20))
                         .onSubmit {
                             input.handleSubmit()
                         }
@@ -121,13 +126,19 @@ struct MessageInputView: View {
                                     .controlSize(.small)
                             } else {
                                 Image(systemName: input.isEditing ? "checkmark" : "arrow.up")
+                                    #if os(macOS)
                                     .font(.system(size: 15))
+                                    #else
+                                    .font(.title3)
+                                    #endif
                                     .bold()
                             }
                         }
                     }
                     .opacity(input.sendButtonDisabled ? 0.35 : 0.85)
+                    #if os(macOS)
                     .controlSize(.large)
+                    #endif
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(.circle)
                     .allowsHitTesting(!input.sendButtonDisabled)
@@ -165,10 +176,14 @@ struct MessageInputView: View {
             input.editingMessageDidChange()
         }
         .onAppear {
-            focusMessageField()
+            if isMac {
+                focusMessageField()
+            }
         }
         .onChange(of: chatStore.selectedChat?.id) { _, _ in
-            focusMessageField()
+            if isMac {
+                focusMessageField()
+            }
         }
         .onChange(of: chatStore.activeComposerMessage?.id) { _, _ in
             focusMessageField()

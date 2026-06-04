@@ -94,8 +94,8 @@ struct ChatInfoSheet: View {
 //            .navigationTitle(chat.displayTitle)
             .formStyle(.grouped)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(role: .cancel) { dismiss() }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(role: .close) { dismiss() }
                 }
             }
         }
