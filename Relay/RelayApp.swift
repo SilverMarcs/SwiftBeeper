@@ -7,6 +7,7 @@ struct RelayApp: App {
     #endif
     @State private var sessionStore = SessionStore()
     @State private var chatStore: ChatStore
+    @State private var inputManager: InputManager
     @State private var notificationService = NotificationService()
     @State private var backend = EasyMatrixBackend.shared
 
@@ -21,6 +22,7 @@ struct RelayApp: App {
         _sessionStore = State(initialValue: sessionStore)
         _notificationService = State(initialValue: notificationService)
         _chatStore = State(initialValue: chatStore)
+        _inputManager = State(initialValue: InputManager(chatStore: chatStore))
         APIClient.manageSecret = EasyMatrixBackend.shared.manageSecret
         APIClient.tokenRefresher = { [sessionStore] in
             try await sessionStore.refreshAccessToken()
@@ -32,6 +34,7 @@ struct RelayApp: App {
             backend: backend,
             sessionStore: sessionStore,
             chatStore: chatStore,
+            inputManager: inputManager,
             notificationService: notificationService
         )
     }

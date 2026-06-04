@@ -7,7 +7,10 @@ struct RootView: View {
     let backend: EasyMatrixBackend
     let sessionStore: SessionStore
     let chatStore: ChatStore
+    let inputManager: InputManager
     let notificationService: NotificationService
+
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         BackendGate(backend: backend) {
@@ -17,7 +20,18 @@ struct RootView: View {
                 }
                 .environment(sessionStore)
                 .environment(chatStore)
+                .environment(inputManager)
         }
         .task { await backend.start() }
+        .onChange(of: scenePhase) { _, newPhase in
+            // iOS suspends the embedded backend (and its localhost socket) while
+            // backgrounded; restart it on return so requests stop failing with
+            // "Could not connect to the server", then reconnect realtime + reload.
+            guard newPhase == .active else { return }
+            Task {
+                await backend.recoverIfNeeded()
+                chatStore.handleAppForeground()
+            }
+        }
     }
 }

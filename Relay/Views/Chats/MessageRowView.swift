@@ -23,7 +23,7 @@ struct MessageRowView: View {
         let isOutgoing = message.isOutgoing(in: chat)
         HStack(alignment: .bottom, spacing: 6) {
             if isOutgoing {
-                Spacer(minLength: 100)
+                Spacer(minLength: 50)
             } else if showIncomingIdentity {
                 if isLastInGroup {
                     Button {
@@ -94,6 +94,7 @@ struct MessageRowView: View {
                     Label("Reactions", systemImage: "face.smiling.inverse")
                         .labelStyle(.titleAndIcon)
                 }
+               .pickerStyle(.palette)
                 
                 Divider()
                 
@@ -147,7 +148,7 @@ struct MessageRowView: View {
             }
 
             if !isOutgoing {
-                Spacer(minLength: 100)
+                Spacer(minLength: 50)
             }
         }
         .sheet(item: $profileSheetParticipant) { participant in

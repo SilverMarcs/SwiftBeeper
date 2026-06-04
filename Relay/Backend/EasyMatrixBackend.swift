@@ -106,6 +106,38 @@ final class EasyMatrixBackend {
         state = .idle
     }
 
+    /// Called when the app returns to the foreground. While iOS suspends the
+    /// process, it tears down the embedded server's listening socket, so requests
+    /// fail with "Could not connect to the server" even though `state` still reads
+    /// `.ready`. Probe the server and, if it's no longer accepting connections,
+    /// restart it (a brief `BackendGate` flash while it reboots is fine).
+    func recoverIfNeeded() async {
+        switch state {
+        case .idle, .starting, .stopping:
+            // Initial startup (RootView's `.task`) owns these transitions.
+            return
+        case .crashed:
+            await start()
+        case .ready:
+            if await isServerReachable() { return }
+            logger.info("Backend unreachable after returning to foreground — restarting")
+            await stop()
+            await start()
+        }
+    }
+
+    private func isServerReachable() async -> Bool {
+        let url = APIConfiguration.baseURL.appending(path: "/manage/state")
+        var request = URLRequest(url: url, timeoutInterval: 2.0)
+        request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse).map { (200..<500).contains($0.statusCode) } ?? false
+        } catch {
+            return false
+        }
+    }
+
     private func waitUntilReady() async throws {
         let deadline = Date().addingTimeInterval(45)
         let url = APIConfiguration.baseURL.appending(path: "/manage/state")

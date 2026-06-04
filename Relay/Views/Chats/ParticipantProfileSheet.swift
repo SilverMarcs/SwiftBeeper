@@ -57,7 +57,7 @@ struct ParticipantProfileSheet: View {
             .formStyle(.grouped)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(role: .cancel) { dismiss() }
                 }
             }
         }

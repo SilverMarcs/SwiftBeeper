@@ -55,6 +55,7 @@ final class ChatStore: RealtimeEventHandler {
     var selectedChatID: String? {
         didSet {
             guard oldValue != selectedChatID else { return }
+            print("🟢 [store] selectedChatID \(oldValue ?? "nil") -> \(selectedChatID ?? "nil")")
             // Only the open chat keeps a timeline in memory — reset it on switch.
             messages = []
             messagesChatID = nil
@@ -63,6 +64,21 @@ final class ChatStore: RealtimeEventHandler {
             replyingToMessage = nil
             editingMessage = nil
             messagesError = nil
+
+            // Own the open-chat load here, not in the detail view's `.task`. A
+            // debounced chat-list refresh can briefly drop the open chat from
+            // `chats`, which collapses the detail view and cancels a view-owned
+            // load — and that cancellation also kills the in-flight request,
+            // leaving an empty timeline that never recovers (same view id, so the
+            // `.task` doesn't re-fire). A store-owned task survives that churn; we
+            // cancel it only when the selection actually changes.
+            loadMessagesTask?.cancel()
+            if let chatID = selectedChatID {
+                print("🟢 [store] launching loadMessagesTask for \(chatID)")
+                loadMessagesTask = Task { [weak self] in await self?.loadMessages(for: chatID) }
+            } else {
+                loadMessagesTask = nil
+            }
         }
     }
 
@@ -95,6 +111,7 @@ final class ChatStore: RealtimeEventHandler {
 
     private var scheduledChatsRefreshTask: Task<Void, Never>?
     private var scheduledMessagesRefreshTask: Task<Void, Never>?
+    private var loadMessagesTask: Task<Void, Never>?
     private var lastNotifiedMessageIDByChatID: [String: String] = [:]
 
     init(realtimeService: RealtimeService, notificationService: NotificationService) {
@@ -120,6 +137,12 @@ final class ChatStore: RealtimeEventHandler {
     var selectedChat: Chat? {
         guard let selectedChatID else { return nil }
         return chat(byID: selectedChatID)
+    }
+
+    /// Which chat to fall back to when the current selection becomes invalid.
+    /// macOS and iPad auto-select the first chat; iPhone stays manual (nil).
+    private var autoSelectedChatID: String? {
+        Device.isIPhone ? nil : chats.first?.id
     }
 
     func chat(byID chatID: String) -> Chat? {
@@ -176,12 +199,27 @@ final class ChatStore: RealtimeEventHandler {
         realtimeService.start()
     }
 
+    /// Called once the embedded backend is confirmed running after the app
+    /// returns to the foreground. The websocket and any in-flight requests die
+    /// while the app is suspended, so reconnect realtime (its `ready` event
+    /// re-syncs the chat list) and reload the open chat's timeline.
+    func handleAppForeground() {
+        guard !APIClient.accessToken.isEmpty else { return }
+        realtimeService.start()
+        if let chatID = selectedChatID {
+            loadMessagesTask?.cancel()
+            loadMessagesTask = Task { [weak self] in await self?.loadMessages(for: chatID) }
+        }
+    }
+
     func clearState() {
         restoreListState(.empty)
         lowPriorityChatIDs = []
         searchResults = nil
         searchQuery = ""
         isSearching = false
+        loadMessagesTask?.cancel()
+        loadMessagesTask = nil
         messages = []
         messagesChatID = nil
         hasMoreOlderMessages = false
@@ -251,14 +289,19 @@ final class ChatStore: RealtimeEventHandler {
             chatsErrorIsAuth = false
             lastLoadedInboxFilter = selectedInboxFilter
 
+            print("🟣 [store] performLoadChats COMMIT count=\(refreshedChats.count) selectedChatID=\(selectedChatID ?? "nil") inChatsByID=\(chatsByID[selectedChatID ?? ""] != nil)")
+            // macOS/iPad auto-select the first chat (and on launch / filter
+            // change); iPhone navigation is manual, so leave it unselected.
             if selectedChatID == snapshot.selectedChatID {
                 if let existingSelectedChatID = snapshot.selectedChatID, chatsByID[existingSelectedChatID] != nil {
                     selectedChatID = existingSelectedChatID
                 } else if chatsByID[selectedChatID ?? ""] == nil {
-                    selectedChatID = chats.first?.id
+                    print("🟣 [store] performLoadChats DESELECT (open chat absent from refreshed list) was=\(selectedChatID ?? "nil")")
+                    selectedChatID = autoSelectedChatID
                 }
             } else if chatsByID[selectedChatID ?? ""] == nil {
-                selectedChatID = chats.first?.id
+                print("🟣 [store] performLoadChats DESELECT-2 was=\(selectedChatID ?? "nil")")
+                selectedChatID = autoSelectedChatID
             }
         } catch {
             if retriesRemaining > 0,
@@ -377,7 +420,7 @@ final class ChatStore: RealtimeEventHandler {
             searchResults = results
         }
         if selectedChatID == chatID {
-            selectedChatID = chats.first?.id
+            selectedChatID = autoSelectedChatID
         }
     }
 
@@ -390,7 +433,7 @@ final class ChatStore: RealtimeEventHandler {
             try await APIClient.archiveChat(chatID: chatID, archived: archived)
             setChats(chats.filter { $0.id != chatID })
             if selectedChatID == chatID {
-                selectedChatID = chats.first?.id
+                selectedChatID = autoSelectedChatID
             }
         } catch {
             chatsError = error.localizedDescription
@@ -433,7 +476,11 @@ final class ChatStore: RealtimeEventHandler {
     /// Full-refreshes the open chat's timeline. Used on first appearance, after a
     /// send/delete, and on reconnect; steady-state updates arrive via realtime.
     func loadMessages(for chatID: String) async {
-        guard !APIClient.accessToken.isEmpty, chatID == selectedChatID else { return }
+        guard !APIClient.accessToken.isEmpty, chatID == selectedChatID else {
+            print("🟠 [store] loadMessages EARLY-RETURN chat=\(chatID) selectedChatID=\(selectedChatID ?? "nil") tokenEmpty=\(APIClient.accessToken.isEmpty)")
+            return
+        }
+        print("🟠 [store] loadMessages START chat=\(chatID)")
 
         let requestID = UUID()
         latestLoadRequestID = requestID
@@ -444,7 +491,11 @@ final class ChatStore: RealtimeEventHandler {
 
         do {
             let response = try await APIClient.listMessages(chatID: chatID)
-            guard latestLoadRequestID == requestID, chatID == selectedChatID else { return }
+            guard latestLoadRequestID == requestID, chatID == selectedChatID else {
+                print("🟠 [store] loadMessages POST-AWAIT DROP chat=\(chatID) selectedChatID=\(selectedChatID ?? "nil") staleRequest=\(latestLoadRequestID != requestID) gotItems=\(response.items.count)")
+                return
+            }
+            print("🟠 [store] loadMessages COMMIT chat=\(chatID) items=\(response.items.count)")
 
             messagesError = nil
             if let readKey = response.lastReadByOtherSortKey {
@@ -456,9 +507,18 @@ final class ChatStore: RealtimeEventHandler {
             messagesChatID = chatID
             hasMoreOlderMessages = response.hasMore
         } catch {
+            print("🟠 [store] loadMessages CATCH chat=\(chatID) cancelLike=\(isCancellationLikeError(error)) stale=\(latestLoadRequestID != requestID) error=\(error)")
             guard latestLoadRequestID == requestID else { return }
             handleMessageError(error)
         }
+    }
+
+    /// Awaitable handle for the store-owned open-chat load, so the detail view can
+    /// sequence its scroll/unread UI without owning the request's lifetime.
+    func awaitCurrentMessagesLoad() async {
+        print("🔵 [store] awaitCurrentMessagesLoad begin hasTask=\(loadMessagesTask != nil)")
+        await loadMessagesTask?.value
+        print("🔵 [store] awaitCurrentMessagesLoad end")
     }
 
     @discardableResult
@@ -737,6 +797,7 @@ final class ChatStore: RealtimeEventHandler {
         scheduledChatsRefreshTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard let self, !Task.isCancelled else { return }
+            print("🟣 [store] scheduledChatsRefresh -> loadChats")
             await self.loadChats()
         }
     }
