@@ -123,7 +123,7 @@ struct MessageInputView: View {
                         Group {
                             if input.isSendingMessage {
                                 ProgressView()
-                                #of os(macOS)
+                                    #if os(macOS)
                                     .controlSize(.small)
                                     #endif
                             } else {

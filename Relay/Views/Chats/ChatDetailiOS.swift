@@ -11,7 +11,15 @@ struct ChatDetailiOS: View {
     @State private var isPreparingInitialScroll = false
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
+    // Pagination is gated for the first few seconds after the view appears or
+    // the chat changes, so the initial bottom-pinned layout doesn't trigger
+    // an accidental "load older" while things settle. Loads requested during
+    // the gated window are deferred (not dropped) and fire when it opens.
+    @State private var paginationGateOpensAt: ContinuousClock.Instant = .now
+    @State private var pendingOlderLoad: Task<Void, Never>?
     private let bottomAnchorID = "bottom-id"
+
+    private static let paginationGateDelay: Duration = .seconds(2)
 
     var body: some View {
         if sessionStore.accessToken.isEmpty {
@@ -34,9 +42,15 @@ struct ChatDetailiOS: View {
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+                            // Per-chat identity so the row (and its appear/disappear
+                            // callbacks) resets when the chat changes.
+                            .id("older-spinner-\(selectedChat.id)")
                             .onAppear {
-                                guard !chatStore.isLoadingOlderMessages else { return }
-                                loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
+                                scheduleOlderLoad(chatID: selectedChat.id, proxy: proxy)
+                            }
+                            .onDisappear {
+                                pendingOlderLoad?.cancel()
+                                pendingOlderLoad = nil
                             }
                     }
 
@@ -70,9 +84,9 @@ struct ChatDetailiOS: View {
                                 isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
                             )
                         )
-                        .id(entry.message.id)
+                        .id(entry.id)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2  , trailing: 10))
+                        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
                     }
 
                     Color.clear
@@ -82,8 +96,12 @@ struct ChatDetailiOS: View {
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
                 }
+                .environment(\.defaultMinListRowHeight, 1)
+                .listStyle(.plain)
                 .task(id: selectedChat.id) {
-                    print("🔴 [iOS .task] FIRED chat=\(selectedChat.id) selectedChatID=\(chatStore.selectedChatID ?? "nil")")
+                    // Runs on appear AND when the chat changes (same check for
+                    // both): push the pagination gate out by the delay.
+                    paginationGateOpensAt = ContinuousClock.now.advanced(by: Self.paginationGateDelay)
                     isPreparingInitialScroll = true
                     firstUnreadID = nil
                     chatStore.setReplyTo(nil)
@@ -92,14 +110,10 @@ struct ChatDetailiOS: View {
                     // The load itself is owned by the store (survives view churn);
                     // here we just wait for it to settle before sequencing scroll.
                     await chatStore.awaitCurrentMessagesLoad()
-                    print("🔴 [iOS .task] after await chat=\(selectedChat.id) count=\(chatStore.messages(for: selectedChat.id).count) cancelled=\(Task.isCancelled)")
                     firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: selectedChat.id), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
-                    try? await Task.sleep(for: .milliseconds(150))
-                    scrollToBottom(with: proxy, animated: false)
-                    try? await Task.sleep(for: .milliseconds(250))
-                    scrollToBottom(with: proxy, animated: false)
+                    try? await Task.sleep(for: .milliseconds(100))
                     guard !Task.isCancelled else { return }
                     isPreparingInitialScroll = false
                     await detail
@@ -116,13 +130,13 @@ struct ChatDetailiOS: View {
                     }
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
-                    guard let newValue else { return }
+                    guard let newValue,
+                          let target = chatStore.messages(for: selectedChat.id).first(where: { $0.id == newValue })
+                    else { return }
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(newValue, anchor: .center)
+                        proxy.scrollTo(target.timelineKey, anchor: .center)
                     }
                 }
-                .listStyle(.plain)
-                .environment(\.defaultMinListRowHeight, 1)
                 .animation(.default, value: activeComposerMessageID)
                 .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
                 .toolbar {
@@ -171,7 +185,6 @@ struct ChatDetailiOS: View {
                                 .controlSize(.large)
                         }
                         .ignoresSafeArea(edges: .vertical)
-                        .id(selectedChat.id)
                     }
                     }
                 }
@@ -191,10 +204,7 @@ struct ChatDetailiOS: View {
                         }
                         .onChange(of: isSearchFocused) { _, focused in
                             guard focused else { return }
-                            Task { @MainActor in
-                                try? await Task.sleep(for: .milliseconds(200))
-                                scrollToBottom(with: proxy, animated: true)
-                            }
+                            scrollToBottom(with: proxy, animated: true)
                         }
                         .safeAreaInset(edge: .bottom) {
                             MessagePendingAttachmentsBar()
@@ -214,7 +224,7 @@ struct ChatDetailiOS: View {
                     }
                 }
             }
-          } else {
+        } else {
             let _ = print("🔴 [iOS body] NO selectedChat (collapsed) selectedChatID=\(chatStore.selectedChatID ?? "nil")")
             ContentUnavailableView(
                 "Pick a Chat",
@@ -243,11 +253,26 @@ struct ChatDetailiOS: View {
         }
     }
 
+    /// Defers the "load older" request until the pagination gate opens.
+    /// If the gate is already open, the sleep returns immediately and this
+    /// behaves like the plain onAppear-triggered load.
+    private func scheduleOlderLoad(chatID: String, proxy: ScrollViewProxy) {
+        pendingOlderLoad?.cancel()
+        let opensAt = paginationGateOpensAt
+        pendingOlderLoad = Task { @MainActor in
+            try? await Task.sleep(until: opensAt, clock: .continuous)
+            guard !Task.isCancelled else { return }
+            guard !chatStore.isLoadingOlderMessages else { return }
+            loadOlderMessages(chatID: chatID, proxy: proxy)
+        }
+    }
+
     private func loadOlderMessages(chatID: String, proxy: ScrollViewProxy) {
         let anchorMessageID = chatStore.messages(for: chatID).first?.timelineKey
         Task { @MainActor in
             _ = await chatStore.loadOlderMessages(for: chatID)
             if let anchorMessageID {
+                // Re-anchor so the prepended page doesn't shift what's on screen.
                 try? await Task.sleep(for: .milliseconds(1))
                 proxy.scrollTo(anchorMessageID, anchor: .top)
             }
