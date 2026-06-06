@@ -121,8 +121,16 @@ struct ChatDetailiOS: View {
                 }
                 .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
                     guard !isPreparingInitialScroll else { return }
-                    guard newTracker.count > oldTracker.count else { return }
+                    // 2026-06-06: a send lands as two store commits — the WS merge
+                    // grows the array but the new message isn't last yet (its sort
+                    // key settles on the follow-up loadMessages commit), then the
+                    // reload swaps lastID with the count unchanged. Requiring
+                    // count-grew AND lastID-changed in a single transition matched
+                    // neither commit, so sending never scrolled. Trigger on lastID
+                    // change with a non-decreasing count: pagination keeps lastID
+                    // stable, deletions shrink the count — both still skipped.
                     guard newTracker.lastID != oldTracker.lastID else { return }
+                    guard newTracker.count >= oldTracker.count else { return }
 
                     firstUnreadID = nil
                     Task { @MainActor in
