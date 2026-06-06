@@ -20,6 +20,11 @@ final class InputManager {
     /// this — the iPhone `.searchable` field manages its own presentation.
     var pendingFocus = false
 
+    /// Mirrors the inline composer's `FocusState` (set by `MessageInputView`)
+    /// so the iPad chat detail — which owns the scroll proxy — can scroll to
+    /// the bottom when the keyboard comes up.
+    var isComposerFocused = false
+
     init(chatStore: ChatStore) {
         self.chatStore = chatStore
     }

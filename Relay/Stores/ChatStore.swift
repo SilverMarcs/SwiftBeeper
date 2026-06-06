@@ -497,15 +497,20 @@ final class ChatStore: RealtimeEventHandler {
             }
             print("🟠 [store] loadMessages COMMIT chat=\(chatID) items=\(response.items.count)")
 
-            messagesError = nil
-            if let readKey = response.lastReadByOtherSortKey {
+            // 2026-06-05: every write below only fires on real change. Observation
+            // invalidates observers on ANY write (it doesn't compare values), and a
+            // send triggers several overlapping refetches (WS reconcile + post-send
+            // refresh) — unconditional writes re-rendered the whole timeline mid
+            // scroll animation, visibly shifting the scroll position.
+            if messagesError != nil { messagesError = nil }
+            if let readKey = response.lastReadByOtherSortKey, readKey != lastReadByOtherSortKey {
                 lastReadByOtherSortKey = readKey
             }
             let existing = messagesChatID == chatID ? messages : []
             let merged = refreshedMessages(existing: existing, latestPage: response.items)
-            messages = merged
-            messagesChatID = chatID
-            hasMoreOlderMessages = response.hasMore
+            if merged != messages { messages = merged }
+            if messagesChatID != chatID { messagesChatID = chatID }
+            if hasMoreOlderMessages != response.hasMore { hasMoreOlderMessages = response.hasMore }
         } catch {
             print("🟠 [store] loadMessages CATCH chat=\(chatID) cancelLike=\(isCancellationLikeError(error)) stale=\(latestLoadRequestID != requestID) error=\(error)")
             guard latestLoadRequestID == requestID else { return }
@@ -828,6 +833,11 @@ final class ChatStore: RealtimeEventHandler {
     // MARK: - Private storage helpers
 
     private func setChats(_ newChats: [Chat]) {
+        // 2026-06-05: skip identical commits. The sidebar refresh fires several
+        // times around a send; rewriting `chats`/`chatsByID` with equal values
+        // still invalidates every observer (Observation doesn't compare), which
+        // re-rendered the open chat's whole timeline via `selectedChat`.
+        guard newChats != chats else { return }
         chats = newChats
         chatsByID = Dictionary(newChats.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
     }

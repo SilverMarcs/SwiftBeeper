@@ -96,6 +96,7 @@ struct ChatDetailiOS: View {
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .environment(\.defaultMinListRowHeight, 1)
                 .listStyle(.plain)
                 .task(id: selectedChat.id) {
@@ -127,6 +128,12 @@ struct ChatDetailiOS: View {
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
                         scrollToBottom(with: proxy, animated: true)
+                        // 2026-06-05: re-grouping (prev bubble's isLastInGroup
+                        // flips) and the debounced sidebar refresh re-measure
+                        // rows after the animated scroll lands, leaving the list
+                        // slightly off-bottom. Re-pin once layout settles.
+                        try? await Task.sleep(for: .milliseconds(450))
+                        scrollToBottom(with: proxy, animated: false)
                     }
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
@@ -201,10 +208,19 @@ struct ChatDetailiOS: View {
                         .onSubmit(of: .search) {
                             inputManager.handleSubmit()
                             isSearchFocused = false
+                            // 2026-06-05: the sent message lands almost instantly
+                            // (in-process backend), so the tracker's scroll fires
+                            // mid search-bar dismissal and gets swallowed by the
+                            // inset animation. Re-scroll after it settles.
+                            scrollToBottom(with: proxy, animated: true, delay: .milliseconds(350))
                         }
                         .onChange(of: isSearchFocused) { _, focused in
                             guard focused else { return }
-                            scrollToBottom(with: proxy, animated: true)
+                            // 2026-06-05: scrolling immediately is a no-op — the
+                            // keyboard hasn't presented yet, so the bottom is
+                            // "visible" and then gets covered as it slides up.
+                            // Wait out the keyboard transition before scrolling.
+                            scrollToBottom(with: proxy, animated: true, delay: .milliseconds(250))
                         }
                         .safeAreaInset(edge: .bottom) {
                             MessagePendingAttachmentsBar()
@@ -222,6 +238,15 @@ struct ChatDetailiOS: View {
                     $0.safeAreaBar(edge: .bottom, spacing: 0) {
                         MessageInputView()
                     }
+                    // 2026-06-05: the inline composer's FocusState is private to
+                    // MessageInputView, so nothing scrolled when the keyboard
+                    // came up and it covered the latest messages. The composer
+                    // mirrors its focus into InputManager; scroll once the
+                    // keyboard transition settles.
+                    .onChange(of: inputManager.isComposerFocused) { _, focused in
+                        guard focused else { return }
+                        scrollToBottom(with: proxy, animated: true, delay: .milliseconds(250))
+                    }
                 }
             }
         } else {
@@ -234,13 +259,28 @@ struct ChatDetailiOS: View {
         }
     }
 
-    private func scrollToBottom(with proxy: ScrollViewProxy, animated: Bool) {
-        if animated {
-            withAnimation {
+    /// `delay` waits out keyboard / search-bar transitions: a scrollTo issued
+    /// while the List's bottom inset is still animating either targets the
+    /// pre-transition layout or is swallowed outright (macOS is unaffected —
+    /// no on-screen keyboard).
+    private func scrollToBottom(with proxy: ScrollViewProxy, animated: Bool, delay: Duration = .zero) {
+        let scroll = {
+            if animated {
+                withAnimation {
+                    proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+                }
+            } else {
                 proxy.scrollTo(bottomAnchorID, anchor: .bottom)
             }
+        }
+
+        if delay == .zero {
+            scroll()
         } else {
-            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+            Task { @MainActor in
+                try? await Task.sleep(for: delay)
+                scroll()
+            }
         }
     }
 

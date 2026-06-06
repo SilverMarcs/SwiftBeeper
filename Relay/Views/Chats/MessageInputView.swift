@@ -177,6 +177,11 @@ struct MessageInputView: View {
         .onChange(of: chatStore.editingMessage?.id) { _, _ in
             input.editingMessageDidChange()
         }
+        // Mirror focus into InputManager so the iPad detail view can scroll
+        // the timeline when the keyboard appears (FocusState is view-local).
+        .onChange(of: isMessageFieldFocused) { _, focused in
+            input.isComposerFocused = focused
+        }
         .onAppear {
             if isMac {
                 focusMessageField()
