@@ -4,6 +4,7 @@ import SwiftMediaViewer
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SessionStore.self) private var sessionStore
+    @AppStorage("dismissKeyboardAfterSend") private var dismissKeyboardAfterSend = false
 
     var body: some View {
         NavigationStack {
@@ -25,6 +26,10 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("Removes downloaded media files from the temporary directory.")
+            }
+
+            Section("Keyboard") {
+                Toggle("Dismiss Keyboard After Send", isOn: $dismissKeyboardAfterSend)
             }
             
            Section("Cache") {

@@ -7,7 +7,10 @@ struct ChatDetailiOS: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     @State private var showingChatInfo = false
-    @State private var isSearchFocused = false
+    @State private var isSearchPresented = false
+    @FocusState private var isSearchFocused: Bool
+    @AppStorage("dismissKeyboardAfterSend") private var dismissKeyboardAfterSend = false
+    @State private var delegateProxy: AnyObject?
     @State private var isPreparingInitialScroll = false
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
@@ -211,11 +214,36 @@ struct ChatDetailiOS: View {
                     $0.onChange(of: chatStore.editingMessage?.id) { _, _ in
                         inputManager.editingMessageDidChange()
                     }
-                    .searchable(text: inputManager.draftBinding, isPresented: $isSearchFocused, prompt: Text(inputManager.messageFieldPrompt))
+                    .searchable(text: inputManager.draftBinding, isPresented: $isSearchPresented, prompt: Text(inputManager.messageFieldPrompt))
+                        .searchFocused($isSearchFocused)
                         .searchPresentationToolbarBehavior(.avoidHidingContent)
+                        .background(
+                            SearchIntrospector { textField in
+                                if delegateProxy == nil {
+                                    let proxy = TextFieldDelegateProxy(originalDelegate: textField.delegate)
+                                    proxy.shouldReturn = {
+                                        if dismissKeyboardAfterSend {
+                                            return true
+                                        } else {
+                                            inputManager.handleSubmit()
+                                            return false
+                                        }
+                                    }
+                                    textField.delegate = proxy
+                                    delegateProxy = proxy
+                                }
+                            }
+                        )
                         .onSubmit(of: .search) {
                             inputManager.handleSubmit()
-                            isSearchFocused = false
+                            if dismissKeyboardAfterSend {
+                                isSearchPresented = false
+                            } else {
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(50))
+                                    isSearchFocused = true
+                                }
+                            }
                             // 2026-06-05: the sent message lands almost instantly
                             // (in-process backend), so the tracker's scroll fires
                             // mid search-bar dismissal and gets swallowed by the
@@ -230,6 +258,11 @@ struct ChatDetailiOS: View {
                             // Wait out the keyboard transition before scrolling.
                             scrollToBottom(with: proxy, animated: true, delay: .milliseconds(250))
                         }
+                        .onChange(of: inputManager.isSendingMessage) { oldValue, newValue in
+                            if oldValue && !newValue && !dismissKeyboardAfterSend {
+                                isSearchFocused = true
+                            }
+                        }
                         .safeAreaInset(edge: .bottom) {
                             MessagePendingAttachmentsBar()
                         }
@@ -239,6 +272,11 @@ struct ChatDetailiOS: View {
                             }
                             ToolbarSpacer(.fixed, placement: .bottomBar)
                             DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                            if inputManager.isSendingMessage {
+                                ToolbarItem(placement: .bottomBar) {
+                                    ProgressView()
+                                }
+                            }
                         }
                 }
                 .if(isIPad) {
@@ -425,5 +463,80 @@ private struct TimelineEntry: Identifiable {
     let isLastInGroup: Bool
 
     var id: String { message.timelineKey }
+}
+
+private class TextFieldDelegateProxy: NSObject, UITextFieldDelegate {
+    weak var originalDelegate: UITextFieldDelegate?
+    var shouldReturn: (() -> Bool)?
+
+    init(originalDelegate: UITextFieldDelegate?) {
+        self.originalDelegate = originalDelegate
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        if aSelector == #selector(textFieldShouldReturn(_:)) {
+            return true
+        }
+        return originalDelegate?.responds(to: aSelector) ?? super.responds(to: aSelector)
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        return originalDelegate
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        if let shouldReturn = shouldReturn {
+            return shouldReturn()
+        }
+        return originalDelegate?.textFieldShouldReturn?(textField) ?? true
+    }
+}
+
+private struct SearchIntrospector: UIViewRepresentable {
+    var introspect: (UISearchTextField) -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        DispatchQueue.main.async {
+            if let searchField = findSearchTextField(startingFrom: view) {
+                introspect(searchField)
+            }
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    private func findSearchTextField(startingFrom view: UIView) -> UISearchTextField? {
+        if let window = view.window, let field = findSearchTextField(in: window) {
+            return field
+        }
+        var responder: UIResponder? = view
+        while responder != nil {
+            if let viewController = responder as? UIViewController {
+                if let field = findSearchTextField(in: viewController.view) {
+                    return field
+                }
+                if let navigationBar = viewController.navigationController?.navigationBar,
+                   let field = findSearchTextField(in: navigationBar) {
+                    return field
+                }
+            }
+            responder = responder?.next
+        }
+        return nil
+    }
+
+    private func findSearchTextField(in view: UIView) -> UISearchTextField? {
+        if let searchField = view as? UISearchTextField {
+            return searchField
+        }
+        for subview in view.subviews {
+            if let field = findSearchTextField(in: subview) {
+                return field
+            }
+        }
+        return nil
+    }
 }
 #endif

@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 struct MessageInputView: View {
     @Environment(InputManager.self) private var input
     @Environment(ChatStore.self) private var chatStore
+    @AppStorage("dismissKeyboardAfterSend") private var dismissKeyboardAfterSend = false
 
     @State private var showingFilePicker = false
     @State private var showingPhotoPicker = false
@@ -115,10 +116,24 @@ struct MessageInputView: View {
                         .glassEffect(in: .rect(cornerRadius: 20))
                         .onSubmit {
                             input.handleSubmit()
+                            #if !os(macOS)
+                            if dismissKeyboardAfterSend {
+                                isMessageFieldFocused = false
+                            } else {
+                                focusMessageField()
+                            }
+                            #endif
                         }
 
                     Button {
                         input.handleSubmit()
+                        #if !os(macOS)
+                        if dismissKeyboardAfterSend {
+                            isMessageFieldFocused = false
+                        } else {
+                            focusMessageField()
+                        }
+                        #endif
                     } label: {
                         Group {
                             if input.isSendingMessage {
@@ -182,6 +197,13 @@ struct MessageInputView: View {
         .onChange(of: isMessageFieldFocused) { _, focused in
             input.isComposerFocused = focused
         }
+        #if !os(macOS)
+        .onChange(of: input.isSendingMessage) { oldValue, newValue in
+            if oldValue && !newValue && !dismissKeyboardAfterSend {
+                focusMessageField()
+            }
+        }
+        #endif
         .onAppear {
             if isMac {
                 focusMessageField()
