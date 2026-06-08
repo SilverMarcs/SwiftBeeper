@@ -6,12 +6,8 @@ struct VideoAttachmentView: View {
 
     @State private var videoPlayer: AVPlayer?
     @State private var isLoading = false
-
-    #if os(macOS)
-    private let maxWidth: CGFloat = 500
-    #else
-    private let maxWidth: CGFloat = Device.isIPad ? 400 : 275
-    #endif
+    
+    private let maxWidth: CGFloat = Device.isMacOrPad ? 400 : 275
     private let maxHeight: CGFloat = 500
 
     var body: some View {
