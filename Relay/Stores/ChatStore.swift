@@ -23,6 +23,71 @@ enum InboxFilter: String, CaseIterable {
     }
 }
 
+enum ChatFilter: Hashable, Equatable, Identifiable {
+    case inbox(InboxFilter)
+    case service(serviceID: String, name: String)
+
+    var id: String {
+        switch self {
+        case .inbox(let inbox): return "inbox_\(inbox.rawValue)"
+        case .service(let id, _): return "service_\(id)"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .inbox(let inbox): return inbox.label
+        case .service(_, let name): return name
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .inbox(let inbox): return inbox.systemImage
+        case .service(let serviceID, _):
+            return Self.systemImage(for: serviceID)
+        }
+    }
+
+    static func systemImage(for serviceID: String) -> String {
+        let id = serviceID.lowercased()
+        if id.contains("whatsapp") { return "phone.bubble.fill" }
+        if id.contains("telegram") { return "paperplane.fill" }
+        if id.contains("signal") { return "envelope.badge.shield.half.filled" }
+        if id.contains("discord") { return "gamecontroller.fill" }
+        if id.contains("slack") { return "square.grid.3x3.topleft.filled" }
+        if id.contains("instagram") { return "camera.fill" }
+        if id.contains("facebook") || id.contains("messenger") { return "bubble.left.and.bubble.right.fill" }
+        if id.contains("linkedin") { return "person.text.rectangle.fill" }
+        if id.contains("twitter") || id.contains("x") { return "x.squareroot" }
+        if id.contains("gmessages") || id.contains("google messages") { return "message.fill" }
+        if id.contains("hungryserv") || id.contains("matrix") { return "circle.grid.hex.fill" }
+        return "bubble.left.and.bubble.right"
+    }
+
+    static func cleanNetworkName(for serviceID: String) -> String {
+        let clean = serviceID.replacingOccurrences(of: "go", with: "")
+                            .replacingOccurrences(of: "local-", with: "")
+        switch clean.lowercased() {
+        case "whatsapp": return "WhatsApp"
+        case "telegram": return "Telegram"
+        case "signal": return "Signal"
+        case "discord": return "Discord"
+        case "slack": return "Slack"
+        case "linkedin": return "LinkedIn"
+        case "instagram": return "Instagram"
+        case "facebook", "messenger": return "Messenger"
+        case "gmessages": return "Google Messages"
+        case "gvoice": return "Google Voice"
+        case "twitter", "x": return "Twitter/X"
+        case "imessage": return "iMessage"
+        case "hungryserv": return "Beeper (Matrix)"
+        default:
+            return clean.capitalized
+        }
+    }
+}
+
 /// The app's single source of truth: chat list, the open chat's timeline, the
 /// composer, and realtime event handling. The timeline is *event-sourced* — the
 /// backend hydrates each `message.upserted` event with the full message, so we
@@ -43,7 +108,52 @@ final class ChatStore: RealtimeEventHandler {
     private(set) var chatsError: String?
     private(set) var chatsErrorIsAuth: Bool = false
     private(set) var isRecoveringAuth: Bool = false
-    var selectedInboxFilter: InboxFilter = .primary
+    var selectedFilter: ChatFilter = .inbox(.primary)
+    var selectedInboxFilter: InboxFilter {
+        get {
+            switch selectedFilter {
+            case .inbox(let inbox): return inbox
+            case .service: return .primary
+            }
+        }
+        set {
+            selectedFilter = .inbox(newValue)
+        }
+    }
+    private(set) var connectedAccounts: [Account] = []
+    
+    var isArchiveSelected: Bool {
+        if case .inbox(.archive) = selectedFilter {
+            return true
+        }
+        return false
+    }
+    
+    var availableServiceFilters: [ChatFilter] {
+        if !connectedAccounts.isEmpty {
+            return connectedAccounts.compactMap { account in
+                guard account.accountID != "hungryserv" else { return .service(serviceID: "hungryserv", name: "Beeper (Matrix)") }
+                let name = account.network ?? ChatFilter.cleanNetworkName(for: account.accountID)
+                return .service(serviceID: account.accountID, name: name)
+            }
+        } else {
+            let fallbackServices = [
+                ("whatsapp", "WhatsApp"),
+                ("telegram", "Telegram"),
+                ("facebookgo", "Messenger"),
+                ("instagramgo", "Instagram"),
+                ("signal", "Signal"),
+                ("discordgo", "Discord"),
+                ("slackgo", "Slack"),
+                ("linkedin", "LinkedIn"),
+                ("gmessages", "Google Messages"),
+                ("gvoice", "Google Voice"),
+                ("twitter", "Twitter/X"),
+                ("imessage", "iMessage")
+            ]
+            return fallbackServices.map { .service(serviceID: $0.0, name: $0.1) }
+        }
+    }
     var searchQuery: String = ""
     var searchResults: [Chat]?
     var isSearching = false
@@ -128,10 +238,18 @@ final class ChatStore: RealtimeEventHandler {
     // MARK: - Derived chat-list accessors
 
     var displayedChats: [Chat] {
-        if searchQuery.isBlank {
-            return chats
+        let baseChats = searchQuery.isBlank ? chats : (searchResults ?? chats)
+        switch selectedFilter {
+        case .inbox:
+            return baseChats
+        case .service(let serviceID, _):
+            return baseChats.filter { chat in
+                guard let chatAccountID = chat.accountID else { return false }
+                let target = serviceID.lowercased()
+                let actual = chatAccountID.lowercased()
+                return actual == target || actual.contains(target) || target.contains(actual)
+            }
         }
-        return searchResults ?? chats
     }
 
     var selectedChat: Chat? {
@@ -196,7 +314,17 @@ final class ChatStore: RealtimeEventHandler {
         }
 
         await loadChats()
+        await loadConnectedAccounts()
         realtimeService.start()
+    }
+
+    func loadConnectedAccounts() async {
+        guard !APIClient.accessToken.isEmpty else { return }
+        do {
+            connectedAccounts = try await APIClient.listAccounts()
+        } catch {
+            print("🔴 [store] failed to load connected accounts: \(error.localizedDescription)")
+        }
     }
 
     /// Called once the embedded backend is confirmed running after the app

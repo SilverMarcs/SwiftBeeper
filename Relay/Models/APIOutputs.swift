@@ -47,3 +47,11 @@ struct RemoveReactionOutput: Decodable {
     let messageID: String
     let reactionKey: String
 }
+
+struct Account: Decodable, Identifiable, Equatable, Hashable {
+    let accountID: String
+    let network: String?
+
+    var id: String { accountID }
+}
+

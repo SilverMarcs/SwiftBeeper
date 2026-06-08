@@ -76,7 +76,7 @@ struct ChatSidebarView: View {
                 SettingsView()
             }
         }
-        .onChange(of: chatStore.selectedInboxFilter) {
+        .onChange(of: chatStore.selectedFilter) {
             Task {
                 await chatStore.loadChats()
             }
@@ -85,17 +85,35 @@ struct ChatSidebarView: View {
 
     private var filterMenu: some View {
         Menu {
-            ForEach(InboxFilter.allCases, id: \.self) { filter in
-                Button {
-                    chatStore.selectedInboxFilter = filter
-                } label: {
-                    Label(filter.label, systemImage: filter.systemImage)
+            Section("Inboxes") {
+                ForEach(InboxFilter.allCases, id: \.self) { filter in
+                    Toggle(isOn: Binding(
+                        get: { chatStore.selectedFilter == .inbox(filter) },
+                        set: { if $0 { chatStore.selectedFilter = .inbox(filter) } }
+                    )) {
+                        Label(filter.label, systemImage: filter.systemImage)
+                    }
+                }
+            }
+
+            Divider()
+
+            Section("Services") {
+                ForEach(chatStore.availableServiceFilters, id: \.self) { filter in
+                    Toggle(isOn: Binding(
+                        get: { chatStore.selectedFilter == filter },
+                        set: { if $0 { chatStore.selectedFilter = filter } }
+                    )) {
+                        Text(filter.label)
+                    }
                 }
             }
         } label: {
-            Label(chatStore.selectedInboxFilter.label, systemImage: "line.3.horizontal.decrease")
+            Label("Filter", systemImage: "line.3.horizontal.decrease")
         }
+        .menuOrder(.fixed)
         .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private var settingsButton: some View {

@@ -54,7 +54,7 @@ struct ChatRowView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button {
                 Task {
-                    if chatStore.selectedInboxFilter == .archive {
+                    if chatStore.isArchiveSelected {
                         await chatStore.unarchiveChat(chat.id)
                     } else {
                         await chatStore.archiveChat(chat.id)
@@ -62,12 +62,12 @@ struct ChatRowView: View {
                 }
             } label: {
                 Label(
-                    chatStore.selectedInboxFilter == .archive ? "Unarchive" : "Archive",
-                    systemImage: chatStore.selectedInboxFilter == .archive ? "tray.and.arrow.up" : "archivebox"
+                    chatStore.isArchiveSelected ? "Unarchive" : "Archive",
+                    systemImage: chatStore.isArchiveSelected ? "tray.and.arrow.up" : "archivebox"
                 )
                 .labelStyle(.iconOnly)
             }
-            .tint(chatStore.selectedInboxFilter == .archive ? .blue : .orange)
+            .tint(chatStore.isArchiveSelected ? .blue : .orange)
 
             Button {
                 Task {

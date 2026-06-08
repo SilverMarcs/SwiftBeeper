@@ -78,6 +78,13 @@ extension APIClient {
             body: EmptyBody()
         )
     }
+
+    static func listAccounts() async throws -> [Account] {
+        guard let url = URL(string: "/v1/accounts", relativeTo: APIConfiguration.baseURL) else {
+            throw APIError.invalidURL("/v1/accounts")
+        }
+        return try await get(url: url)
+    }
 }
 
 private struct ArchiveChatRequest: Encodable {
