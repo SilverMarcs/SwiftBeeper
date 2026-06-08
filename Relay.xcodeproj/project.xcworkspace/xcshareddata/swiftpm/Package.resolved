@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/SilverMarcs/SwiftMediaViewer",
       "state" : {
-        "branch" : "main",
-        "revision" : "8468cac2ff3cb0c6d1a94d5c0cacf438508886e2"
+        "branch" : "feature/stable-cache-key",
+        "revision" : "a39be369edf3a8d017b9a3f7ae17be8a4a70cf88"
       }
     }
   ],

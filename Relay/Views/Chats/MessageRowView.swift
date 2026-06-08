@@ -219,7 +219,9 @@ struct MessageRowView: View {
                 .labelStyle(.titleAndIcon)
              #endif
         }
+        #if !os(macOS)
         .pickerStyle(.palette)
+        #endif
 
         Divider()
 

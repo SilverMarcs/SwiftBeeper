@@ -134,14 +134,23 @@ final class EasyMatrixBackend {
 
     private func isServerReachable() async -> Bool {
         let url = APIConfiguration.baseURL.appending(path: "/manage/state")
-        var request = URLRequest(url: url, timeoutInterval: 2.0)
-        request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse).map { (200..<500).contains($0.statusCode) } ?? false
-        } catch {
-            return false
+        
+        for attempt in 1...3 {
+            var request = URLRequest(url: url, timeoutInterval: 1.0)
+            request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse, (200..<500).contains(http.statusCode) {
+                    return true
+                }
+            } catch {
+                logger.info("Reachability probe attempt \(attempt) failed: \(error.localizedDescription, privacy: .public)")
+            }
+            if attempt < 3 {
+                try? await Task.sleep(for: .milliseconds(150))
+            }
         }
+        return false
     }
 
     private func waitUntilReady() async throws {

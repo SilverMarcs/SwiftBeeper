@@ -913,7 +913,11 @@ final class ChatStore: RealtimeEventHandler {
     private func mergedMessages(existing: [Message], incoming: [Message]) -> [Message] {
         var merged = Dictionary(existing.map { ($0.timelineKey, $0) }, uniquingKeysWith: { current, _ in current })
         for message in incoming {
-            merged.updateValue(message, forKey: message.timelineKey)
+            if let existingMsg = merged[message.timelineKey] {
+                merged[message.timelineKey] = existingMsg.merging(detail: message)
+            } else {
+                merged[message.timelineKey] = message
+            }
         }
         return merged.values.sorted(by: { $0.numericSortKey < $1.numericSortKey })
     }

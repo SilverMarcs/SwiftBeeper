@@ -5,13 +5,20 @@ struct ProfileAvatarView: View {
     let name: String
     let imageURLString: String?
     let dimension: CGFloat
+    var allowsFullscreen: Bool = false
 
     var body: some View {
-        CachedAsyncImage(
-            url: AuthenticatedImageLoader.displayURL(for: imageURLString),
-            targetSize: targetSize
-        ) {
-            initialsAvatar
+        Group {
+            if allowsFullscreen, let displayURL = AuthenticatedImageLoader.displayURL(for: imageURLString) {
+                SMVImage(url: displayURL, targetSize: targetSize)
+            } else {
+                CachedAsyncImage(
+                    url: AuthenticatedImageLoader.displayURL(for: imageURLString),
+                    targetSize: targetSize
+                ) {
+                    initialsAvatar
+                }
+            }
         }
         .scaledToFill()
         .frame(width: dimension, height: dimension)

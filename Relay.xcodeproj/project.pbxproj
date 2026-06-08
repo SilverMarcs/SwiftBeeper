@@ -457,7 +457,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SilverMarcs/SwiftMediaViewer";
 			requirement = {
-				branch = main;
+				branch = "feature/stable-cache-key";
 				kind = branch;
 			};
 		};

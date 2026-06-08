@@ -183,4 +183,28 @@ struct Message: Identifiable, Decodable, Equatable {
 
         return groups.values.sorted(by: { $0.reactionKey < $1.reactionKey })
     }
+
+    /// Merges a freshly-fetched copy (`detail`) into this one, preserving richer
+    /// data (like reactions or attachments) if the new copy omitted them.
+    func merging(detail: Message) -> Message {
+        let mergedSenderName = (detail.senderName?.isEmpty == false) ? detail.senderName : (senderName?.isEmpty == false ? senderName : nil)
+        let mergedReactions = detail.reactions ?? reactions
+        let mergedAttachments = detail.attachments ?? attachments
+
+        return Message(
+            id: detail.id,
+            chatID: detail.chatID,
+            senderID: detail.senderID,
+            senderName: mergedSenderName,
+            timestamp: detail.timestamp,
+            sortKey: detail.sortKey,
+            type: detail.type ?? type,
+            text: detail.text ?? text,
+            isSender: detail.isSender ?? isSender,
+            attachments: mergedAttachments,
+            isUnread: detail.isUnread ?? isUnread,
+            reactions: mergedReactions,
+            linkedMessageID: detail.linkedMessageID ?? linkedMessageID
+        )
+    }
 }

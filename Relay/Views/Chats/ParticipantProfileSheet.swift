@@ -12,7 +12,8 @@ struct ParticipantProfileSheet: View {
                         ProfileAvatarView(
                             name: participant.displayName,
                             imageURLString: participant.imgURL,
-                            dimension: 96
+                            dimension: 96,
+                            allowsFullscreen: true
                         )
 
                         VStack(spacing: 2) {
