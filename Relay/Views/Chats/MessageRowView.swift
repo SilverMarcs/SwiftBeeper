@@ -223,8 +223,41 @@ struct MessageRowView: View {
         .pickerStyle(.palette)
         #endif
 
+        #if os(macOS)
         Divider()
+        #endif
 
+        #if !os(macOS)
+        Section {
+            Button {
+                withAnimation {
+                    chatStore.setReplyTo(message)
+                }
+            } label: {
+                Label("Reply", systemImage: "arrowshape.turn.up.left")
+            }
+
+            if message.hasText || message.isEmptyDeleted {
+                Button {
+                    copyMessageText()
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+            }
+
+            if chatStore.canEdit(message, in: chat) {
+                Button {
+                    withAnimation {
+                        chatStore.startEditing(message, in: chat)
+                    }
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+            }
+        } header: {
+            Text(message.timestampText)
+        }
+        #else
         Button {
             withAnimation {
                 chatStore.setReplyTo(message)
@@ -250,6 +283,7 @@ struct MessageRowView: View {
                 Label("Edit", systemImage: "pencil")
             }
         }
+        #endif
 
         if let attachments = message.attachments, !attachments.isEmpty {
             Divider()
