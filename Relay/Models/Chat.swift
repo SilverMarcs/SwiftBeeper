@@ -68,6 +68,7 @@ struct Chat: Identifiable, Decodable, Equatable {
     var type: ChatKind?
     var isPinned: Bool?
     var isArchived: Bool?
+    var isLowPriority: Bool?
     var accountID: String?
     var lastActivity: Date?
     var lastReadMessageSortKey: String?
@@ -126,6 +127,7 @@ struct Chat: Identifiable, Decodable, Equatable {
         result.type = detail.type ?? type
         result.isPinned = detail.isPinned ?? isPinned
         result.isArchived = detail.isArchived ?? isArchived
+        result.isLowPriority = detail.isLowPriority ?? isLowPriority
         result.accountID = detail.accountID ?? accountID
         result.lastActivity = detail.lastActivity ?? lastActivity
         result.lastReadMessageSortKey = detail.lastReadMessageSortKey ?? lastReadMessageSortKey

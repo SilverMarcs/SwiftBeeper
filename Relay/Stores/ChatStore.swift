@@ -5,12 +5,14 @@ enum InboxFilter: String, CaseIterable {
     case primary
     case lowPriority = "low-priority"
     case archive
+    case unread
 
     var label: String {
         switch self {
         case .primary: "Primary"
         case .lowPriority: "Low Priority"
         case .archive: "Archive"
+        case .unread: "Unread"
         }
     }
 
@@ -19,6 +21,7 @@ enum InboxFilter: String, CaseIterable {
         case .primary: "tray.full"
         case .lowPriority: "tray"
         case .archive: "archivebox"
+        case .unread: "envelope.badge"
         }
     }
 }
@@ -157,7 +160,6 @@ final class ChatStore: RealtimeEventHandler {
     var searchQuery: String = ""
     var searchResults: [Chat]?
     var isSearching = false
-    private var lowPriorityChatIDs: Set<String> = []
     private var chatsCursor: String?
     private var lastLoadedInboxFilter: InboxFilter?
     private var chatsByID: [String: Chat] = [:]
@@ -268,7 +270,7 @@ final class ChatStore: RealtimeEventHandler {
     }
 
     func isPrimaryInboxChat(_ chat: Chat) -> Bool {
-        !lowPriorityChatIDs.contains(chat.id) && chat.isArchived != true
+        chat.isLowPriority != true && chat.isArchived != true
     }
 
     // MARK: - Open-chat accessors
@@ -342,7 +344,6 @@ final class ChatStore: RealtimeEventHandler {
 
     func clearState() {
         restoreListState(.empty)
-        lowPriorityChatIDs = []
         searchResults = nil
         searchQuery = ""
         isSearching = false
@@ -363,11 +364,6 @@ final class ChatStore: RealtimeEventHandler {
 
     // MARK: - Chat list loading
 
-    func ensureLowPriorityIDsLoaded() async {
-        guard lowPriorityChatIDs.isEmpty else { return }
-        lowPriorityChatIDs = (try? await APIClient.listLowPriorityChatIDs()) ?? []
-    }
-
     func loadChats() async {
         await performLoadChats(retriesRemaining: 1)
     }
@@ -386,25 +382,10 @@ final class ChatStore: RealtimeEventHandler {
         defer { isLoadingChats = false }
 
         do {
-            let refreshedChats: [Chat]
-            let refreshedCursor: String?
-            let refreshedHasMoreChats: Bool
-
-            if selectedInboxFilter == .primary {
-                async let chatsResponse = APIClient.listChats()
-                async let lowPriorityIDs = (try? APIClient.listLowPriorityChatIDs()) ?? []
-
-                let response = try await chatsResponse
-                lowPriorityChatIDs = await lowPriorityIDs
-                refreshedChats = response.items.filter(isPrimaryInboxChat)
-                refreshedCursor = response.oldestCursor
-                refreshedHasMoreChats = response.hasMore ?? false
-            } else {
-                let response = try await APIClient.searchChats(inbox: selectedInboxFilter.rawValue)
-                refreshedChats = response.items
-                refreshedCursor = response.oldestCursor
-                refreshedHasMoreChats = response.hasMore
-            }
+            let response = try await APIClient.listChats(inbox: selectedInboxFilter.rawValue)
+            let refreshedChats = response.items
+            let refreshedCursor = response.oldestCursor
+            let refreshedHasMoreChats = response.hasMore ?? false
 
             setChats(mergedChatsPreservingExistingContext(
                 refreshedChats: refreshedChats,
@@ -472,23 +453,15 @@ final class ChatStore: RealtimeEventHandler {
         do {
             let existingIDs = Set(chats.map(\.id))
 
-            if selectedInboxFilter == .primary {
-                let response = try await APIClient.listChats(cursor: cursor, direction: "before")
-                let newChats = response.items.filter { !existingIDs.contains($0.id) && isPrimaryInboxChat($0) }
-                setChats(chats + newChats)
-                chatsCursor = response.oldestCursor
-                hasMoreChats = response.hasMore ?? false
-            } else {
-                let response = try await APIClient.searchChats(
-                    inbox: selectedInboxFilter.rawValue,
-                    cursor: cursor,
-                    direction: "before"
-                )
-                let newChats = response.items.filter { !existingIDs.contains($0.id) }
-                setChats(chats + newChats)
-                chatsCursor = response.oldestCursor
-                hasMoreChats = response.hasMore
-            }
+            let response = try await APIClient.listChats(
+                inbox: selectedInboxFilter.rawValue,
+                cursor: cursor,
+                direction: "before"
+            )
+            let newChats = response.items.filter { !existingIDs.contains($0.id) }
+            setChats(chats + newChats)
+            chatsCursor = response.oldestCursor
+            hasMoreChats = response.hasMore ?? false
         } catch {
             // Silently fail on pagination errors; the user can scroll again to retry.
         }
@@ -946,7 +919,6 @@ final class ChatStore: RealtimeEventHandler {
 
     /// Posts notifications for a background chat directly from the realtime payload.
     private func notify(_ incoming: [Message], chatID: String) async {
-        await ensureLowPriorityIDsLoaded()
         guard let chat = chat(byID: chatID), chat.isMuted != true, isPrimaryInboxChat(chat) else { return }
 
         for message in incoming {
@@ -1004,13 +976,12 @@ final class ChatStore: RealtimeEventHandler {
         var selectedChatID: String?
         var chatsCursor: String?
         var hasMoreChats: Bool
-        var lowPriorityChatIDs: Set<String>
         var lastLoadedInboxFilter: InboxFilter?
         var chatsError: String?
 
         static let empty = ChatListState(
             chats: [], selectedChatID: nil, chatsCursor: nil, hasMoreChats: false,
-            lowPriorityChatIDs: [], lastLoadedInboxFilter: nil, chatsError: nil
+            lastLoadedInboxFilter: nil, chatsError: nil
         )
     }
 
@@ -1020,7 +991,6 @@ final class ChatStore: RealtimeEventHandler {
             selectedChatID: selectedChatID,
             chatsCursor: chatsCursor,
             hasMoreChats: hasMoreChats,
-            lowPriorityChatIDs: lowPriorityChatIDs,
             lastLoadedInboxFilter: lastLoadedInboxFilter,
             chatsError: chatsError
         )
@@ -1031,7 +1001,6 @@ final class ChatStore: RealtimeEventHandler {
         selectedChatID = state.selectedChatID
         chatsCursor = state.chatsCursor
         hasMoreChats = state.hasMoreChats
-        lowPriorityChatIDs = state.lowPriorityChatIDs
         lastLoadedInboxFilter = state.lastLoadedInboxFilter
         chatsError = state.chatsError
     }
