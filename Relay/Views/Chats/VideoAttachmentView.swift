@@ -9,11 +9,10 @@ struct VideoAttachmentView: View {
 
     #if os(macOS)
     private let maxWidth: CGFloat = 500
-    private let maxHeight: CGFloat = 500
     #else
-    private let maxWidth: CGFloat = 300
-    private let maxHeight: CGFloat = 500
+    private let maxWidth: CGFloat = Device.isIPad ? 400 : 275
     #endif
+    private let maxHeight: CGFloat = 500
 
     var body: some View {
         Group {

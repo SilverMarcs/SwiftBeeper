@@ -167,7 +167,6 @@ final class ChatStore: RealtimeEventHandler {
     var selectedChatID: String? {
         didSet {
             guard oldValue != selectedChatID else { return }
-            print("🟢 [store] selectedChatID \(oldValue ?? "nil") -> \(selectedChatID ?? "nil")")
             // Only the open chat keeps a timeline in memory — reset it on switch.
             messages = []
             messagesChatID = nil
@@ -186,7 +185,6 @@ final class ChatStore: RealtimeEventHandler {
             // cancel it only when the selection actually changes.
             loadMessagesTask?.cancel()
             if let chatID = selectedChatID {
-                print("🟢 [store] launching loadMessagesTask for \(chatID)")
                 loadMessagesTask = Task { [weak self] in await self?.loadMessages(for: chatID) }
             } else {
                 loadMessagesTask = nil
@@ -325,7 +323,7 @@ final class ChatStore: RealtimeEventHandler {
         do {
             connectedAccounts = try await APIClient.listAccounts()
         } catch {
-            print("🔴 [store] failed to load connected accounts: \(error.localizedDescription)")
+            // Non-critical; the service-filter list falls back to defaults.
         }
     }
 
@@ -398,18 +396,15 @@ final class ChatStore: RealtimeEventHandler {
             chatsErrorIsAuth = false
             lastLoadedInboxFilter = selectedInboxFilter
 
-            print("🟣 [store] performLoadChats COMMIT count=\(refreshedChats.count) selectedChatID=\(selectedChatID ?? "nil") inChatsByID=\(chatsByID[selectedChatID ?? ""] != nil)")
             // macOS/iPad auto-select the first chat (and on launch / filter
             // change); iPhone navigation is manual, so leave it unselected.
             if selectedChatID == snapshot.selectedChatID {
                 if let existingSelectedChatID = snapshot.selectedChatID, chatsByID[existingSelectedChatID] != nil {
                     selectedChatID = existingSelectedChatID
                 } else if chatsByID[selectedChatID ?? ""] == nil {
-                    print("🟣 [store] performLoadChats DESELECT (open chat absent from refreshed list) was=\(selectedChatID ?? "nil")")
                     selectedChatID = autoSelectedChatID
                 }
             } else if chatsByID[selectedChatID ?? ""] == nil {
-                print("🟣 [store] performLoadChats DESELECT-2 was=\(selectedChatID ?? "nil")")
                 selectedChatID = autoSelectedChatID
             }
         } catch {
@@ -578,10 +573,8 @@ final class ChatStore: RealtimeEventHandler {
     /// send/delete, and on reconnect; steady-state updates arrive via realtime.
     func loadMessages(for chatID: String) async {
         guard !APIClient.accessToken.isEmpty, chatID == selectedChatID else {
-            print("🟠 [store] loadMessages EARLY-RETURN chat=\(chatID) selectedChatID=\(selectedChatID ?? "nil") tokenEmpty=\(APIClient.accessToken.isEmpty)")
             return
         }
-        print("🟠 [store] loadMessages START chat=\(chatID)")
 
         let requestID = UUID()
         latestLoadRequestID = requestID
@@ -593,10 +586,8 @@ final class ChatStore: RealtimeEventHandler {
         do {
             let response = try await APIClient.listMessages(chatID: chatID)
             guard latestLoadRequestID == requestID, chatID == selectedChatID else {
-                print("🟠 [store] loadMessages POST-AWAIT DROP chat=\(chatID) selectedChatID=\(selectedChatID ?? "nil") staleRequest=\(latestLoadRequestID != requestID) gotItems=\(response.items.count)")
                 return
             }
-            print("🟠 [store] loadMessages COMMIT chat=\(chatID) items=\(response.items.count)")
 
             // 2026-06-05: every write below only fires on real change. Observation
             // invalidates observers on ANY write (it doesn't compare values), and a
@@ -613,7 +604,6 @@ final class ChatStore: RealtimeEventHandler {
             if messagesChatID != chatID { messagesChatID = chatID }
             if hasMoreOlderMessages != response.hasMore { hasMoreOlderMessages = response.hasMore }
         } catch {
-            print("🟠 [store] loadMessages CATCH chat=\(chatID) cancelLike=\(isCancellationLikeError(error)) stale=\(latestLoadRequestID != requestID) error=\(error)")
             guard latestLoadRequestID == requestID else { return }
             handleMessageError(error)
         }
@@ -622,9 +612,7 @@ final class ChatStore: RealtimeEventHandler {
     /// Awaitable handle for the store-owned open-chat load, so the detail view can
     /// sequence its scroll/unread UI without owning the request's lifetime.
     func awaitCurrentMessagesLoad() async {
-        print("🔵 [store] awaitCurrentMessagesLoad begin hasTask=\(loadMessagesTask != nil)")
         await loadMessagesTask?.value
-        print("🔵 [store] awaitCurrentMessagesLoad end")
     }
 
     @discardableResult
@@ -840,8 +828,14 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
 
-    nonisolated func realtimeDidUpsertChat(chatID: String?) {
-        Task { @MainActor in scheduleChatsRefresh() }
+    nonisolated func realtimeDidUpsertChat(chatID: String?, chat: Chat?) {
+        Task { @MainActor in
+            if let chat {
+                applyChatUpsert(chat)
+            } else {
+                scheduleChatsRefresh()
+            }
+        }
     }
 
     nonisolated func realtimeDidDeleteChat(chatID: String?) {
@@ -862,14 +856,14 @@ final class ChatStore: RealtimeEventHandler {
                 // Apply the payload for instant new-message rendering, then reconcile
                 // (debounced) so reactions/edits/deletes — which arrive as separate
                 // events — settle correctly. Both touch only the open chat.
+                //
+                // The sidebar (preview, unread, ordering) is updated by the
+                // `chat.upserted` event that always accompanies a message — now
+                // hydrated with the chat summary — so we no longer refetch the
+                // whole chat list here.
                 applyIncomingMessages(incoming, chatID: chatID)
                 scheduleMessagesRefresh(chatID: chatID)
-            }
-
-            // Sidebar metadata (preview, unread, ordering) stays server-authoritative.
-            scheduleChatsRefresh()
-
-            if chatID != selectedChatID {
+            } else {
                 await notify(incoming, chatID: chatID)
             }
         }
@@ -903,7 +897,6 @@ final class ChatStore: RealtimeEventHandler {
         scheduledChatsRefreshTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard let self, !Task.isCancelled else { return }
-            print("🟣 [store] scheduledChatsRefresh -> loadChats")
             await self.loadChats()
         }
     }
@@ -914,6 +907,60 @@ final class ChatStore: RealtimeEventHandler {
             try? await Task.sleep(for: .milliseconds(250))
             guard let self, !Task.isCancelled else { return }
             await self.loadMessages(for: chatID)
+        }
+    }
+
+    /// Applies a hydrated `chat.upserted` summary to the sidebar without a full
+    /// list refetch. Patches the chat in place and re-sorts by recency for the
+    /// common case (an existing chat that still belongs to the open inbox got new
+    /// activity). Falls back to a debounced list refresh only when we lack the
+    /// context to patch locally — a brand-new chat, or one whose inbox membership
+    /// changed (archived/unarchived, low-priority toggled, etc.).
+    private func applyChatUpsert(_ incoming: Chat) {
+        // Keep an in-flight search view consistent if it holds this chat.
+        if var results = searchResults,
+           let index = results.firstIndex(where: { $0.id == incoming.id }) {
+            results[index] = results[index].merging(detail: incoming)
+            searchResults = results
+        }
+
+        let belongs = chatBelongsToCurrentInbox(incoming)
+
+        guard chatsByID[incoming.id] != nil else {
+            // A chat we don't have yet. We lack list context (cursor position,
+            // ordering against unloaded pages), so let the server place it.
+            if belongs { scheduleChatsRefresh() }
+            return
+        }
+
+        guard belongs else {
+            // The chat left the current inbox (archived, marked low-priority,
+            // read, …). Let the server reconcile membership authoritatively.
+            scheduleChatsRefresh()
+            return
+        }
+
+        var updated = chats
+        if let index = updated.firstIndex(where: { $0.id == incoming.id }) {
+            updated[index] = updated[index].merging(detail: incoming)
+        }
+        // The backend orders chats by activity (sorting_timestamp DESC); mirror
+        // that so a freshly-active chat moves to the top of the sidebar.
+        updated.sort { ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast) }
+        setChats(updated)
+    }
+
+    /// Whether a chat belongs to the currently-loaded inbox, mirroring the
+    /// backend's inbox filtering. Used to decide whether a `chat.upserted` can be
+    /// patched locally or needs a server-authoritative refetch. The `unread`
+    /// inbox also keys off marked-unread state, which the client model doesn't
+    /// carry, so we always refetch there to stay correct.
+    private func chatBelongsToCurrentInbox(_ chat: Chat) -> Bool {
+        switch selectedInboxFilter {
+        case .primary: return chat.isArchived != true && chat.isLowPriority != true
+        case .lowPriority: return chat.isLowPriority == true
+        case .archive: return chat.isArchived == true
+        case .unread: return false
         }
     }
 

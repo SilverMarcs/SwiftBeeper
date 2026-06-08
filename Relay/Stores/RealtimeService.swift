@@ -5,7 +5,11 @@ import Observation
     /// The socket (re)connected — a good time to resync, since events may have
     /// been missed while disconnected.
     func realtimeDidConnect()
-    func realtimeDidUpsertChat(chatID: String?)
+    /// Carries the fully-hydrated chat summary from the event payload (preview,
+    /// unread, ordering, flags) when present, so the handler can patch a single
+    /// sidebar row instead of refetching the whole list. `chat` is nil only when
+    /// the backend couldn't hydrate it — the handler should refetch in that case.
+    func realtimeDidUpsertChat(chatID: String?, chat: Chat?)
     func realtimeDidDeleteChat(chatID: String?)
     /// Carries the fully-hydrated messages from the event payload, so the handler
     /// can apply them directly without refetching.
@@ -94,7 +98,10 @@ final class RealtimeService {
                 eventHandler?.realtimeDidReceiveError("Realtime error: \(message)")
             }
         case "chat.upserted":
-            eventHandler?.realtimeDidUpsertChat(chatID: envelope.chatID)
+            // The event payload carries the hydrated chat summary; apply it
+            // directly rather than refetching the chat list.
+            let chat = (try? JSONDecoder.beeper.decode(ChatEntriesPayload.self, from: data))?.entries?.first
+            eventHandler?.realtimeDidUpsertChat(chatID: envelope.chatID, chat: chat)
         case "chat.deleted":
             eventHandler?.realtimeDidDeleteChat(chatID: envelope.chatID)
         case "message.upserted":
@@ -173,6 +180,10 @@ private struct WebSocketEnvelope: Decodable {
 
 private struct MessageEntriesPayload: Decodable {
     let entries: [Message]?
+}
+
+private struct ChatEntriesPayload: Decodable {
+    let entries: [Chat]?
 }
 
 private struct SubscriptionsSetCommand: Encodable {

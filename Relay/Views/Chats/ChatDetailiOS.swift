@@ -20,6 +20,9 @@ struct ChatDetailiOS: View {
     // the gated window are deferred (not dropped) and fire when it opens.
     @State private var paginationGateOpensAt: ContinuousClock.Instant = .now
     @State private var pendingOlderLoad: Task<Void, Never>?
+    // Timeline grouping does per-message `Calendar` work; cache it so unrelated
+    // store changes (a sidebar refresh) don't recompute it on every body pass.
+    @State private var timelineCache = MemoizedValue<TimelineCacheKey, [TimelineEntry]>()
     private let bottomAnchorID = "bottom-id"
 
     private static let paginationGateDelay: Duration = .seconds(2)
@@ -33,7 +36,9 @@ struct ChatDetailiOS: View {
             )
         } else if let selectedChat = chatStore.selectedChat {
             let messages = chatStore.messages(for: selectedChat.id)
-            let timelineEntries = timelineEntries(for: messages)
+            let timelineEntries = timelineCache(TimelineCacheKey(messages: messages, firstUnreadID: firstUnreadID)) {
+                self.timelineEntries(for: messages)
+            }
             let activeComposerMessageID = chatStore.activeComposerMessage?.id
             let readIndicatorMessageID = lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
 
@@ -296,7 +301,6 @@ struct ChatDetailiOS: View {
                 }
             }
         } else {
-            let _ = print("🔴 [iOS body] NO selectedChat (collapsed) selectedChatID=\(chatStore.selectedChatID ?? "nil")")
             ContentUnavailableView(
                 "Pick a Chat",
                 systemImage: "list.bullet",
@@ -454,6 +458,13 @@ struct ChatDetailiOS: View {
 private struct MessageListTracker: Equatable {
     let count: Int
     let lastID: String?
+}
+
+/// Memoization key for the timeline grouping: it depends only on the message
+/// values and the unread divider's position.
+private struct TimelineCacheKey: Equatable {
+    let messages: [Message]
+    let firstUnreadID: String?
 }
 
 private struct TimelineEntry: Identifiable {

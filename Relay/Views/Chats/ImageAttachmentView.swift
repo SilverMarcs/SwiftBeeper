@@ -4,7 +4,7 @@ import SwiftUI
 struct ImageAttachmentView: View {
     let attachment: Attachment
 
-    private let maxWidth: CGFloat = Device.isMacOrPad ? 500 : 275
+    private let maxWidth: CGFloat = Device.isMacOrPad ? 400 : 275
     private let maxHeight: CGFloat = 500
     /// Decode size in pixels — large enough that SMV's fullscreen viewer
     /// (which reuses the same cached decode) stays sharp.

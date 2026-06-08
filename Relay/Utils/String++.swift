@@ -30,6 +30,15 @@ private let markdownCache: NSCache<NSString, AttributedStringBox> = {
 /// Creating an `NSDataDetector` is relatively expensive; share one instance.
 private let sharedLinkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
+/// Link detection is identical for identical input but runs on every `body`
+/// re-evaluation (and several times per message row). Cache by source string so
+/// re-renders are cheap — mirrors `markdownCache`.
+private let extractedURLsCache: NSCache<NSString, NSArray> = {
+    let cache = NSCache<NSString, NSArray>()
+    cache.countLimit = 2000
+    return cache
+}()
+
 extension String {
     var markdownAttributed: AttributedString {
         let key = self as NSString
@@ -56,7 +65,13 @@ extension String {
         guard let detector = sharedLinkDetector else {
             return []
         }
+        let key = self as NSString
+        if let cached = extractedURLsCache.object(forKey: key) as? [URL] {
+            return cached
+        }
         let range = NSRange(startIndex..., in: self)
-        return detector.matches(in: self, range: range).compactMap { $0.url }
+        let urls = detector.matches(in: self, range: range).compactMap { $0.url }
+        extractedURLsCache.setObject(urls as NSArray, forKey: key)
+        return urls
     }
 }
