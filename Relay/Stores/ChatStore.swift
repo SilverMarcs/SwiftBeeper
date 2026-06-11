@@ -124,7 +124,16 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
     private(set) var connectedAccounts: [Account] = []
-    
+
+    /// The logged-in user as they appear across their chats. There is no
+    /// dedicated "me" endpoint — the backend only surfaces the current user as
+    /// the `isSelf` participant inside each chat — so pick the first such
+    /// participant that carries a usable name/avatar, falling back to any.
+    var currentUserProfile: ChatParticipant? {
+        let selves = chats.compactMap { $0.participants?.items.first(where: { $0.isSelf == true }) }
+        return selves.first(where: { ($0.fullName?.isEmpty == false) || ($0.username?.isEmpty == false) }) ?? selves.first
+    }
+
     var isArchiveSelected: Bool {
         if case .inbox(.archive) = selectedFilter {
             return true

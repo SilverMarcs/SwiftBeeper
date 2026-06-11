@@ -9,7 +9,6 @@ struct ChatDetailiOS: View {
     @State private var showingChatInfo = false
     @State private var isSearchPresented = false
     @FocusState private var isSearchFocused: Bool
-    @AppStorage("dismissKeyboardAfterSend") private var dismissKeyboardAfterSend = false
     @State private var delegateProxy: AnyObject?
     @State private var isPreparingInitialScroll = false
     @State private var firstUnreadID: String?
@@ -227,12 +226,8 @@ struct ChatDetailiOS: View {
                                 if delegateProxy == nil {
                                     let proxy = TextFieldDelegateProxy(originalDelegate: textField.delegate)
                                     proxy.shouldReturn = {
-                                        if dismissKeyboardAfterSend {
-                                            return true
-                                        } else {
-                                            inputManager.handleSubmit()
-                                            return false
-                                        }
+                                        inputManager.handleSubmit()
+                                        return false
                                     }
                                     textField.delegate = proxy
                                     delegateProxy = proxy
@@ -241,13 +236,9 @@ struct ChatDetailiOS: View {
                         )
                         .onSubmit(of: .search) {
                             inputManager.handleSubmit()
-                            if dismissKeyboardAfterSend {
-                                isSearchPresented = false
-                            } else {
-                                Task { @MainActor in
-                                    try? await Task.sleep(for: .milliseconds(50))
-                                    isSearchFocused = true
-                                }
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(50))
+                                isSearchFocused = true
                             }
                             // 2026-06-05: the sent message lands almost instantly
                             // (in-process backend), so the tracker's scroll fires
@@ -264,7 +255,7 @@ struct ChatDetailiOS: View {
                             scrollToBottom(with: proxy, animated: true, delay: .milliseconds(250))
                         }
                         .onChange(of: inputManager.isSendingMessage) { oldValue, newValue in
-                            if oldValue && !newValue && !dismissKeyboardAfterSend {
+                            if oldValue && !newValue {
                                 isSearchFocused = true
                             }
                         }

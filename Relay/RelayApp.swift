@@ -50,6 +50,7 @@ struct RelayApp: App {
         Settings {
             SettingsView()
                 .environment(sessionStore)
+                .environment(chatStore)
         }
         #else
         WindowGroup {

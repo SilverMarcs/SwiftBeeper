@@ -1,38 +1,68 @@
-import AVKit
+import SwiftMediaViewer
 import SwiftUI
 
 struct VideoAttachmentView: View {
     let attachment: Attachment
 
-    @State private var videoPlayer: AVPlayer?
-    @State private var isLoading = false
-    
+    @AppStorage("autoplay") private var autoplay = true
+    @AppStorage("muteOnPlay") private var muteOnPlay = false
+
+    @State private var showVideo = false
+
     private let maxWidth: CGFloat = Device.isMacOrPad ? 400 : 275
     private let maxHeight: CGFloat = 500
 
     var body: some View {
         Group {
-            if let videoPlayer {
-                VideoPlayer(player: videoPlayer)
-                    .frame(width: videoSize.width, height: videoSize.height)
-                    .clipShape(.rect(cornerRadius: 12))
-                    .onDisappear {
-                        stopPlayback(videoPlayer)
-                    }
-            } else if isLoading {
-                ProgressView()
-                    .frame(width: videoSize.width, height: videoSize.height)
-                    .subtleBackground()
-                    .clipShape(.rect(cornerRadius: 12))
+            if showVideo, let urlString = AuthenticatedImageLoader.displayURL(for: attachment.resolvedURL)?.absoluteString {
+                // SMVVideo shows an inline player and zooms to a full-screen
+                // AVPlayer on tap; autoplay it since we only reach here once the
+                // poster has been swapped out (by tap or the autoplay delay).
+                SMVVideo(videoURL: urlString, autoplay: true, muteOnPlay: muteOnPlay)
             } else {
-                Color.clear
-                    .frame(width: videoSize.width, height: videoSize.height)
-                    .subtleBackground()
-                    .clipShape(.rect(cornerRadius: 12))
+                preview
             }
         }
-        .task(id: attachment.resolvedURL) {
-            await loadVideo()
+        .frame(width: videoSize.width, height: videoSize.height)
+        .clipShape(.rect(cornerRadius: 12))
+    }
+
+    // Poster + play button. With autoplay on, this shows for ~1s then hands off
+    // to SMVVideo — so videos don't all start fetching at once while scrolling.
+    private var preview: some View {
+        Button {
+            showVideo = true
+        } label: {
+            posterImage
+                .overlay {
+                    Image(systemName: "play.fill")
+                        .font(.title2)
+                        .padding()
+                        .background(.black.opacity(0.5), in: .circle)
+                        .foregroundStyle(.white)
+                }
+        }
+        .buttonStyle(.plain)
+        .task {
+            guard autoplay else { return }
+            do {
+                try await Task.sleep(for: .seconds(1))
+            } catch {
+                return
+            }
+            showVideo = true
+        }
+    }
+
+    @ViewBuilder
+    private var posterImage: some View {
+        if let posterURL = AuthenticatedImageLoader.displayURL(for: attachment.posterImg) {
+            CachedAsyncImage(url: posterURL, targetSize: 450) {
+                Color.clear.subtleBackground()
+            }
+            .scaledToFill()
+        } else {
+            Color.clear.subtleBackground()
         }
     }
 
@@ -52,28 +82,5 @@ struct VideoAttachmentView: View {
         }
 
         return CGSize(width: width, height: height)
-    }
-
-    private func loadVideo() async {
-        guard let urlString = attachment.resolvedURL else { return }
-
-        isLoading = true
-        defer { isLoading = false }
-
-        let ext = attachment.mimeType?.split(separator: "/").last.map(String.init) ?? "mp4"
-        guard let fileURL = await AuthenticatedImageLoader.downloadToTempFile(
-            urlString: urlString,
-            fileExtension: ext
-        ) else { return }
-
-        let player = AVPlayer(url: fileURL)
-        player.pause()
-        videoPlayer = player
-    }
-
-    private func stopPlayback(_ player: AVPlayer) {
-        player.pause()
-        player.replaceCurrentItem(with: nil)
-        videoPlayer = nil
     }
 }
