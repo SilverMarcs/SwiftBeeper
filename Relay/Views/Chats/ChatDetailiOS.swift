@@ -268,6 +268,24 @@ struct ChatDetailiOS: View {
                                 isSearchFocused = true
                             }
                         }
+                        .onChange(of: activeComposerMessageID) { _, newValue in
+                            // Entering reply/edit state:
+                            guard newValue != nil else { return }
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(200))
+                                // try? await Task.sleep(for: .milliseconds(450))
+                                isSearchFocused = true
+                            }
+                        }
+                        .onChange(of: isSearchPresented) { _, presented in
+                            // Exiting the search/compose mode (Cancel) should also
+                            // bail out of any reply/edit state — they're entered
+                            // together, so leaving one leaves the other. A bare
+                            // keyboard dismissal keeps the search presented, so this
+                            // only fires on a real search exit.
+                            guard !presented, chatStore.activeComposerMessage != nil else { return }
+                            inputManager.cancelComposerAction()
+                        }
                         .safeAreaInset(edge: .bottom) {
                             MessagePendingAttachmentsBar()
                         }
