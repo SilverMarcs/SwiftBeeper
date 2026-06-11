@@ -5,21 +5,34 @@ struct BackendGate<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        switch backend.state {
-        case .idle, .starting, .stopping:
-            // Only gate the very first startup. Later transitions through these
-            // states (the foreground-recovery restart in `recoverIfNeeded()`,
-            // shutdown on quit) keep the content up — a brief silent reconnect
-            // instead of a full-screen "Quitting"/"Starting backend" takeover.
-            if backend.hasEverBeenReady {
-                content()
-            } else {
+        // `hasEverBeenReady` only ever flips false→true once, so once the
+        // backend has come up we keep `content()` in a single, stable
+        // structural slot for the rest of the session. Previously `content()`
+        // was returned from two different `switch` arms (`.ready` and the
+        // `.starting`/`.stopping` recovery branch); SwiftUI treats each arm of
+        // a `switch` as a distinct identity, so the foreground-restart churn
+        // (.ready → .stopping → .starting → .ready in `recoverIfNeeded()`)
+        // moved content across `_ConditionalContent` slots and tore down /
+        // rebuilt the whole ContentView tree twice. That reset every `@State`
+        // underneath it — dismissing open sheets and flashing every avatar back
+        // through its loading placeholder. Gating on the monotonic flag pins
+        // content to one slot, and the crash UI overlays it instead of
+        // replacing it so a crash+retry also preserves state.
+        if backend.hasEverBeenReady {
+            content()
+                .overlay {
+                    if case .crashed(let message) = backend.state {
+                        crashedView(message: message)
+                            .background(.background)
+                    }
+                }
+        } else {
+            switch backend.state {
+            case .crashed(let message):
+                crashedView(message: message)
+            default:
                 loadingView("Starting backend")
             }
-        case .ready:
-            content()
-        case .crashed(let message):
-            crashedView(message: message)
         }
     }
 
