@@ -156,6 +156,9 @@ struct ChatSidebarView: View {
         }
         .if(isIPhone) { $0.listStyle(.plain) }
         // .if(isMacOrPad) { $0.listStyle(.sidebar) }
+        // Animate only when the row order/membership changes (keyed on the id
+        // sequence), not on in-place row edits like a chat's last-message text.
+        .animation(.default, value: chatStore.displayedChats.map(\.id))
         .overlay {
             if chatStore.chats.isEmpty {
                 if chatStore.isSearching
