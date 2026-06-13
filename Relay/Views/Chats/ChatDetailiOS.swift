@@ -109,21 +109,30 @@ struct ChatDetailiOS: View {
                 .task(id: selectedChat.id) {
                     // Runs on appear AND when the chat changes (same check for
                     // both): push the pagination gate out by the delay.
+                    let chatID = selectedChat.id
                     paginationGateOpensAt = ContinuousClock.now.advanced(by: Self.paginationGateDelay)
                     isPreparingInitialScroll = true
                     firstUnreadID = nil
                     chatStore.setReplyTo(nil)
                     chatStore.cancelEditing()
-                    async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
+                    // 2026-06-14: clear the flag in a defer so a cancelled task can't
+                    // leak it `true`. The old `guard !Task.isCancelled` before the
+                    // clear meant that if this task was cancelled during the trailing
+                    // sleep (view churn on a chat switch), the flag stuck `true` and
+                    // the tracker below silently swallowed EVERY message-arrival
+                    // scroll from the second chat onward. The identity check keeps a
+                    // chat switch from clobbering the next chat's freshly-set flag.
+                    defer {
+                        if chatStore.selectedChat?.id == chatID { isPreparingInitialScroll = false }
+                    }
+                    async let detail: () = chatStore.loadChatDetail(for: chatID)
                     // The load itself is owned by the store (survives view churn);
                     // here we just wait for it to settle before sequencing scroll.
                     await chatStore.awaitCurrentMessagesLoad()
-                    firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: selectedChat.id), chat: selectedChat)
+                    firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: chatID), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottom(with: proxy, animated: false)
                     try? await Task.sleep(for: .milliseconds(100))
-                    guard !Task.isCancelled else { return }
-                    isPreparingInitialScroll = false
                     await detail
                 }
                 .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
@@ -248,6 +257,11 @@ struct ChatDetailiOS: View {
                         }
                         .onChange(of: isSearchFocused) { _, focused in
                             guard focused else { return }
+                            // 2026-06-14: focusing for a reply/edit must NOT jump to
+                            // the bottom — that scrolls past the message being acted
+                            // on. The activeComposerMessageID handler below reveals
+                            // the target instead; only bottom-pin a fresh compose.
+                            guard chatStore.activeComposerMessage == nil else { return }
                             // 2026-06-05: scrolling immediately is a no-op — the
                             // keyboard hasn't presented yet, so the bottom is
                             // "visible" and then gets covered as it slides up.
