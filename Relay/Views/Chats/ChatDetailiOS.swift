@@ -131,7 +131,7 @@ struct ChatDetailiOS: View {
                     await chatStore.awaitCurrentMessagesLoad()
                     firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: chatID), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
-                    scrollToBottom(with: proxy, animated: false)
+                    scrollToBottomSettling(with: proxy, animateFirst: false)
                     try? await Task.sleep(for: .milliseconds(100))
                     await detail
                 }
@@ -149,16 +149,7 @@ struct ChatDetailiOS: View {
                     guard newTracker.count >= oldTracker.count else { return }
 
                     firstUnreadID = nil
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(50))
-                        scrollToBottom(with: proxy, animated: true)
-                        // 2026-06-05: re-grouping (prev bubble's isLastInGroup
-                        // flips) and the debounced sidebar refresh re-measure
-                        // rows after the animated scroll lands, leaving the list
-                        // slightly off-bottom. Re-pin once layout settles.
-                        try? await Task.sleep(for: .milliseconds(450))
-                        scrollToBottom(with: proxy, animated: false)
-                    }
+                    scrollToBottomSettling(with: proxy, animateFirst: true)
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
                     guard let newValue,
@@ -353,6 +344,27 @@ struct ChatDetailiOS: View {
             Task { @MainActor in
                 try? await Task.sleep(for: delay)
                 scroll()
+            }
+        }
+    }
+
+    /// Scrolls to the bottom, then re-pins several times across a short window.
+    ///
+    /// 2026-06-14: rows re-measure at unpredictable times *after* the first
+    /// scroll — on iPhone the .searchable submit churns the keyboard (down then
+    /// up) on every send, and async avatar/media height plus bubble re-grouping
+    /// (the previous message's `isLastInGroup` flips, hiding its avatar) shift
+    /// layout too. A single fixed-delay re-pin races whichever settle happens to
+    /// land last, leaving the list slightly off-bottom. Re-pinning across the
+    /// window catches the late ones. iPad/Mac use the inline composer (no
+    /// search-bar keyboard churn), which is why they were less affected.
+    private func scrollToBottomSettling(with proxy: ScrollViewProxy, animateFirst: Bool) {
+        Task { @MainActor in
+            scrollToBottom(with: proxy, animated: animateFirst)
+            for step: Duration in [.milliseconds(150), .milliseconds(300), .milliseconds(500)] {
+                try? await Task.sleep(for: step)
+                if Task.isCancelled { return }
+                scrollToBottom(with: proxy, animated: false)
             }
         }
     }
