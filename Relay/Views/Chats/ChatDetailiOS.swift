@@ -94,6 +94,7 @@ struct ChatDetailiOS: View {
                             showReadIndicator: entry.message.id == readIndicatorMessageID,
                             isFirstInGroup: entry.isFirstInGroup,
                             isLastInGroup: entry.isLastInGroup,
+                            linkedMessage: entry.linkedMessage,
                             onTapLinkedMessage: { linkedID in
                                 scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
                             }
@@ -373,6 +374,14 @@ struct ChatDetailiOS: View {
     private func scrollToBottomSettling(with proxy: ScrollViewProxy, animateFirst: Bool) {
         Task { @MainActor in
             scrollToBottom(with: proxy, animated: animateFirst)
+            // 2026-06-21: a new message (animateFirst == true — send or incoming)
+            // scrolls exactly ONCE. The non-animated re-pins below landed on top
+            // of the animated scroll as a visible abrupt second jump, and on
+            // iPhone the .searchable submit handler already re-scrolls once after
+            // the keyboard inset settles. Keep the re-pins only for initial
+            // chat-open (animateFirst == false), where rows still measure late on
+            // first render and there's no other scroll covering for them.
+            guard !animateFirst else { return }
             for step: Duration in [.milliseconds(150), .milliseconds(300), .milliseconds(500)] {
                 try? await Task.sleep(for: step)
                 if Task.isCancelled { return }
@@ -457,6 +466,10 @@ struct ChatDetailiOS: View {
     private func timelineEntries(for messages: [Message]) -> [TimelineEntry] {
         var entries: [TimelineEntry] = []
         let count = messages.count
+        // Resolve reply targets once here (the whole result is memoized) so each
+        // reply bubble gets its quoted message as plain data instead of
+        // subscribing to the store and re-scanning `messages` on every render.
+        let messagesByID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         for i in 0..<count {
             let message = messages[i]
@@ -475,7 +488,9 @@ struct ChatDetailiOS: View {
             let isFirstInGroup = !sameSenderAsPrev || showsTimestamp || message.id == firstUnreadID
             let isLastInGroup = !sameSenderAsNext || nextShowsTimestamp || nextIsUnread
 
-            entries.append(TimelineEntry(message: message, showsTimestamp: showsTimestamp, isFirstInGroup: isFirstInGroup, isLastInGroup: isLastInGroup))
+            let linkedMessage = message.linkedMessageID.flatMap { $0.isEmpty ? nil : messagesByID[$0] }
+
+            entries.append(TimelineEntry(message: message, showsTimestamp: showsTimestamp, isFirstInGroup: isFirstInGroup, isLastInGroup: isLastInGroup, linkedMessage: linkedMessage))
         }
 
         return entries
@@ -528,6 +543,7 @@ private struct TimelineEntry: Identifiable {
     let showsTimestamp: Bool
     let isFirstInGroup: Bool
     let isLastInGroup: Bool
+    let linkedMessage: Message?
 
     var id: String { message.timelineKey }
 }

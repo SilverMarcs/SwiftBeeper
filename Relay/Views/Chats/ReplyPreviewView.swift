@@ -1,16 +1,13 @@
 import SwiftUI
 
 struct ReplyPreviewView: View {
-    @Environment(ChatStore.self) private var chatStore
-
-    let linkedMessageID: String
-    let chatID: String
+    /// Resolved by the timeline grouping (memoized) and passed in as plain data,
+    /// so this view doesn't subscribe to the store or re-scan `messages` per render.
+    let linkedMessage: Message?
     let isOutgoing: Bool
     var onTap: (() -> Void)? = nil
 
     var body: some View {
-        let linkedMessage = chatStore.message(byID: linkedMessageID, in: chatID)
-
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 1.5)
                 .fill(Color.accentColor)

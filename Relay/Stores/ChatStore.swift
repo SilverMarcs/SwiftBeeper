@@ -304,11 +304,6 @@ final class ChatStore: RealtimeEventHandler {
         return displayableMessages
     }
 
-    func message(byID messageID: String, in chatID: String) -> Message? {
-        guard chatID == messagesChatID else { return nil }
-        return messages.first(where: { $0.id == messageID })
-    }
-
     func hasMoreMessages(for chatID: String) -> Bool {
         chatID == messagesChatID && hasMoreOlderMessages
     }

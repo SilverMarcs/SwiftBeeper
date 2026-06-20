@@ -77,6 +77,7 @@ struct ChatDetailMac: View {
                             showReadIndicator: entry.message.id == readIndicatorMessageID,
                             isFirstInGroup: entry.isFirstInGroup,
                             isLastInGroup: entry.isLastInGroup,
+                            linkedMessage: entry.linkedMessage,
                             onTapLinkedMessage: { linkedID in
                                 scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
                             }
@@ -310,6 +311,10 @@ struct ChatDetailMac: View {
     private func timelineEntries(for messages: [Message]) -> [TimelineEntry] {
         var entries: [TimelineEntry] = []
         let count = messages.count
+        // Resolve reply targets once here (the whole result is memoized) so each
+        // reply bubble gets its quoted message as plain data instead of
+        // subscribing to the store and re-scanning `messages` on every render.
+        let messagesByID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         for i in 0..<count {
             let message = messages[i]
@@ -328,7 +333,9 @@ struct ChatDetailMac: View {
             let isFirstInGroup = !sameSenderAsPrev || showsTimestamp || message.id == firstUnreadID
             let isLastInGroup = !sameSenderAsNext || nextShowsTimestamp || nextIsUnread
 
-            entries.append(TimelineEntry(message: message, showsTimestamp: showsTimestamp, isFirstInGroup: isFirstInGroup, isLastInGroup: isLastInGroup))
+            let linkedMessage = message.linkedMessageID.flatMap { $0.isEmpty ? nil : messagesByID[$0] }
+
+            entries.append(TimelineEntry(message: message, showsTimestamp: showsTimestamp, isFirstInGroup: isFirstInGroup, isLastInGroup: isLastInGroup, linkedMessage: linkedMessage))
         }
 
         return entries
@@ -381,6 +388,7 @@ private struct TimelineEntry: Identifiable {
     let showsTimestamp: Bool
     let isFirstInGroup: Bool
     let isLastInGroup: Bool
+    let linkedMessage: Message?
 
     var id: String { message.timelineKey }
 }

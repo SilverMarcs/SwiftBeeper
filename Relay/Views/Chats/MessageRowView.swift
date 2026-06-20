@@ -13,6 +13,8 @@ struct MessageRowView: View {
     var showReadIndicator: Bool = false
     var isFirstInGroup: Bool = true
     var isLastInGroup: Bool = true
+    /// The message this one replies to, pre-resolved by the timeline grouping.
+    var linkedMessage: Message? = nil
     var onTapLinkedMessage: ((String) -> Void)? = nil
 
     @State private var profileSheetParticipant: ChatParticipant?
@@ -49,8 +51,7 @@ struct MessageRowView: View {
 
                 if let linkedMessageID = message.linkedMessageID, !linkedMessageID.isEmpty {
                     ReplyPreviewView(
-                        linkedMessageID: linkedMessageID,
-                        chatID: message.chatID,
+                        linkedMessage: linkedMessage,
                         isOutgoing: isOutgoing,
                         onTap: { onTapLinkedMessage?(linkedMessageID) }
                     )

@@ -57,9 +57,9 @@ struct AudioAttachmentView: View {
         .padding(.vertical, 8)
         .bubbleBackground(isOutgoing: isOutgoing)
         .clipShape(.rect(cornerRadius: 12))
-        .task(id: attachment.resolvedURL) {
-            await loadAudio()
-        }
+        // Load lazily on the first play tap (handled in the button above), not on
+        // appear — auto-loading downloaded and (for OGG/Opus) CPU-transcoded every
+        // voice note that scrolled into view, even ones the user never played.
         .onDisappear {
             tearDownPlayer()
         }
