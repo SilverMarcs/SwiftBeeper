@@ -22,6 +22,9 @@ struct ChatDetailiOS: View {
     // Timeline grouping does per-message `Calendar` work; cache it so unrelated
     // store changes (a sidebar refresh) don't recompute it on every body pass.
     @State private var timelineCache = MemoizedValue<TimelineCacheKey, [TimelineEntry]>()
+    // The read indicator scans every message (isOutgoing + isReadByOther); memoize
+    // it so an unrelated store change doesn't re-scan the timeline on each body pass.
+    @State private var readIndicatorCache = MemoizedValue<ReadIndicatorKey, String?>()
     private let bottomAnchorID = "bottom-id"
 
     private static let paginationGateDelay: Duration = .seconds(2)
@@ -35,11 +38,20 @@ struct ChatDetailiOS: View {
             )
         } else if let selectedChat = chatStore.selectedChat {
             let messages = chatStore.messages(for: selectedChat.id)
-            let timelineEntries = timelineCache(TimelineCacheKey(messages: messages, firstUnreadID: firstUnreadID)) {
+            let timelineVersion = chatStore.messagesChatID == selectedChat.id ? chatStore.messagesVersion : -1
+            let timelineEntries = timelineCache(TimelineCacheKey(version: timelineVersion, firstUnreadID: firstUnreadID)) {
                 self.timelineEntries(for: messages)
             }
             let activeComposerMessageID = chatStore.activeComposerMessage?.id
-            let readIndicatorMessageID = lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
+            let readIndicatorMessageID = readIndicatorCache(
+                ReadIndicatorKey(
+                    version: timelineVersion,
+                    lastReadByOtherSortKey: chatStore.lastReadByOtherSortKey,
+                    selfParticipantID: selectedChat.participants?.items.first(where: { $0.isSelf == true })?.id
+                )
+            ) {
+                self.lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
+            }
 
             ScrollViewReader { proxy in
                 List {
@@ -495,11 +507,20 @@ private struct MessageListTracker: Equatable {
     let lastID: String?
 }
 
-/// Memoization key for the timeline grouping: it depends only on the message
-/// values and the unread divider's position.
+/// Memoization key for the timeline grouping: it depends only on the timeline's
+/// content (tracked by the store's O(1) version counter) and the unread divider's
+/// position. `version` is -1 when no timeline is shown for the open chat yet.
 private struct TimelineCacheKey: Equatable {
-    let messages: [Message]
+    let version: Int
     let firstUnreadID: String?
+}
+
+/// Memoization key for the "Read" indicator: it depends on the timeline content,
+/// how far the other side has read, and who "self" is (which drives `isOutgoing`).
+private struct ReadIndicatorKey: Equatable {
+    let version: Int
+    let lastReadByOtherSortKey: String?
+    let selfParticipantID: String?
 }
 
 private struct TimelineEntry: Identifiable {

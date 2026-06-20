@@ -203,7 +203,24 @@ final class ChatStore: RealtimeEventHandler {
 
     // MARK: Open-chat timeline
 
-    private(set) var messages: [Message] = []
+    private(set) var messages: [Message] = [] {
+        didSet {
+            // Cache the displayable subset (and bump a cheap version counter) on
+            // write rather than re-deriving it on every `messages(for:)` call.
+            // `isDisplayable` lowercases free text to sniff membership events, so
+            // filtering in the view's `body` re-scanned the whole timeline on
+            // every unrelated store change (a sidebar refresh re-runs the open
+            // chat's body). The guarded writes here only fire on real change, so
+            // this recompute is bounded to actual timeline mutations.
+            displayableMessages = messages.filter(\.isDisplayable)
+            messagesVersion &+= 1
+        }
+    }
+    /// Displayable subset of `messages`, recomputed only when `messages` changes.
+    private(set) var displayableMessages: [Message] = []
+    /// Monotonic counter bumped on every `messages` change. Lets views key their
+    /// timeline memoization on an O(1) value instead of deep-comparing `[Message]`.
+    private(set) var messagesVersion: Int = 0
     /// Which chat `messages` currently belongs to (guards against load races).
     private(set) var messagesChatID: String?
     private(set) var hasMoreOlderMessages = false
@@ -284,7 +301,7 @@ final class ChatStore: RealtimeEventHandler {
 
     func messages(for chatID: String) -> [Message] {
         guard chatID == messagesChatID else { return [] }
-        return messages.filter(\.isDisplayable)
+        return displayableMessages
     }
 
     func message(byID messageID: String, in chatID: String) -> Message? {

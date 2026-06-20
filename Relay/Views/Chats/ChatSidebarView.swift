@@ -125,8 +125,13 @@ struct ChatSidebarView: View {
     }
 
     private var chatList: some View {
-        List(selection: Bindable(chatStore).selectedChatID) {
-            ForEach(chatStore.displayedChats) { chat in
+        // `displayedChats` filters (and lowercases for service filters) on every
+        // access; compute it once per body pass instead of re-deriving it for the
+        // ForEach, each row's pagination check, and the animation value.
+        let displayedChats = chatStore.displayedChats
+        let lastChatID = displayedChats.last?.id
+        return List(selection: Bindable(chatStore).selectedChatID) {
+            ForEach(displayedChats) { chat in
                 ChatRowView(chat: chat)
                     .if(isIPhone) {
                         $0.listRowSeparator(.hidden, edges: .top)
@@ -134,7 +139,7 @@ struct ChatSidebarView: View {
                     }
                     .tag(chat.id)
                     .onAppear {
-                        if chat.id == chatStore.displayedChats.last?.id,
+                        if chat.id == lastChatID,
                            chatStore.hasMoreChats,
                            !chatStore.isLoadingMoreChats {
                             Task {
@@ -158,7 +163,7 @@ struct ChatSidebarView: View {
         // .if(isMacOrPad) { $0.listStyle(.sidebar) }
         // Animate only when the row order/membership changes (keyed on the id
         // sequence), not on in-place row edits like a chat's last-message text.
-        .animation(.default, value: chatStore.displayedChats.map(\.id))
+        .animation(.default, value: displayedChats.map(\.id))
         .overlay {
             if chatStore.chats.isEmpty {
                 if chatStore.isSearching

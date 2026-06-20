@@ -56,7 +56,7 @@ struct MessageRowView: View {
                     )
                 }
 
-                messageContent
+                messageContent(isOutgoing: isOutgoing)
 
                 if isOutgoing && showReadIndicator {
                    Text("Read")
@@ -113,49 +113,50 @@ struct MessageRowView: View {
     }
 
     @ViewBuilder
-    private func reactionsOverlay(if slot: BubbleSlot) -> some View {
+    private func reactionsOverlay(if slot: BubbleSlot, isOutgoing: Bool) -> some View {
         if slot == lastBubbleSlot {
             reactionsView
                 .offset(
-                    x: message.isOutgoing(in: chat) ? -15 : 15,
+                    x: isOutgoing ? -15 : 15,
                     y: 1
                 )
         }
     }
 
-    private var reactionsAlignment: Alignment {
-        message.isOutgoing(in: chat) ? .bottomLeading : .bottomTrailing
+    private func reactionsAlignment(isOutgoing: Bool) -> Alignment {
+        isOutgoing ? .bottomLeading : .bottomTrailing
     }
 
     @ViewBuilder
-    private var messageContent: some View {
-        let isOutgoing = message.isOutgoing(in: chat)
+    private func messageContent(isOutgoing: Bool) -> some View {
+        let alignment = reactionsAlignment(isOutgoing: isOutgoing)
         VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
             if let attachments = message.attachments, attachments.isEmpty == false {
                 ForEach(attachments) { attachment in
                     AttachmentView(attachment: attachment, isOutgoing: isOutgoing)
-                        .overlay(alignment: reactionsAlignment) {
-                            reactionsOverlay(if: .attachment(attachment.id))
+                        .overlay(alignment: alignment) {
+                            reactionsOverlay(if: .attachment(attachment.id), isOutgoing: isOutgoing)
                         }
                 }
             }
 
             if let urls = message.extractedURLs, !urls.isEmpty {
-                if message.textWithoutURLs?.isEmpty == false {
-                    Text(message.textWithoutURLs!.markdownAttributed)
+                let textWithoutURLs = message.textWithoutURLs
+                if let textWithoutURLs, !textWithoutURLs.isEmpty {
+                    Text(textWithoutURLs.markdownAttributed)
                         .foregroundStyle(isOutgoing ? .white : .primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
-                        .overlay(alignment: reactionsAlignment) {
-                            reactionsOverlay(if: .textWithUrls)
+                        .overlay(alignment: alignment) {
+                            reactionsOverlay(if: .textWithUrls, isOutgoing: isOutgoing)
                         }
                 }
 
                 ForEach(urls, id: \.absoluteString) { url in
                     LinkPillView(url: url)
-                        .overlay(alignment: reactionsAlignment) {
-                            reactionsOverlay(if: .linkPill(url.absoluteString))
+                        .overlay(alignment: alignment) {
+                            reactionsOverlay(if: .linkPill(url.absoluteString), isOutgoing: isOutgoing)
                         }
                 }
             } else if message.hasText || message.isEmptyDeleted {
@@ -171,8 +172,8 @@ struct MessageRowView: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .messageBubbleChrome(isOutgoing: isOutgoing)
-                .overlay(alignment: reactionsAlignment) {
-                    reactionsOverlay(if: .text)
+                .overlay(alignment: alignment) {
+                    reactionsOverlay(if: .text, isOutgoing: isOutgoing)
                 }
             }
         }
