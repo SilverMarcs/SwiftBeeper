@@ -127,20 +127,33 @@ struct ChatDetailMac: View {
                         .id(bottomAnchorID)
                 }
                 .task(id: selectedChat.id) {
+                    // Re-fires on every selection change (no .id() on the detail
+                    // view needed — that would rebuild the whole pane per chat).
+                    let chatID = selectedChat.id
                     isPreparingInitialScroll = true
                     firstUnreadID = nil
                     chatStore.setReplyTo(nil)
                     chatStore.cancelEditing()
-                    async let detail: () = chatStore.loadChatDetail(for: selectedChat.id)
+                    // 2026-07-08: defer bail-out ported from ChatDetailiOS (its
+                    // 2026-06-14 scar): the old `guard !Task.isCancelled` before the
+                    // clear leaked the mask `true` when a chat switch cancelled this
+                    // task mid-sleep — and on macOS this view instance is shared
+                    // across chats, so the leak also swallowed message-arrival
+                    // scrolls. The settling task owns the happy-path unmask.
+                    var settlingOwnsUnmask = false
+                    defer {
+                        if !settlingOwnsUnmask, chatStore.selectedChat?.id == chatID {
+                            isPreparingInitialScroll = false
+                        }
+                    }
+                    async let detail: () = chatStore.loadChatDetail(for: chatID)
                     // The load itself is owned by the store (survives view churn);
                     // here we just wait for it to settle before sequencing scroll.
                     await chatStore.awaitCurrentMessagesLoad()
-                    firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: selectedChat.id), chat: selectedChat)
+                    firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: chatID), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
-                    scrollToBottom(with: proxy, animated: false)
-                    try? await Task.sleep(for: .milliseconds(100))
-                    guard !Task.isCancelled else { return }
-                    isPreparingInitialScroll = false
+                    scrollToBottomSettling(with: proxy, chatID: chatID)
+                    settlingOwnsUnmask = true
                     await detail
                 }
                 .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
@@ -247,6 +260,29 @@ struct ChatDetailMac: View {
             }
         } else {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
+    }
+
+    /// Initial-open only: pins to the bottom, re-pins across a short window, and
+    /// drops the mask after the final pin. Message-arrival scrolls stay a single
+    /// animated scroll (see the 2026-06-21 note in the tracker onChange).
+    ///
+    /// 2026-07-08: ported from ChatDetailiOS. The single scrollTo landed against
+    /// NSTableView's estimated row heights, so chats with late-measuring rows
+    /// (media, link pills) settled slightly above the bottom after the mask was
+    /// already down. Unlike iOS this view instance is shared across chats (no
+    /// .id() per chat), so a stale run from a fast chat switch must bail on the
+    /// identity check instead of clobbering the next chat's mask.
+    private func scrollToBottomSettling(with proxy: ScrollViewProxy, chatID: String) {
+        Task { @MainActor in
+            scrollToBottom(with: proxy, animated: false)
+            for step: Duration in [.milliseconds(25), .milliseconds(60), .milliseconds(100)] {
+                try? await Task.sleep(for: step)
+                guard chatStore.selectedChat?.id == chatID else { return }
+                scrollToBottom(with: proxy, animated: false)
+            }
+            guard chatStore.selectedChat?.id == chatID else { return }
+            isPreparingInitialScroll = false
         }
     }
 
