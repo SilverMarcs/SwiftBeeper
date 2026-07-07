@@ -10,7 +10,11 @@ struct ChatDetailiOS: View {
     @State private var isSearchPresented = false
     @FocusState private var isSearchFocused: Bool
     @State private var delegateProxy: AnyObject?
-    @State private var isPreparingInitialScroll = false
+    // Starts true: on iPhone the push transition renders the list top-anchored
+    // for a few frames before `.task` runs, so starting false flashed unscrolled
+    // content ahead of the mask. iOS recreates this view per chat (ContentView
+    // applies .id(selectedChatID)), so a fresh chat always re-masks.
+    @State private var isPreparingInitialScroll = true
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
     // Pagination is gated for the first few seconds after the view appears or
@@ -135,8 +139,19 @@ struct ChatDetailiOS: View {
                     // the tracker below silently swallowed EVERY message-arrival
                     // scroll from the second chat onward. The identity check keeps a
                     // chat switch from clobbering the next chat's freshly-set flag.
+                    // 2026-07-07: the defer is now only the bail-out path. Unmasking
+                    // here (~150ms after load) exposed the settle re-pins on iPhone:
+                    // the first scrollTo fires mid push-transition and gets swallowed
+                    // (see scrollToBottom's doc), so the mask dropped on top-anchored
+                    // content and the 300/500ms re-pin was the visible "jump" to
+                    // bottom. The settling task owns the unmask now, after its final
+                    // re-pin; the defer only covers runs cancelled before settling
+                    // starts, so the mask can't stick on.
+                    var settlingOwnsUnmask = false
                     defer {
-                        if chatStore.selectedChat?.id == chatID { isPreparingInitialScroll = false }
+                        if !settlingOwnsUnmask, chatStore.selectedChat?.id == chatID {
+                            isPreparingInitialScroll = false
+                        }
                     }
                     async let detail: () = chatStore.loadChatDetail(for: chatID)
                     // The load itself is owned by the store (survives view churn);
@@ -145,6 +160,7 @@ struct ChatDetailiOS: View {
                     firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: chatID), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottomSettling(with: proxy, animateFirst: false)
+                    settlingOwnsUnmask = true
                     try? await Task.sleep(for: .milliseconds(100))
                     await detail
                 }
@@ -211,7 +227,6 @@ struct ChatDetailiOS: View {
                     ParticipantProfileSheet(participant: participant)
                 }
                 .overlay {
-                    if isIPad {
                     if isPreparingInitialScroll {
                         ZStack {
                             Rectangle()
@@ -220,7 +235,6 @@ struct ChatDetailiOS: View {
                                 .controlSize(.large)
                         }
                         .ignoresSafeArea(edges: .vertical)
-                    }
                     }
                 }
                 .onDrop(of: [.item], isTargeted: nil) { providers in
@@ -382,11 +396,23 @@ struct ChatDetailiOS: View {
             // chat-open (animateFirst == false), where rows still measure late on
             // first render and there's no other scroll covering for them.
             guard !animateFirst else { return }
-            for step: Duration in [.milliseconds(150), .milliseconds(300), .milliseconds(500)] {
+            // 2026-07-08: tuned down from 150/300/500 — once the mask started
+            // dropping only after the final pin (not at `.task` end), the long
+            // window stopped being load-bearing; verified clean on device. If the
+            // top-anchored jump ever reappears on iPhone-push, lengthen the final
+            // step back past the ~350ms push transition.
+            for step: Duration in [.milliseconds(25), .milliseconds(60), .milliseconds(100)] {
                 try? await Task.sleep(for: step)
-                if Task.isCancelled { return }
+                if Task.isCancelled { break }
                 scrollToBottom(with: proxy, animated: false)
             }
+            // 2026-07-07: the initial-open mask comes down here — after the final
+            // re-pin — not when the `.task` ends. Every earlier unmask point left
+            // a late re-pin visible as a jump on iPhone. This is an unstructured
+            // Task, so a chat switch can't cancel it into leaving the mask on;
+            // a stale run only writes state on a dead view instance (iOS gives
+            // each chat its own instance via .id).
+            isPreparingInitialScroll = false
         }
     }
 
