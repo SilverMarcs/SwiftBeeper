@@ -158,15 +158,15 @@ struct ChatDetailMac: View {
 
                     firstUnreadID = nil
                     Task { @MainActor in
+                        // 2026-06-21: scroll exactly once on a new message. The
+                        // non-animated re-pin that used to follow at +450ms landed
+                        // as a visible abrupt second jump (the "split" scroll).
+                        // Row heights are known by layout time (text + pre-sized
+                        // media) and re-grouping is synchronous, and the sidebar
+                        // refresh now skips no-op commits (it no longer re-measures
+                        // the timeline), so the single animated scroll lands clean.
                         try? await Task.sleep(for: .milliseconds(50))
                         scrollToBottom(with: proxy, animated: true)
-                        // 2026-06-06: same scar as iOS (2026-06-05) — re-grouping
-                        // (prev bubble's isLastInGroup flips) and the debounced
-                        // sidebar refresh re-measure rows after the animated
-                        // scroll lands, leaving the list slightly off-bottom.
-                        // Re-pin once layout settles.
-                        try? await Task.sleep(for: .milliseconds(450))
-                        scrollToBottom(with: proxy, animated: false)
                     }
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
