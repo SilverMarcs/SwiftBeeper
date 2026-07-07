@@ -26,6 +26,7 @@ final class RealtimeService {
     private var webSocketListenerTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var realtimeConnectionID = UUID()
+    private var reconnectAttempt = 0
     private(set) var realtimeError: String?
 
     weak var eventHandler: RealtimeEventHandler?
@@ -89,6 +90,7 @@ final class RealtimeService {
 
         switch envelope.type {
         case "ready":
+            reconnectAttempt = 0
             await sendSubscriptionsAllChats()
             eventHandler?.realtimeDidConnect()
         case "subscriptions.updated":
@@ -138,13 +140,23 @@ final class RealtimeService {
         guard connectionID == realtimeConnectionID else { return }
 
         reconnectTask?.cancel()
+        let attempt = reconnectAttempt
+        reconnectAttempt += 1
+        // Exponential backoff (1, 2, 4, 8 … s, capped at 30) instead of a fixed
+        // 2 s loop. A prolonged backend outage no longer rewrites observable
+        // error state — and re-renders the whole SwiftUI tree — every couple of
+        // seconds, which was a major contributor to the app feeling frozen.
+        let delaySeconds = min(pow(2.0, Double(attempt)), 30.0)
         reconnectTask = Task { [weak self] in
             guard let self else { return }
 
-            self.eventHandler?.realtimeDidReceiveError("Realtime disconnected. Retrying…")
+            // Surface the retry banner only on the first drop, not every cycle.
+            if attempt == 0 {
+                self.eventHandler?.realtimeDidReceiveError("Realtime disconnected. Retrying…")
+            }
 
             do {
-                try await Task.sleep(for: .seconds(2))
+                try await Task.sleep(for: .seconds(delaySeconds))
             } catch { return }
 
             guard !Task.isCancelled, self.realtimeConnectionID == connectionID else { return }

@@ -126,7 +126,46 @@ final class EasyMatrixBackend {
             await start()
         case .ready:
             if await isServerReachable() { return }
-            logger.info("Backend unreachable after returning to foreground — restarting")
+            logger.info("Backend unreachable after returning to foreground — rebinding")
+            await resume()
+        }
+    }
+
+    /// Cheap foreground recovery. iOS reaps the process's sockets while it is
+    /// suspended, so the localhost listener is dead on return — but the Matrix
+    /// client, database, and crypto store all live on in memory. Rebind a fresh
+    /// socket onto them (`EasyMatrixResume`) instead of tearing the whole
+    /// backend down and cold-booting it: the old `stop()` + `start()` path paid
+    /// a 5 s graceful-shutdown ceiling, a DB close/reopen, a crypto reload, and
+    /// a synchronous homeserver `/versions` call — seconds of dead time on every
+    /// foreground. `state` stays `.ready` throughout so `BackendGate` keeps the
+    /// UI up and the rebind is invisible. Falls back to a full restart if the
+    /// rebind fails or the server doesn't answer afterwards.
+    func resume() async {
+        guard handle != 0, state == .ready else {
+            // Nothing live to rebind onto (never started, or mid-transition).
+            await start()
+            return
+        }
+
+        let listenAddr = Self.listenAddr
+        let currentHandle = handle
+        let rebound = await Task.detached(priority: .userInitiated) { () -> Bool in
+            listenAddr.withMutableCString { EasyMatrixResume(currentHandle, $0) == 0 }
+        }.value
+
+        guard rebound else {
+            logger.info("Rebind failed (\(Self.lastBackendError(), privacy: .public)) — full restart")
+            await stop()
+            await start()
+            return
+        }
+
+        do {
+            try await waitUntilReady()
+            logger.info("EasyMatrix backend rebound after returning to foreground")
+        } catch {
+            logger.error("Backend not ready after rebind — full restart: \(error.localizedDescription, privacy: .public)")
             await stop()
             await start()
         }
