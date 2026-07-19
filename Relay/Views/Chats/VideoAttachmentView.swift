@@ -1,5 +1,8 @@
 import SwiftMediaViewer
 import SwiftUI
+import AVKit
+
+
 
 struct VideoAttachmentView: View {
     let attachment: Attachment
@@ -8,6 +11,7 @@ struct VideoAttachmentView: View {
     @AppStorage("muteOnPlay") private var muteOnPlay = false
 
     @State private var showVideo = false
+    @State private var userRequestedPlay = false
 
     private let maxWidth: CGFloat = Device.isMacOrPad ? 400 : 275
     private let maxHeight: CGFloat = 500
@@ -18,7 +22,12 @@ struct VideoAttachmentView: View {
                 // SMVVideo shows an inline player and zooms to a full-screen
                 // AVPlayer on tap; autoplay it since we only reach here once the
                 // poster has been swapped out (by tap or the autoplay delay).
-                SMVVideo(videoURL: urlString, autoplay: true, muteOnPlay: muteOnPlay)
+                let shouldPlay = autoplay || userRequestedPlay
+                #if os(macOS)
+                MacVideoPlayer(urlString: urlString, autoplay: shouldPlay, muteOnPlay: muteOnPlay)
+                #else
+                SMVVideo(videoURL: urlString, autoplay: shouldPlay, muteOnPlay: muteOnPlay)
+                #endif
             } else {
                 preview
             }
@@ -31,20 +40,22 @@ struct VideoAttachmentView: View {
     // to SMVVideo — so videos don't all start fetching at once while scrolling.
     private var preview: some View {
         Button {
+            userRequestedPlay = true
             showVideo = true
         } label: {
             posterImage
                 .overlay {
-                    Image(systemName: "play.fill")
-                        .font(.title2)
-                        .padding()
-                        .background(.black.opacity(0.5), in: .circle)
-                        .foregroundStyle(.white)
+                    if !autoplay {
+                        Image(systemName: "play.fill")
+                            .font(.title2)
+                            .padding()
+                            .background(.black.opacity(0.5), in: .circle)
+                            .foregroundStyle(.white)
+                    }
                 }
         }
         .buttonStyle(.plain)
         .task {
-            guard autoplay else { return }
             do {
                 try await Task.sleep(for: .seconds(1))
             } catch {
