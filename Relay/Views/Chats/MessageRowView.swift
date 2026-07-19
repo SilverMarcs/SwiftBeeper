@@ -131,10 +131,12 @@ struct MessageRowView: View {
     @ViewBuilder
     private func messageContent(isOutgoing: Bool) -> some View {
         let alignment = reactionsAlignment(isOutgoing: isOutgoing)
+        let otherSideName = isOutgoing ? chat.displayTitle : message.senderDisplayName
+        let avatarURL = isOutgoing ? chat.imgURL : senderAvatarImageURL
         VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
             if let attachments = message.attachments, attachments.isEmpty == false {
                 ForEach(attachments) { attachment in
-                    AttachmentView(attachment: attachment, isOutgoing: isOutgoing)
+                    AttachmentView(attachment: attachment, isOutgoing: isOutgoing, chatTitle: otherSideName, avatarURL: avatarURL)
                         .overlay(alignment: alignment) {
                             reactionsOverlay(if: .attachment(attachment.id), isOutgoing: isOutgoing)
                         }

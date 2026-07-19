@@ -8,6 +8,8 @@ private let logger = Logger(subsystem: "Relay", category: "AudioAttachment")
 struct AudioAttachmentView: View {
     let attachment: Attachment
     let isOutgoing: Bool
+    var title: String? = nil
+    var avatarURL: String? = nil
 
     @Environment(AudioPlayerService.self) private var playerService
 
@@ -133,7 +135,13 @@ struct AudioAttachmentView: View {
             localDuration = itemDuration.seconds
         }
 
-        await playerService.play(attachmentURL: urlString, playableURL: playableURL, givenDuration: attachment.duration)
+        await playerService.play(
+            attachmentURL: urlString, 
+            playableURL: playableURL, 
+            givenDuration: attachment.duration, 
+            title: title,
+            avatarURL: avatarURL
+        )
     }
 
     private func formatDuration(_ seconds: Double) -> String {

@@ -5,6 +5,7 @@ import Observation
 import OSLog
 #if os(iOS)
 import MediaPlayer
+import UIKit
 #endif
 
 private let logger = Logger(subsystem: "Relay", category: "AudioPlayerService")
@@ -21,12 +22,16 @@ final class AudioPlayerService {
     var isAudioLoading = false
     var currentTime: Double = 0
     var duration: Double = 0
+    var currentTitle: String = "Voice Message"
+#if os(iOS)
+    var currentArtwork: MPMediaItemArtwork?
+#endif
     
     init() {
         setupRemoteCommands()
     }
 
-    func play(attachmentURL: String, playableURL: URL, givenDuration: Double?) async {
+    func play(attachmentURL: String, playableURL: URL, givenDuration: Double?, title: String? = nil, avatarURL: String? = nil) async {
         if currentAttachmentURL == attachmentURL {
             // Already loaded this one, just toggle
             toggleAudioPlayback()
@@ -36,6 +41,23 @@ final class AudioPlayerService {
         tearDownPlayer()
 
         currentAttachmentURL = attachmentURL
+        currentTitle = title ?? "Voice Message"
+#if os(iOS)
+        currentArtwork = nil
+        if let avatarURL, let request = AuthenticatedImageLoader.buildRequest(for: avatarURL) {
+            Task {
+                if let (data, response) = try? await URLSession.shared.data(for: request),
+                   let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode),
+                   let image = UIImage(data: data) {
+                    await MainActor.run {
+                        self.currentArtwork = MPMediaItemArtwork(boundsSize: image.size, requestHandler: { _ in image })
+                        self.updateNowPlayingInfo()
+                    }
+                }
+            }
+        }
+#endif
+
         isAudioLoading = true
         defer { isAudioLoading = false }
 
@@ -122,6 +144,7 @@ final class AudioPlayerService {
         isAudioPlaying = false
         currentTime = 0
         currentAttachmentURL = nil
+        currentTitle = "Voice Message"
     }
 
     private func setupAudioSession() {
@@ -181,7 +204,13 @@ final class AudioPlayerService {
         }
 
         var nowPlayingInfo = [String: Any]()
-        nowPlayingInfo[MPMediaItemPropertyTitle] = "Voice Message"
+        nowPlayingInfo[MPMediaItemPropertyTitle] = currentTitle
+        nowPlayingInfo[MPMediaItemPropertyArtist] = "Relay"
+        
+        if let artwork = currentArtwork {
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        }
+        
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isAudioPlaying ? 1.0 : 0.0
