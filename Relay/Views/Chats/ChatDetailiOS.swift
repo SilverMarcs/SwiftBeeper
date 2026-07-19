@@ -284,7 +284,7 @@ struct ChatDetailiOS: View {
                             // keyboard hasn't presented yet, so the bottom is
                             // "visible" and then gets covered as it slides up.
                             // Wait out the keyboard transition before scrolling.
-                            scrollToBottom(with: proxy, animated: true, delay: .milliseconds(250))
+                            scrollToBottom(with: proxy, animated: true, delay: .milliseconds(1))
                         }
                         .onChange(of: inputManager.isSendingMessage) { oldValue, newValue in
                             if oldValue && !newValue {
@@ -337,7 +337,7 @@ struct ChatDetailiOS: View {
                     // keyboard transition settles.
                     .onChange(of: inputManager.isComposerFocused) { _, focused in
                         guard focused else { return }
-                        scrollToBottom(with: proxy, animated: true, delay: .milliseconds(250))
+                        scrollToBottom(with: proxy, animated: true, delay: .milliseconds(1))
                     }
                 }
             }
