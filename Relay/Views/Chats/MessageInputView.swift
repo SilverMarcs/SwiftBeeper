@@ -152,8 +152,13 @@ struct MessageInputView: View {
                     .allowsHitTesting(!input.sendButtonDisabled)
                     .offset(y: -2)
                 }
-                .padding(8)
-                .padding(.horizontal, 2)
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+                #if os(macOS)
+                .padding(.bottom, 12)
+                #else
+                .padding(.bottom, 0)
+                #endif
             }
             .fixedSize(horizontal: false, vertical: true)
         }
