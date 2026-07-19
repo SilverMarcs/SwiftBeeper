@@ -9,11 +9,13 @@ struct RelayApp: App {
     @State private var chatStore: ChatStore
     @State private var inputManager: InputManager
     @State private var notificationService = NotificationService()
+    @State private var audioPlayerService = AudioPlayerService()
     @State private var backend = EasyMatrixBackend.shared
 
     init() {
         let sessionStore = SessionStore()
         let notificationService = NotificationService()
+        let audioPlayerService = AudioPlayerService()
         let chatStore = ChatStore(
             realtimeService: RealtimeService(),
             notificationService: notificationService
@@ -21,6 +23,7 @@ struct RelayApp: App {
         notificationService.store = chatStore
         _sessionStore = State(initialValue: sessionStore)
         _notificationService = State(initialValue: notificationService)
+        _audioPlayerService = State(initialValue: audioPlayerService)
         _chatStore = State(initialValue: chatStore)
         _inputManager = State(initialValue: InputManager(chatStore: chatStore))
         APIClient.manageSecret = EasyMatrixBackend.shared.manageSecret
@@ -35,7 +38,8 @@ struct RelayApp: App {
             sessionStore: sessionStore,
             chatStore: chatStore,
             inputManager: inputManager,
-            notificationService: notificationService
+            notificationService: notificationService,
+            audioPlayerService: audioPlayerService
         )
     }
 

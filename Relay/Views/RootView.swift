@@ -9,6 +9,7 @@ struct RootView: View {
     let chatStore: ChatStore
     let inputManager: InputManager
     let notificationService: NotificationService
+    let audioPlayerService: AudioPlayerService
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -21,6 +22,7 @@ struct RootView: View {
                 .environment(sessionStore)
                 .environment(chatStore)
                 .environment(inputManager)
+                .environment(audioPlayerService)
         }
         .task { await backend.start() }
         .onChange(of: scenePhase) { _, newPhase in

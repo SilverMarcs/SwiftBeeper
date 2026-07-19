@@ -9,23 +9,52 @@ struct AudioAttachmentView: View {
     let attachment: Attachment
     let isOutgoing: Bool
 
-    @State private var audioPlayer: AVPlayer?
-    @State private var playbackObserver: NSObjectProtocol?
-    @State private var timeObserver: Any?
-    @State private var isAudioPlaying = false
-    @State private var isAudioLoading = false
+    @Environment(AudioPlayerService.self) private var playerService
 
-    @State private var currentTime: Double = 0
-    @State private var duration: Double = 0
+    @State private var localIsLoading = false
     @State private var isSeeking = false
+    @State private var localCurrentTime: Double = 0
+    @State private var localDuration: Double?
 
-    private var isReady: Bool { audioPlayer != nil }
+    private var isCurrent: Bool {
+        attachment.resolvedURL != nil && attachment.resolvedURL == playerService.currentAttachmentURL
+    }
+    
+    private var isReady: Bool {
+        isCurrent && !playerService.isAudioLoading
+    }
+
+    private var isAudioPlaying: Bool {
+        isCurrent && playerService.isAudioPlaying
+    }
+
+    private var isAudioLoading: Bool {
+        (isCurrent && playerService.isAudioLoading) || localIsLoading
+    }
+
+    private var currentTime: Double {
+        if isSeeking { return localCurrentTime }
+        return isCurrent ? playerService.currentTime : 0
+    }
+    
+    private var duration: Double {
+        if isCurrent && playerService.duration > 0 { return playerService.duration }
+        if let ld = localDuration { return ld }
+        return attachment.duration ?? 0
+    }
+
+    private var sliderValue: Binding<Double> {
+        Binding(
+            get: { self.currentTime },
+            set: { self.localCurrentTime = $0 }
+        )
+    }
 
     var body: some View {
         HStack(spacing: 8) {
             Button {
                 if isReady {
-                    toggleAudioPlayback()
+                    playerService.toggleAudioPlayback()
                 } else if !isAudioLoading {
                     Task { await loadAudio() }
                 }
@@ -36,18 +65,20 @@ struct AudioAttachmentView: View {
             .buttonStyle(.plain)
 
             Slider(
-                value: $currentTime,
+                value: sliderValue,
                 in: 0...max(duration, 1)
             ) { editing in
                 isSeeking = editing
-                if !editing, let player = audioPlayer {
-                    player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600))
+                if !editing {
+                    if isCurrent {
+                        playerService.seek(to: localCurrentTime)
+                    }
                 }
             }
             .frame(width: 160)
             .disabled(!isReady)
 
-            Text(formatDuration(isSeeking || isAudioPlaying ? currentTime : (attachment.duration ?? duration)))
+            Text(formatDuration(isSeeking || isAudioPlaying ? currentTime : duration))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -57,12 +88,6 @@ struct AudioAttachmentView: View {
         .padding(.vertical, 8)
         .bubbleBackground(isOutgoing: isOutgoing)
         .clipShape(.rect(cornerRadius: 12))
-        // Load lazily on the first play tap (handled in the button above), not on
-        // appear — auto-loading downloaded and (for OGG/Opus) CPU-transcoded every
-        // voice note that scrolled into view, even ones the user never played.
-        .onDisappear {
-            tearDownPlayer()
-        }
     }
 
     private func loadAudio() async {
@@ -71,8 +96,8 @@ struct AudioAttachmentView: View {
             return
         }
 
-        isAudioLoading = true
-        defer { isAudioLoading = false }
+        localIsLoading = true
+        defer { localIsLoading = false }
 
         let ext = Self.fileExtension(from: attachment.mimeType)
         guard let fileURL = await AuthenticatedImageLoader.downloadToTempFile(
@@ -102,73 +127,17 @@ struct AudioAttachmentView: View {
             playableURL = fileURL
         }
 
+        // Wait to get actual duration if possible
         let playerItem = AVPlayerItem(url: playableURL)
-        let player = AVPlayer(playerItem: playerItem)
-
-        // Wait for the player item to be ready (or fail)
-        let isPlayable = (try? await playerItem.asset.load(.isPlayable)) ?? false
-        guard isPlayable else {
-            logger.error("AVPlayer cannot play this audio format: \(attachment.mimeType ?? "unknown")")
-            return
+        if let itemDuration = try? await playerItem.asset.load(.duration), itemDuration.isNumeric {
+            localDuration = itemDuration.seconds
         }
 
-        audioPlayer = player
-
-        // Get actual duration from the loaded asset.
-        let itemDuration = try? await playerItem.asset.load(.duration)
-        if let itemDuration, itemDuration.isNumeric {
-            duration = itemDuration.seconds
-        } else if let d = attachment.duration {
-            duration = d
-        }
-
-        // Periodic time observer to drive the slider
-        timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
-            queue: .main
-        ) { time in
-            guard !isSeeking else { return }
-            currentTime = time.seconds
-        }
-
-        playbackObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: player.currentItem,
-            queue: .main
-        ) { _ in
-            isAudioPlaying = false
-            currentTime = 0
-            player.seek(to: .zero)
-        }
-    }
-
-    private func toggleAudioPlayback() {
-        guard let player = audioPlayer else { return }
-        if isAudioPlaying {
-            player.pause()
-        } else {
-            player.play()
-        }
-        isAudioPlaying.toggle()
+        await playerService.play(attachmentURL: urlString, playableURL: playableURL, givenDuration: attachment.duration)
     }
 
     private func formatDuration(_ seconds: Double) -> String {
         Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
-    }
-
-    private func tearDownPlayer() {
-        if let timeObserver {
-            audioPlayer?.removeTimeObserver(timeObserver)
-            self.timeObserver = nil
-        }
-        audioPlayer?.pause()
-        audioPlayer = nil
-        if let playbackObserver {
-            NotificationCenter.default.removeObserver(playbackObserver)
-            self.playbackObserver = nil
-        }
-        isAudioPlaying = false
-        currentTime = 0
     }
 
     /// Extract a clean file extension from a MIME type like "audio/ogg; codecs=opus"
