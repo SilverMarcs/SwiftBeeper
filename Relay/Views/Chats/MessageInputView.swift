@@ -157,7 +157,7 @@ struct MessageInputView: View {
                 #if os(macOS)
                 .padding(.bottom, 12)
                 #else
-                .padding(.bottom, 0)
+                .padding(.bottom, isMessageFieldFocused ? 8 : 0)
                 #endif
             }
             .fixedSize(horizontal: false, vertical: true)
