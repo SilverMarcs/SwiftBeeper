@@ -123,25 +123,55 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
     #endif
 
-    func postNewMessageNotification(message: Message, chatTitle: String) {
-        guard isAuthorized, !prefersRemoteNotifications else { return }
+    func postNewMessageNotification(message: Message, chat: Chat) {
+        guard isAuthorized else { return }
 
-        let content = UNMutableNotificationContent()
-        content.title = chatTitle
-        content.body = message.displayText
-        content.sound = .default
-        content.threadIdentifier = message.chatID
-        content.categoryIdentifier = Self.messageCategory
-        content.userInfo = ["chatID": message.chatID, "messageID": message.id]
+        Task {
+            let mutableContent = UNMutableNotificationContent()
+            mutableContent.title = chat.isGroupChat ? chat.displayTitle : message.senderDisplayName
+            mutableContent.subtitle = chat.isGroupChat ? message.senderDisplayName : ""
+            mutableContent.body = message.displayText
+            mutableContent.sound = .default
+            mutableContent.threadIdentifier = message.chatID
+            mutableContent.categoryIdentifier = Self.messageCategory
+            mutableContent.userInfo = ["chatID": message.chatID, "messageID": message.id]
 
-        let request = UNNotificationRequest(
-            identifier: "msg-\(message.id)",
-            content: content,
-            trigger: nil
-        )
+            let content: UNNotificationContent
+            #if os(iOS)
+            let avatarURLString: String?
+            if chat.isGroupChat {
+                avatarURLString = chat.imgURL
+            } else {
+                avatarURLString = chat.participant(with: message.senderID)?.imgURL
+                    ?? chat.otherParticipant?.imgURL
+            }
+            let avatarRequest = avatarURLString.flatMap(AuthenticatedImageLoader.buildRequest(for:))
+            let avatarData = await NotificationAvatarLoader.data(for: avatarRequest)
+            let information = CommunicationNotificationInfo(
+                conversationID: message.chatID,
+                senderID: message.senderID,
+                senderName: message.senderDisplayName,
+                chatTitle: chat.displayTitle,
+                isGroupChat: chat.isGroupChat,
+                messageBody: message.displayText
+            )
+            content = await CommunicationNotification.updatedContent(
+                from: mutableContent,
+                information: information,
+                avatarData: avatarData
+            )
+            #else
+            content = mutableContent
+            #endif
 
-        UNUserNotificationCenter.current().add(request) { [logger] error in
-            if let error {
+            let request = UNNotificationRequest(
+                identifier: "msg-\(message.id)",
+                content: content,
+                trigger: nil
+            )
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
                 logger.error("Failed to post notification: \(error.localizedDescription, privacy: .public)")
             }
         }

@@ -9,5 +9,9 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Relay connects to an EasyMatrix server on your local network.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INSendMessageIntent</string>
+	</array>
 </dict>
 </plist>

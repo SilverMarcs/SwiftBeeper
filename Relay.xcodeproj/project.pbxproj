@@ -11,18 +11,67 @@
 		08974BC02F66600000950962 /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBF2F66600000950962 /* SwiftMediaViewer */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
 		08F100000000000000000002 /* EasyMatrix.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08F100000000000000000001 /* EasyMatrix.xcframework */; };
+		A11000000000000000000001 /* RelayNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A11000000000000000000002 /* RelayNotificationService.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A11000000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 086573752F58F64E0084BD91 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A11000000000000000000004;
+			remoteInfo = RelayNotificationService;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A11000000000000000000005 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A11000000000000000000001 /* RelayNotificationService.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0865737D2F58F64E0084BD91 /* Relay.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 		08F100000000000000000001 /* EasyMatrix.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EasyMatrix.xcframework; path = Frameworks/EasyMatrix.xcframework; sourceTree = SOURCE_ROOT; };
+		A11000000000000000000002 /* RelayNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RelayNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A11000000000000000000006 /* Exceptions for "RelayNotificationService" folder in "RelayNotificationService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A11000000000000000000004 /* RelayNotificationService */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0865737F2F58F64E0084BD91 /* Relay */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Relay;
+			sourceTree = "<group>";
+		};
+		A11000000000000000000007 /* RelayNotificationService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A11000000000000000000006 /* Exceptions for "RelayNotificationService" folder in "RelayNotificationService" target */,
+			);
+			path = RelayNotificationService;
+			sourceTree = "<group>";
+		};
+		A11000000000000000000008 /* SharedNotifications */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedNotifications;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -39,13 +88,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A11000000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		086573742F58F64E0084BD91 = {
 			isa = PBXGroup;
 			children = (
+				A11000000000000000000008 /* SharedNotifications */,
 				0865737F2F58F64E0084BD91 /* Relay */,
+				A11000000000000000000007 /* RelayNotificationService */,
 				08A6E00E2F5975A200A2ECF4 /* Frameworks */,
 				0865737E2F58F64E0084BD91 /* Products */,
 			);
@@ -55,6 +113,7 @@
 			isa = PBXGroup;
 			children = (
 				0865737D2F58F64E0084BD91 /* Relay.app */,
+				A11000000000000000000002 /* RelayNotificationService.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -79,13 +138,16 @@
 				0865737A2F58F64E0084BD91 /* Frameworks */,
 				0865737B2F58F64E0084BD91 /* Resources */,
 				08E4517A1A2B3C4D5E6F0001 /* Ensure EasyMatrix xcframework */,
+				A11000000000000000000005 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1100000000000000000000A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0865737F2F58F64E0084BD91 /* Relay */,
+				A11000000000000000000008 /* SharedNotifications */,
 			);
 			name = Relay;
 			packageProductDependencies = (
@@ -95,6 +157,29 @@
 			productName = Relay;
 			productReference = 0865737D2F58F64E0084BD91 /* Relay.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A11000000000000000000004 /* RelayNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1100000000000000000000B /* Build configuration list for PBXNativeTarget "RelayNotificationService" */;
+			buildPhases = (
+				A1100000000000000000000C /* Sources */,
+				A11000000000000000000009 /* Frameworks */,
+				A1100000000000000000000D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A11000000000000000000007 /* RelayNotificationService */,
+				A11000000000000000000008 /* SharedNotifications */,
+			);
+			name = RelayNotificationService;
+			packageProductDependencies = (
+			);
+			productName = RelayNotificationService;
+			productReference = A11000000000000000000002 /* RelayNotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -108,6 +193,9 @@
 				TargetAttributes = {
 					0865737C2F58F64E0084BD91 = {
 						CreatedOnToolsVersion = 26.3;
+					};
+					A11000000000000000000004 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -130,12 +218,20 @@
 			projectRoot = "";
 			targets = (
 				0865737C2F58F64E0084BD91 /* Relay */,
+				A11000000000000000000004 /* RelayNotificationService */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0865737B2F58F64E0084BD91 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1100000000000000000000D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -174,7 +270,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1100000000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1100000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = A11000000000000000000004 /* RelayNotificationService */;
+			targetProxy = A11000000000000000000003 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		086573862F58F64F0084BD91 /* Debug */ = {
@@ -427,6 +539,68 @@
 			};
 			name = Release;
 		};
+		A1100000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J52QUTREBS;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RelayNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.SwiftBeeper.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1100000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J52QUTREBS;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RelayNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.SwiftBeeper.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -444,6 +618,15 @@
 			buildConfigurations = (
 				086573892F58F64F0084BD91 /* Debug */,
 				0865738A2F58F64F0084BD91 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1100000000000000000000B /* Build configuration list for PBXNativeTarget "RelayNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1100000000000000000000E /* Debug */,
+				A1100000000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

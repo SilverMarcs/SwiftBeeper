@@ -105,6 +105,7 @@ extension APIClient {
         struct Body: Encodable {
             let token: String
             let platform: String
+            let serverURL: String
         }
         struct Response: Decodable {
             let success: Bool
@@ -114,7 +115,11 @@ extension APIClient {
         let url = APIConfiguration.baseURL.appending(path: "/v1/push/devices")
         let response: Response = try await post(
             url: url,
-            body: Body(token: token, platform: "apple")
+            body: Body(
+                token: token,
+                platform: "apple",
+                serverURL: APIConfiguration.baseURL.absoluteString
+            )
         )
         return response.enabled
     }

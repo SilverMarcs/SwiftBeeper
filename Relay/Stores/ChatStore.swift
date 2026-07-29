@@ -998,7 +998,7 @@ final class ChatStore: RealtimeEventHandler {
             if Date().timeIntervalSince(message.timestamp) > 60 { continue }
             if message.id == lastNotifiedMessageIDByChatID[chatID] { continue }
             lastNotifiedMessageIDByChatID[chatID] = message.id
-            notificationService.postNewMessageNotification(message: message, chatTitle: chat.displayTitle)
+            notificationService.postNewMessageNotification(message: message, chat: chat)
         }
     }
 
