@@ -8,8 +8,7 @@ import OSLog
 /// `Helpers/build-easymatrix-xcframework.sh`) and is started via its C ABI
 /// (`EasyMatrixCreate` / `EasyMatrixServe`, declared in the bridging header).
 /// It binds a localhost HTTP + WebSocket server inside the app process, which
-/// the rest of the app talks to exactly as it would a standalone server —
-/// `APIConfiguration.baseURL` still points at `127.0.0.1`.
+/// the rest of the app talks to exactly as it would a standalone server.
 ///
 /// This replaces the old macOS-only model that spawned the backend as a child
 /// `Process`. Spawning subprocesses is forbidden on iOS; binding a localhost
@@ -37,7 +36,7 @@ final class EasyMatrixBackend {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Relay", category: "EasyMatrixBackend")
     private var handle: EasyMatrixHandle = 0
 
-    /// Host:port the in-process backend binds. Must match `APIConfiguration.baseURL`.
+    /// Host:port the in-process backend binds.
     private static let listenAddr = "127.0.0.1:23374"
 
     private init() {}
@@ -87,7 +86,7 @@ final class EasyMatrixBackend {
             try await waitUntilReady()
             state = .ready
             hasEverBeenReady = true
-            logger.info("EasyMatrix backend ready on \(APIConfiguration.baseURL.absoluteString, privacy: .public)")
+            logger.info("EasyMatrix backend ready on \(ServerEndpoint.embedded.baseURL.absoluteString, privacy: .public)")
         } catch {
             logger.error("Backend did not become ready: \(error.localizedDescription, privacy: .public)")
             state = .crashed(error.localizedDescription)
@@ -172,7 +171,7 @@ final class EasyMatrixBackend {
     }
 
     private func isServerReachable() async -> Bool {
-        let url = APIConfiguration.baseURL.appending(path: "/manage/state")
+        let url = ServerEndpoint.embedded.baseURL.appending(path: "/manage/state")
         
         for attempt in 1...3 {
             var request = URLRequest(url: url, timeoutInterval: 1.0)
@@ -194,7 +193,7 @@ final class EasyMatrixBackend {
 
     private func waitUntilReady() async throws {
         let deadline = Date().addingTimeInterval(45)
-        let url = APIConfiguration.baseURL.appending(path: "/manage/state")
+        let url = ServerEndpoint.embedded.baseURL.appending(path: "/manage/state")
         var lastError: Error?
 
         while Date() < deadline {
@@ -225,10 +224,6 @@ final class EasyMatrixBackend {
             "listenAddr": listenAddr,
             "stateDir": stateDir,
             "manageSecret": manageSecret,
-            // SwiftMediaViewer loads images via plain URLSession (no headers), so
-            // /v1/assets/serve accepts the token as ?dangerouslyUseTokenInQuery=.
-            // Low risk: the server is in-process on localhost only.
-            "allowQueryTokenAuth": true,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: config),
               let json = String(data: data, encoding: .utf8) else {
@@ -272,7 +267,7 @@ enum BackendError: LocalizedError {
 private extension String {
     /// Calls `body` with a mutable, NUL-terminated copy of this string. The Go
     /// FFI takes `char*`; the copy is freed when `body` returns.
-    func withMutableCString<R>(_ body: (UnsafeMutablePointer<CChar>) -> R) -> R {
+    nonisolated func withMutableCString<R>(_ body: (UnsafeMutablePointer<CChar>) -> R) -> R {
         let copy = strdup(self)!
         defer { free(copy) }
         return body(copy)

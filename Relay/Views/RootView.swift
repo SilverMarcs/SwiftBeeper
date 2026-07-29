@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Shared root content for every platform: gates the UI on the in-process
-/// backend becoming ready, then shows `ContentView`. The enclosing scene
+/// Shared root content for every platform: prepares the selected server, then
+/// shows `ContentView`. The enclosing scene
 /// (macOS `Window` vs iOS `WindowGroup`) lives in `RelayApp`.
 struct RootView: View {
-    let backend: EasyMatrixBackend
+    let serverConnection: ServerConnection
     let sessionStore: SessionStore
     let chatStore: ChatStore
     let inputManager: InputManager
@@ -14,7 +14,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        BackendGate(backend: backend) {
+        BackendGate(serverConnection: serverConnection) {
             ContentView()
                 .task {
                     await notificationService.requestAuthorization()
@@ -22,17 +22,22 @@ struct RootView: View {
                 .environment(sessionStore)
                 .environment(chatStore)
                 .environment(inputManager)
+                .environment(notificationService)
                 .environment(audioPlayerService)
         }
-        .task { await backend.start() }
+        .task { await serverConnection.prepare() }
+        .task(id: sessionStore.accessToken) {
+            await notificationService.syncRemoteRegistration()
+        }
         .onChange(of: scenePhase) { _, newPhase in
-            // iOS suspends the embedded backend (and its localhost socket) while
-            // backgrounded; restart it on return so requests stop failing with
-            // "Could not connect to the server", then reconnect realtime + reload.
-            guard newPhase == .active else { return }
-            Task {
-                await backend.recoverIfNeeded()
-                chatStore.handleAppForeground()
+            if newPhase == .active {
+                Task {
+                    await serverConnection.recoverIfNeeded()
+                    chatStore.handleAppForeground()
+                    await notificationService.syncRemoteRegistration()
+                }
+            } else {
+                chatStore.handleAppBackground()
             }
         }
     }

@@ -303,6 +303,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = Relay/Relay.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Relay/Relay-macOS.entitlements";
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = J52QUTREBS;
@@ -323,6 +325,7 @@
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Relay-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Relay;
 				INFOPLIST_KEY_CFBundleName = Relay;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
@@ -365,6 +368,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = Relay/Relay.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Relay/Relay-macOS.entitlements";
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = J52QUTREBS;
@@ -385,6 +390,7 @@
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Relay-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Relay;
 				INFOPLIST_KEY_CFBundleName = Relay;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";

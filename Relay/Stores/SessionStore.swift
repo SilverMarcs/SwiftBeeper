@@ -5,18 +5,43 @@ import Observation
 @Observable
 final class SessionStore {
     private let keychain = KeychainManager.shared
-    private let accessTokenKey = "beeperAccessToken"
+    private static let legacyAccessTokenKey = "beeperAccessToken"
+    private var endpointIdentity: String
+
+    private var accessTokenKey: String {
+        "beeperAccessToken|\(endpointIdentity)"
+    }
 
     var accessToken: String {
         didSet { persistAccessToken(accessToken) }
     }
 
-    init() {
-        accessToken = keychain.load(key: accessTokenKey) ?? ""
+    init(endpointIdentity: String = "embedded") {
+        self.endpointIdentity = endpointIdentity
+
+        let scopedToken = keychain.load(key: "beeperAccessToken|\(endpointIdentity)")
+        if let scopedToken {
+            accessToken = scopedToken
+        } else if endpointIdentity == ServerEndpoint.embedded.identity,
+                  let legacyToken = keychain.load(key: Self.legacyAccessTokenKey) {
+            accessToken = legacyToken
+            keychain.save(key: "beeperAccessToken|\(endpointIdentity)", data: legacyToken)
+        } else {
+            accessToken = ""
+        }
     }
 
     func clearToken() {
         accessToken = ""
+    }
+
+    func switchEndpoint(to identity: String, suppliedToken: String? = nil) {
+        endpointIdentity = identity
+        if let suppliedToken, !suppliedToken.isEmpty {
+            accessToken = suppliedToken
+        } else {
+            accessToken = keychain.load(key: accessTokenKey) ?? ""
+        }
     }
 
     /// Mints a fresh manage access token. Used to recover from a 401 when the

@@ -361,6 +361,10 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
 
+    func handleAppBackground() {
+        realtimeService.stop()
+    }
+
     func clearState() {
         restoreListState(.empty)
         searchResults = nil

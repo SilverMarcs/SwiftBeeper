@@ -70,12 +70,13 @@ enum APIClient {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if url.path.hasPrefix("/manage/") || url.path == "/manage" {
-            request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
+            let manageSecret = APIConfiguration.manageSecret
+            if !manageSecret.isEmpty {
+                request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
+            }
         }
         return request
     }
-
-    static var manageSecret: String = ""
 
     /// Wired up by the app at startup. Returns a fresh bearer token. Called
     /// at most once per request when sendRaw observes a 401 on a /v1/* path,

@@ -99,3 +99,32 @@ extension APIClient {
         APIConfiguration.baseURL.appending(path: "/manage/\(path)")
     }
 }
+
+extension APIClient {
+    static func registerPushDevice(token: String) async throws -> Bool {
+        struct Body: Encodable {
+            let token: String
+            let platform: String
+        }
+        struct Response: Decodable {
+            let success: Bool
+            let enabled: Bool
+        }
+
+        let url = APIConfiguration.baseURL.appending(path: "/v1/push/devices")
+        let response: Response = try await post(
+            url: url,
+            body: Body(token: token, platform: "apple")
+        )
+        return response.enabled
+    }
+
+    static func unregisterPushDevice(token: String) async throws {
+        struct Response: Decodable {
+            let success: Bool
+        }
+
+        let url = APIConfiguration.baseURL.appending(path: "/v1/push/devices/\(token)")
+        let _: Response = try await delete(url: url)
+    }
+}

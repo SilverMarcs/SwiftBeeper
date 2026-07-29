@@ -24,15 +24,34 @@ import Observation
 final class RealtimeService {
     private var webSocketTask: URLSessionWebSocketTask?
     private var webSocketListenerTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var realtimeConnectionID = UUID()
     private var reconnectAttempt = 0
+    private var shouldRun = false
     private(set) var realtimeError: String?
 
     weak var eventHandler: RealtimeEventHandler?
 
     func start() {
-        stop()
+        shouldRun = true
+        guard webSocketTask == nil, reconnectTask == nil else { return }
+        connect()
+    }
+
+    func stop() {
+        shouldRun = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        closeConnection()
+        reconnectAttempt = 0
+    }
+
+    // MARK: - Private
+
+    private func connect() {
+        guard shouldRun else { return }
+        closeConnection()
         realtimeConnectionID = UUID()
 
         let webSocketTask = APIClient.makeWebSocketTask()
@@ -44,20 +63,21 @@ final class RealtimeService {
             guard let self else { return }
             await self.listenForEvents(connectionID: connectionID)
         }
+
+        heartbeatTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runHeartbeat(connectionID: connectionID)
+        }
     }
 
-    func stop() {
+    private func closeConnection() {
         webSocketListenerTask?.cancel()
-        reconnectTask?.cancel()
-
+        heartbeatTask?.cancel()
         webSocketListenerTask = nil
-        reconnectTask = nil
-
+        heartbeatTask = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
     }
-
-    // MARK: - Private
 
     private func listenForEvents(connectionID: UUID) async {
         while !Task.isCancelled {
@@ -75,9 +95,37 @@ final class RealtimeService {
                     break
                 }
             } catch {
-                guard !Task.isCancelled else { return }
-                scheduleReconnect(connectionID: connectionID)
+                guard !Task.isCancelled, shouldRun else { return }
+                scheduleReconnect(connectionID: connectionID, error: error)
                 return
+            }
+        }
+    }
+
+    private func runHeartbeat(connectionID: UUID) async {
+        while !Task.isCancelled, shouldRun, connectionID == realtimeConnectionID {
+            do {
+                try await Task.sleep(for: .seconds(20))
+                guard !Task.isCancelled,
+                      connectionID == realtimeConnectionID,
+                      let webSocketTask else { return }
+                try await ping(webSocketTask)
+            } catch {
+                guard !Task.isCancelled, shouldRun else { return }
+                scheduleReconnect(connectionID: connectionID, error: error)
+                return
+            }
+        }
+    }
+
+    private func ping(_ task: URLSessionWebSocketTask) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            task.sendPing { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
             }
         }
     }
@@ -91,6 +139,7 @@ final class RealtimeService {
         switch envelope.type {
         case "ready":
             reconnectAttempt = 0
+            realtimeError = nil
             await sendSubscriptionsAllChats()
             eventHandler?.realtimeDidConnect()
         case "subscriptions.updated":
@@ -136,22 +185,24 @@ final class RealtimeService {
         }
     }
 
-    private func scheduleReconnect(connectionID: UUID) {
-        guard connectionID == realtimeConnectionID else { return }
+    private func scheduleReconnect(connectionID: UUID, error: Error) {
+        guard shouldRun,
+              connectionID == realtimeConnectionID,
+              reconnectTask == nil else { return }
 
-        reconnectTask?.cancel()
+        closeConnection()
         let attempt = reconnectAttempt
         reconnectAttempt += 1
-        // Exponential backoff (1, 2, 4, 8 … s, capped at 30) instead of a fixed
-        // 2 s loop. A prolonged backend outage no longer rewrites observable
-        // error state — and re-renders the whole SwiftUI tree — every couple of
-        // seconds, which was a major contributor to the app feeling frozen.
-        let delaySeconds = min(pow(2.0, Double(attempt)), 30.0)
+        let baseDelay = min(pow(2.0, Double(attempt)), 30.0)
+        // Jitter prevents every client from reconnecting to a recovering remote
+        // deployment at the same instant.
+        let delaySeconds = baseDelay + Double.random(in: 0 ... max(0.25, baseDelay * 0.25))
+
         reconnectTask = Task { [weak self] in
             guard let self else { return }
 
-            // Surface the retry banner only on the first drop, not every cycle.
             if attempt == 0 {
+                self.realtimeError = error.localizedDescription
                 self.eventHandler?.realtimeDidReceiveError("Realtime disconnected. Retrying…")
             }
 
@@ -159,8 +210,9 @@ final class RealtimeService {
                 try await Task.sleep(for: .seconds(delaySeconds))
             } catch { return }
 
-            guard !Task.isCancelled, self.realtimeConnectionID == connectionID else { return }
-            self.start()
+            guard !Task.isCancelled, self.shouldRun else { return }
+            self.reconnectTask = nil
+            self.connect()
         }
     }
 }

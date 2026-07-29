@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct BackendGate<Content: View>: View {
-    let backend: EasyMatrixBackend
+    let serverConnection: ServerConnection
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -18,19 +18,18 @@ struct BackendGate<Content: View>: View {
         // through its loading placeholder. Gating on the monotonic flag pins
         // content to one slot, and the crash UI overlays it instead of
         // replacing it so a crash+retry also preserves state.
-        if backend.hasEverBeenReady {
+        if serverConnection.hasEverBeenReady {
             content()
                 .overlay {
-                    if case .crashed(let message) = backend.state {
+                    if let message = serverConnection.failureMessage {
                         crashedView(message: message)
                             .background(.background)
                     }
                 }
         } else {
-            switch backend.state {
-            case .crashed(let message):
+            if let message = serverConnection.failureMessage {
                 crashedView(message: message)
-            default:
+            } else {
                 loadingView("Starting backend")
             }
         }
@@ -49,7 +48,7 @@ struct BackendGate<Content: View>: View {
             Text(message)
         } actions: {
             Button("Retry") {
-                Task { await backend.start() }
+                Task { await serverConnection.retry() }
             }
             .controlSize(.large)
         }

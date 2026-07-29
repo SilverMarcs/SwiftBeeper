@@ -1,12 +1,11 @@
 import Foundation
+import CryptoKit
 
 enum AuthenticatedImageLoader {
     /// Builds a plain URL that SwiftMediaViewer's `CachedAsyncImage`/`SMVImage`
     /// can load without custom headers: mxc/localmxc/file URLs are routed
-    /// through the in-process assets proxy with the access token in the query
-    /// (`dangerouslyUseTokenInQuery`, enabled via `allowQueryTokenAuth` in the
-    /// backend config). Cached loads never hit the network, so the token is
-    /// only consulted on cache misses.
+    /// through the assets proxy with an asset-specific signature. The API
+    /// bearer token itself never appears in the image or video URL.
     static func displayURL(for urlString: String?) -> URL? {
         guard let urlString, let sourceURL = URL(string: urlString) else { return nil }
 
@@ -17,9 +16,10 @@ enum AuthenticatedImageLoader {
         guard var components = URLComponents(url: APIConfiguration.assetsProxyURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
+        guard let signature = assetAccessSignature(for: urlString) else { return nil }
         components.queryItems = [
             URLQueryItem(name: "url", value: urlString),
-            URLQueryItem(name: "dangerouslyUseTokenInQuery", value: APIClient.accessToken),
+            URLQueryItem(name: "assetAccessSignature", value: signature),
         ]
         return components.url
     }
@@ -71,5 +71,20 @@ enum AuthenticatedImageLoader {
         for fileURL in contents where fileURL.lastPathComponent.hasPrefix("beeper-") {
             try? FileManager.default.removeItem(at: fileURL)
         }
+    }
+
+    private static func assetAccessSignature(for assetURL: String) -> String? {
+        let accessToken = APIClient.accessToken
+        guard !accessToken.isEmpty else { return nil }
+
+        let key = SymmetricKey(data: Data(accessToken.utf8))
+        let authenticationCode = HMAC<SHA256>.authenticationCode(
+            for: Data(assetURL.utf8),
+            using: key
+        )
+        return authenticationCode.map { byte in
+            let value = String(byte, radix: 16)
+            return value.count == 1 ? "0\(value)" : value
+        }.joined()
     }
 }

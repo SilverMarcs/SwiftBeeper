@@ -3,14 +3,18 @@ import SwiftMediaViewer
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(ServerConnection.self) private var serverConnection
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
+    @Environment(NotificationService.self) private var notificationService
     @AppStorage("autoplay") private var autoplay = true
     @AppStorage("muteOnPlay") private var muteOnPlay = false
 
     var body: some View {
         NavigationStack {
             Form {
+                ServerSettingsSection()
+
                 Section {
                     if sessionStore.accessToken.isEmpty {
                         Text("Not signed in.")
@@ -64,7 +68,7 @@ struct SettingsView: View {
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile?.displayName ?? "Account")
-                    .fontWeight(.semibold)
+                    .bold()
                 if let username = profile?.username, !username.isEmpty,
                    username != profile?.displayName {
                     Text(username)
@@ -75,13 +79,15 @@ struct SettingsView: View {
 
             Spacer()
 
-            Button(role: .destructive) {
-                sessionStore.clearToken()
-            } label: {
-                Image(systemName: "rectangle.portrait.and.arrow.right")
-                .foregroundStyle(.red)
+            Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                Task {
+                    await notificationService.unregisterRemoteRegistration()
+                    sessionStore.clearToken()
+                }
             }
             .buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+            .foregroundStyle(.red)
         }
         .padding(.vertical, 4)
     }
@@ -89,6 +95,8 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
+        .environment(ServerConnection())
         .environment(SessionStore())
         .environment(ChatStore())
+        .environment(NotificationService())
 }

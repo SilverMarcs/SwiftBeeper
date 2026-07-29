@@ -87,10 +87,11 @@ final class AudioPlayerService {
             forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
-            guard let self = self else { return }
-            // Assuming no manual seeking lock inside service during tick, handled by view
-            self.currentTime = time.seconds
-            self.updateNowPlayingInfo()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.currentTime = time.seconds
+                self.updateNowPlayingInfo()
+            }
         }
 
         playbackObserver = NotificationCenter.default.addObserver(
@@ -98,11 +99,13 @@ final class AudioPlayerService {
             object: player.currentItem,
             queue: .main
         ) { [weak self] _ in
-            guard let self = self else { return }
-            self.isAudioPlaying = false
-            self.currentTime = 0
-            self.audioPlayer?.seek(to: .zero)
-            self.updateNowPlayingInfo()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.isAudioPlaying = false
+                self.currentTime = 0
+                self.audioPlayer?.seek(to: .zero)
+                self.updateNowPlayingInfo()
+            }
         }
 
         player.play()

@@ -90,8 +90,8 @@ package_lib() {
 LIB_ARGS=()
 
 if [ "$WHAT" = "all" ] || [ "$WHAT" = "macos" ]; then
-    build_slice darwin arm64 macosx "" mac-arm64
-    build_slice darwin amd64 macosx "" mac-amd64
+    build_slice darwin arm64 macosx "arm64-apple-macos${MACOS_MIN}" mac-arm64
+    build_slice darwin amd64 macosx "x86_64-apple-macos${MACOS_MIN}" mac-amd64
     MAC_PKG="$(package_lib macos "$BUILD_DIR/mac-arm64" "$BUILD_DIR/mac-amd64")"
     LIB_ARGS+=(-library "$MAC_PKG/libeasymatrix.a" -headers "$MAC_PKG/Headers")
 fi
