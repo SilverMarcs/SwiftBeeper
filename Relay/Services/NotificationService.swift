@@ -19,7 +19,9 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     weak var store: ChatStore?
     weak var serverConnection: ServerConnection?
     weak var sessionStore: SessionStore?
+    #if os(iOS)
     private var deviceToken: String?
+    #endif
 
     func requestAuthorization() async {
         let center = UNUserNotificationCenter.current()
@@ -42,14 +44,21 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             isAuthorized = granted
             logger.info("Notification authorization: \(granted, privacy: .public)")
+            #if os(iOS)
             if granted {
                 registerForRemoteNotifications()
             }
+            #else
+            // macOS notifications are generated locally from the live event
+            // stream. Ensure an APNs token from an older build is invalidated.
+            NSApplication.shared.unregisterForRemoteNotifications()
+            #endif
         } catch {
             logger.error("Failed to request notification authorization: \(error.localizedDescription, privacy: .public)")
         }
     }
 
+    #if os(iOS)
     func didRegisterForRemoteNotifications(_ data: Data) {
         // Apple recommends asking APNs for the current token on every launch,
         // rather than treating a previously saved value as permanent.
@@ -63,8 +72,10 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     func didFailToRegisterForRemoteNotifications(_ error: Error) {
         logger.error("APNs registration failed: \(error.localizedDescription, privacy: .public)")
     }
+    #endif
 
     func syncRemoteRegistration() async {
+        #if os(iOS)
         guard isAuthorized,
               let deviceToken,
               serverConnection?.usesEmbeddedServer == false,
@@ -80,9 +91,13 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             prefersRemoteNotifications = false
             logger.error("Could not register push device: \(error.localizedDescription, privacy: .public)")
         }
+        #else
+        prefersRemoteNotifications = false
+        #endif
     }
 
     func unregisterRemoteRegistration() async {
+        #if os(iOS)
         guard let deviceToken,
               serverConnection?.usesEmbeddedServer == false,
               sessionStore?.accessToken.isEmpty == false else {
@@ -96,15 +111,17 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             logger.error("Could not unregister push device: \(error.localizedDescription, privacy: .public)")
         }
         prefersRemoteNotifications = false
-    }
-
-    private func registerForRemoteNotifications() {
-        #if os(macOS)
-        NSApplication.shared.registerForRemoteNotifications()
         #else
-        UIApplication.shared.registerForRemoteNotifications()
+        NSApplication.shared.unregisterForRemoteNotifications()
+        prefersRemoteNotifications = false
         #endif
     }
+
+    #if os(iOS)
+    private func registerForRemoteNotifications() {
+        UIApplication.shared.registerForRemoteNotifications()
+    }
+    #endif
 
     func postNewMessageNotification(message: Message, chatTitle: String) {
         guard isAuthorized, !prefersRemoteNotifications else { return }

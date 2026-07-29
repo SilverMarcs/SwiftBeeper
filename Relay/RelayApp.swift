@@ -26,7 +26,9 @@ struct RelayApp: App {
         notificationService.store = chatStore
         notificationService.serverConnection = serverConnection
         notificationService.sessionStore = sessionStore
+        #if os(iOS)
         AppDelegate.notificationService = notificationService
+        #endif
         _serverConnection = State(initialValue: serverConnection)
         _sessionStore = State(initialValue: sessionStore)
         _notificationService = State(initialValue: notificationService)

@@ -8,7 +8,9 @@ typealias PlatformApplicationDelegate = UIApplicationDelegate
 
 @MainActor
 final class AppDelegate: NSObject, PlatformApplicationDelegate {
+    #if os(iOS)
     static weak var notificationService: NotificationService?
+    #endif
 
     #if os(macOS)
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -20,20 +22,6 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate {
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
-    }
-
-    func application(
-        _ application: NSApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
-        Self.notificationService?.didRegisterForRemoteNotifications(deviceToken)
-    }
-
-    func application(
-        _ application: NSApplication,
-        didFailToRegisterForRemoteNotificationsWithError error: Error
-    ) {
-        Self.notificationService?.didFailToRegisterForRemoteNotifications(error)
     }
     #else
     func application(
