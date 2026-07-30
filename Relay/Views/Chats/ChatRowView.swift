@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct ChatRowView: View {
-    @Environment(ChatStore.self) private var chatStore
     @Environment(\.appearsActive) private var appearsActive
 
     let chat: Chat
@@ -52,52 +51,27 @@ struct ChatRowView: View {
         }
         .padding(3)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button {
-                Task {
-                    if chatStore.isArchiveSelected {
-                        await chatStore.unarchiveChat(chat.id)
-                    } else {
-                        await chatStore.archiveChat(chat.id)
-                    }
-                }
-            } label: {
-                Label(
-                    chatStore.isArchiveSelected ? "Unarchive" : "Archive",
-                    systemImage: chatStore.isArchiveSelected ? "tray.and.arrow.up" : "archivebox"
-                )
-                .labelStyle(.iconOnly)
-            }
-            .tint(chatStore.isArchiveSelected ? .blue : .orange)
-
-            Button {
-                Task {
-                    if chat.isMuted == true {
-                        await chatStore.unmuteChat(chat.id)
-                    } else {
-                        await chatStore.muteChat(chat.id)
-                    }
-                }
-            } label: {
-                Label(
-                    chat.isMuted == true ? "Unmute" : "Mute",
-                    systemImage: chat.isMuted == true ? "bell" : "bell.slash"
-                )
-                .labelStyle(.iconOnly)
-            }
-            .tint(.purple)
+            ChatRowActionsView(
+                chat: chat,
+                includesReadAction: false,
+                includesArchiveAndMuteActions: true
+            )
+            .labelStyle(.iconOnly)
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            if chat.unreadCount > 0 {
-                Button {
-                    Task {
-                        await chatStore.markChatAsRead(chat.id)
-                    }
-                } label: {
-                    Label("Mark Read", systemImage: "envelope.open")
-                        .labelStyle(.iconOnly)
-                }
-                .tint(.blue)
-            }
+            ChatRowActionsView(
+                chat: chat,
+                includesReadAction: true,
+                includesArchiveAndMuteActions: false
+            )
+            .labelStyle(.iconOnly)
+        }
+        .contextMenu {
+            ChatRowActionsView(
+                chat: chat,
+                includesReadAction: true,
+                includesArchiveAndMuteActions: true
+            )
         }
     }
 }
