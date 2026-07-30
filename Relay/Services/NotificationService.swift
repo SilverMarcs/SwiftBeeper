@@ -153,7 +153,17 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 senderName: message.senderDisplayName,
                 chatTitle: chat.displayTitle,
                 isGroupChat: chat.isGroupChat,
-                messageBody: message.displayText
+                messageBody: message.displayText,
+                recipients: chat.isGroupChat
+                    ? (chat.participants?.items ?? [])
+                        .filter { $0.isSelf != true && $0.id != message.senderID }
+                        .map {
+                            CommunicationNotificationParticipant(
+                                id: $0.id,
+                                name: $0.displayName
+                            )
+                        }
+                    : []
             )
             content = await CommunicationNotification.updatedContent(
                 from: mutableContent,

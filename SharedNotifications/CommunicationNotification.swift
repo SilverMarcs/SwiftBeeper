@@ -4,12 +4,15 @@ import Foundation
 @preconcurrency import UserNotifications
 
 struct CommunicationNotificationInfo: Sendable {
+    static let maximumRecipientCount = 8
+
     let conversationID: String
     let senderID: String
     let senderName: String
     let chatTitle: String
     let isGroupChat: Bool
     let messageBody: String
+    let recipients: [CommunicationNotificationParticipant]
 
     init(
         conversationID: String,
@@ -17,7 +20,8 @@ struct CommunicationNotificationInfo: Sendable {
         senderName: String,
         chatTitle: String,
         isGroupChat: Bool,
-        messageBody: String
+        messageBody: String,
+        recipients: [CommunicationNotificationParticipant] = []
     ) {
         self.conversationID = conversationID
         self.senderID = senderID
@@ -25,6 +29,7 @@ struct CommunicationNotificationInfo: Sendable {
         self.chatTitle = chatTitle
         self.isGroupChat = isGroupChat
         self.messageBody = messageBody
+        self.recipients = Array(recipients.prefix(Self.maximumRecipientCount))
     }
 
     init?(userInfo: [AnyHashable: Any], fallbackBody: String) {
@@ -42,6 +47,12 @@ struct CommunicationNotificationInfo: Sendable {
         chatTitle = userInfo["chatTitle"] as? String ?? senderName
         isGroupChat = userInfo["isGroupChat"] as? Bool ?? false
         messageBody = fallbackBody
+        let participantPayloads = userInfo["groupParticipants"] as? [[String: Any]] ?? []
+        recipients = Array(
+            participantPayloads
+                .compactMap { CommunicationNotificationParticipant(userInfo: $0) }
+                .prefix(Self.maximumRecipientCount)
+        )
     }
 }
 
@@ -63,8 +74,20 @@ enum CommunicationNotification {
         let groupName = information.isGroupChat
             ? INSpeakableString(spokenPhrase: information.chatTitle)
             : nil
+        let recipients: [INPerson]? = information.isGroupChat
+            ? information.recipients.map { participant in
+                INPerson(
+                    personHandle: INPersonHandle(value: participant.id, type: .unknown),
+                    nameComponents: nil,
+                    displayName: participant.name,
+                    image: nil,
+                    contactIdentifier: nil,
+                    customIdentifier: participant.id
+                )
+            }
+            : nil
         let intent = INSendMessageIntent(
-            recipients: nil,
+            recipients: recipients,
             outgoingMessageType: .outgoingMessageText,
             content: information.messageBody,
             speakableGroupName: groupName,
@@ -83,10 +106,29 @@ enum CommunicationNotification {
 
         do {
             try await interaction.donate()
-            return try content.updating(from: intent)
+            let updatedContent = try content.updating(from: intent)
+            return preservingMessagePresentation(updatedContent, information: information)
         } catch {
             return content
         }
+    }
+
+    nonisolated private static func preservingMessagePresentation(
+        _ content: UNNotificationContent,
+        information: CommunicationNotificationInfo
+    ) -> UNNotificationContent {
+        guard let mutableContent = content.mutableCopy() as? UNMutableNotificationContent else {
+            return content
+        }
+        mutableContent.title = information.isGroupChat
+            ? information.chatTitle
+            : information.senderName
+        mutableContent.subtitle = information.isGroupChat
+            ? information.senderName
+            : ""
+        mutableContent.body = information.messageBody
+        mutableContent.threadIdentifier = information.conversationID
+        return mutableContent
     }
 }
 
