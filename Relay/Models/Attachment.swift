@@ -26,11 +26,18 @@ struct AttachmentSizeInput: Encodable {
     let height: Int
 }
 
-struct PendingAttachment: Identifiable {
-    let id = UUID()
+struct PendingAttachment: Identifiable, Equatable {
+    let id: UUID
     let fileData: Data
     let fileName: String
     let mimeType: String
+
+    init(id: UUID = UUID(), fileData: Data, fileName: String, mimeType: String) {
+        self.id = id
+        self.fileData = fileData
+        self.fileName = fileName
+        self.mimeType = mimeType
+    }
 }
 
 struct AttachmentSize: Decodable, Equatable {

@@ -60,10 +60,7 @@ struct MessageRowView: View {
                 messageContent(isOutgoing: isOutgoing)
 
                 if isOutgoing && showReadIndicator {
-                   Text("Read")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.trailing, 3)
+                    MessageDeliveryStatusView(status: .read)
                 }
             }
 

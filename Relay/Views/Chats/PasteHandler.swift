@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 #if os(macOS)
 struct PasteHandler: ViewModifier {
-    @Environment(ChatStore.self) private var chatStore
+    @Environment(InputManager.self) private var input
     @State private var eventMonitor: Any?
     @State private var hostingView: NSView?
 
@@ -49,28 +49,28 @@ struct PasteHandler: ViewModifier {
     }
 
     private func processPasteItem(_ item: NSPasteboardItem) {
+        guard let targetChatID = input.selectedChatID else { return }
+
         if let fileURLData = item.data(forType: .fileURL),
            let fileURL = URL(dataRepresentation: fileURLData, relativeTo: nil) {
             guard let data = try? Data(contentsOf: fileURL) else { return }
             let fileName = fileURL.lastPathComponent
             let mimeType = fileURL.mimeType
-            chatStore.pendingAttachments.append(PendingAttachment(
-                fileData: data,
-                fileName: fileName,
-                mimeType: mimeType
-            ))
+            input.addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: targetChatID)
         } else if let imageData = item.data(forType: .png) {
-            chatStore.pendingAttachments.append(PendingAttachment(
-                fileData: imageData,
+            input.addAttachment(
+                data: imageData,
                 fileName: "Pasted_Image_\(UUID().uuidString.prefix(8)).png",
-                mimeType: "image/png"
-            ))
+                mimeType: "image/png",
+                to: targetChatID
+            )
         } else if let imageData = item.data(forType: .tiff) {
-            chatStore.pendingAttachments.append(PendingAttachment(
-                fileData: imageData,
+            input.addAttachment(
+                data: imageData,
                 fileName: "Pasted_Image_\(UUID().uuidString.prefix(8)).tiff",
-                mimeType: "image/tiff"
-            ))
+                mimeType: "image/tiff",
+                to: targetChatID
+            )
         }
     }
 
@@ -81,7 +81,8 @@ private struct HostingViewFinder: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async {
+        Task { @MainActor in
+            await Task.yield()
             hostingView = view
         }
         return view

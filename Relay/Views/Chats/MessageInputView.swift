@@ -12,6 +12,7 @@ struct MessageInputView: View {
     @State private var showingFilePicker = false
     @State private var showingPhotoPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var attachmentTargetChatID: String?
     @FocusState private var isMessageFieldFocused: Bool
 
     var body: some View {
@@ -42,17 +43,18 @@ struct MessageInputView: View {
                 }
 
                 if !input.pendingAttachments.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    ScrollView(.horizontal) {
                         HStack(spacing: 8) {
                             ForEach(input.pendingAttachments) { pending in
                                 PendingAttachmentPreview(
                                     pending: pending,
-                                    isSending: input.isSendingMessage,
+                                    isSending: false,
                                     onRemove: { input.removePendingAttachment(id: pending.id) }
                                 )
                             }
                         }
                     }
+                    .scrollIndicators(.hidden)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                 }
@@ -60,12 +62,14 @@ struct MessageInputView: View {
                 HStack(alignment: .bottom) {
                     Menu {
                         Button {
+                            attachmentTargetChatID = chatStore.selectedChatID
                             showingPhotoPicker = true
                         } label: {
                             Label("Photos Library", systemImage: "photo.on.rectangle.angled")
                         }
 
                         Button {
+                            attachmentTargetChatID = chatStore.selectedChatID
                             showingFilePicker = true
                         } label: {
                             Label("Attach Files", systemImage: "paperclip")
@@ -127,7 +131,7 @@ struct MessageInputView: View {
                         #endif
                     } label: {
                         Group {
-                            if input.isSendingMessage {
+                            if input.isSavingEdit {
                                 ProgressView()
                                     #if os(macOS)
                                     .controlSize(.small)
@@ -166,7 +170,9 @@ struct MessageInputView: View {
             isPresented: $showingFilePicker,
             allowedContentTypes: [.item]
         ) { result in
-            input.handleFileImport(result)
+            guard let attachmentTargetChatID else { return }
+            input.handleFileImport(result, for: attachmentTargetChatID)
+            self.attachmentTargetChatID = nil
         }
         .photosPicker(
             isPresented: $showingPhotoPicker,
@@ -174,13 +180,14 @@ struct MessageInputView: View {
             matching: .any(of: [.images, .videos])
         )
         .onChange(of: selectedPhotoItems) { _, newItems in
-            guard !newItems.isEmpty else { return }
+            guard !newItems.isEmpty, let attachmentTargetChatID else { return }
             Task {
                 for item in newItems {
-                    await input.handlePhotoPick(item)
+                    await input.handlePhotoPick(item, for: attachmentTargetChatID)
                 }
             }
             selectedPhotoItems = []
+            self.attachmentTargetChatID = nil
         }
         #if os(macOS)
         .pasteHandler()
@@ -194,7 +201,7 @@ struct MessageInputView: View {
             input.isComposerFocused = focused
         }
         #if !os(macOS)
-        .onChange(of: input.isSendingMessage) { oldValue, newValue in
+        .onChange(of: input.isSavingEdit) { oldValue, newValue in
             if oldValue && !newValue {
                 focusMessageField()
             }

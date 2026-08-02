@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Drives everything composer-related: the per-chat draft text, the editing /
 /// reply lifecycle, attachment intake, and submitting. It sits on top of
-/// `ChatStore` (which owns the actual send/edit/attachment state) so that both
+/// `ChatStore` (which owns the actual send/edit/outbox state) so that both
 /// the macOS/iPad inline composer (`MessageInputView`) and the iPhone
 /// `.searchable` input can drive the exact same state through one object.
 @MainActor
@@ -14,6 +14,12 @@ final class InputManager {
 
     /// Per-chat draft text, keyed by chat ID, so switching chats keeps drafts.
     private var draftsByChatID: [String: String] = [:]
+    /// Attachments belong to the chat where intake began. In particular, a
+    /// PhotosPicker transfer may finish after the user has navigated elsewhere.
+    private var pendingAttachmentsByChatID: [String: [PendingAttachment]] = [:]
+    /// Remembers which chat owns the draft being edited so an edit finishing
+    /// during navigation cannot clear the newly selected chat's draft.
+    private var editingDraftChatID: String?
 
     /// Set true to request the inline composer grab focus on its next appear
     /// (e.g. right after tapping "Edit"). Only the inline composer observes
@@ -31,7 +37,7 @@ final class InputManager {
 
     // MARK: - Draft text
 
-    private var selectedChatID: String? { chatStore.selectedChatID }
+    var selectedChatID: String? { chatStore.selectedChatID }
 
     var draft: String {
         get {
@@ -63,9 +69,12 @@ final class InputManager {
 
     var hasActiveComposerAction: Bool { chatStore.activeComposerMessage != nil }
 
-    var isSendingMessage: Bool { chatStore.isSendingMessage }
+    var isSavingEdit: Bool { chatStore.isSavingEdit }
 
-    var pendingAttachments: [PendingAttachment] { chatStore.pendingAttachments }
+    var pendingAttachments: [PendingAttachment] {
+        guard let selectedChatID else { return [] }
+        return pendingAttachmentsByChatID[selectedChatID] ?? []
+    }
 
     var messageFieldPrompt: String {
         if isEditing { return "Edit message" }
@@ -74,9 +83,9 @@ final class InputManager {
     }
 
     var sendButtonDisabled: Bool {
-        if chatStore.isSendingMessage { return true }
         if chatStore.selectedChat == nil { return true }
-        return trimmedDraft.isEmpty && chatStore.pendingAttachments.isEmpty
+        if isEditing && chatStore.isSavingEdit { return true }
+        return trimmedDraft.isEmpty && pendingAttachments.isEmpty
     }
 
     var mostRecentEditableOutgoingMessage: Message? {
@@ -93,9 +102,11 @@ final class InputManager {
     /// `chatStore.editingMessage?.id` so both platforms stay in sync.
     func editingMessageDidChange() {
         if let editingMessage = chatStore.editingMessage {
-            draft = editingMessage.text ?? ""
-        } else {
-            draft = ""
+            editingDraftChatID = editingMessage.chatID
+            draftsByChatID[editingMessage.chatID] = editingMessage.text ?? ""
+        } else if let editingDraftChatID {
+            draftsByChatID[editingDraftChatID] = nil
+            self.editingDraftChatID = nil
         }
     }
 
@@ -114,9 +125,12 @@ final class InputManager {
 
     func cancelComposerAction() {
         withAnimation {
-            let wasEditing = isEditing
+            let editingChatID = chatStore.editingMessage?.chatID
             chatStore.cancelComposerAction()
-            if wasEditing { draft = "" }
+            if let editingChatID {
+                clearDraft(for: editingChatID)
+                editingDraftChatID = nil
+            }
         }
     }
 
@@ -133,24 +147,20 @@ final class InputManager {
     private func sendMessage() {
         guard let chatID = chatStore.selectedChat?.id else { return }
         let text = trimmedDraft
-        let attachments = chatStore.pendingAttachments
+        let attachments = pendingAttachments
 
         guard !text.isEmpty || !attachments.isEmpty else { return }
         let previousDraft = draft
         clearDraft(for: chatID)
-        chatStore.clearPendingAttachments()
+        clearPendingAttachments(for: chatID)
 
-        Task {
-            let didSend = await chatStore.sendMessage(text: text, attachments: attachments, to: chatID)
-            if didSend {
-                await chatStore.refreshAfterMessageMutation(chatID: chatID)
-            } else {
-                if (draftsByChatID[chatID] ?? "").isEmpty {
-                    draftsByChatID[chatID] = previousDraft
-                }
-                if chatStore.pendingAttachments.isEmpty {
-                    chatStore.pendingAttachments = attachments
-                }
+        let didQueue = chatStore.sendMessage(text: text, attachments: attachments, to: chatID)
+        if !didQueue {
+            if (draftsByChatID[chatID] ?? "").isEmpty {
+                draftsByChatID[chatID] = previousDraft
+            }
+            if (pendingAttachmentsByChatID[chatID] ?? []).isEmpty {
+                pendingAttachmentsByChatID[chatID] = attachments
             }
         }
     }
@@ -166,9 +176,9 @@ final class InputManager {
         Task {
             let didSave = await chatStore.saveEdit(newText: text)
             if didSave {
-                if let chatID = chatStore.selectedChat?.id {
-                    clearDraft(for: chatID)
-                    await chatStore.refreshAfterMessageMutation(chatID: chatID)
+                if let editingChatID {
+                    clearDraft(for: editingChatID)
+                    await chatStore.refreshAfterMessageMutation(chatID: editingChatID)
                 }
             } else if
                 let editingChatID,
@@ -182,27 +192,32 @@ final class InputManager {
     // MARK: - Attachments
 
     func removePendingAttachment(id: PendingAttachment.ID) {
-        chatStore.removePendingAttachment(id: id)
+        guard let selectedChatID else { return }
+        pendingAttachmentsByChatID[selectedChatID]?.removeAll { $0.id == id }
     }
 
-    private func addAttachment(data: Data, fileName: String, mimeType: String) {
-        chatStore.pendingAttachments.append(PendingAttachment(
+    func addAttachment(data: Data, fileName: String, mimeType: String, to chatID: String) {
+        pendingAttachmentsByChatID[chatID, default: []].append(PendingAttachment(
             fileData: data,
             fileName: fileName,
             mimeType: mimeType
         ))
     }
 
-    func handleFileImport(_ result: Result<URL, Error>) {
+    private func clearPendingAttachments(for chatID: String) {
+        pendingAttachmentsByChatID[chatID] = nil
+    }
+
+    func handleFileImport(_ result: Result<URL, Error>, for chatID: String) {
         guard case .success(let url) = result else { return }
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
 
         guard let data = try? Data(contentsOf: url) else { return }
-        addAttachment(data: data, fileName: url.lastPathComponent, mimeType: url.mimeType)
+        addAttachment(data: data, fileName: url.lastPathComponent, mimeType: url.mimeType, to: chatID)
     }
 
-    func handlePhotoPick(_ item: PhotosPickerItem) async {
+    func handlePhotoPick(_ item: PhotosPickerItem, for chatID: String) async {
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
 
         let mimeType: String
@@ -217,11 +232,11 @@ final class InputManager {
             fileName = "photo.jpg"
         }
 
-        addAttachment(data: data, fileName: fileName, mimeType: mimeType)
+        addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: chatID)
     }
 
     func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard !providers.isEmpty else { return false }
+        guard !providers.isEmpty, let targetChatID = selectedChatID else { return false }
 
         for provider in providers {
             provider.loadFileRepresentation(forTypeIdentifier: UTType.item.identifier) { url, _ in
@@ -231,7 +246,7 @@ final class InputManager {
                 let mimeType = url.mimeType
 
                 Task { @MainActor in
-                    self.addAttachment(data: data, fileName: fileName, mimeType: mimeType)
+                    self.addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: targetChatID)
                 }
             }
         }

@@ -229,15 +229,17 @@ final class ChatStore: RealtimeEventHandler {
     private var latestLoadRequestID: UUID?
     private(set) var isLoadingOlderMessages = false
     private(set) var isLoadingMessages = false
-    private(set) var isSendingMessage = false
+    /// New messages use independent optimistic outbox items; edits still use a
+    /// blocking request and temporarily lock the composer.
+    private(set) var isSavingEdit = false
     var messagesError: String?
-    private(set) var uploadProgress: Double?
 
-    // MARK: Composer
+    // MARK: Composer / outbox
 
     var replyingToMessage: Message?
     var editingMessage: Message?
-    var pendingAttachments: [PendingAttachment] = []
+    private(set) var outgoingMessagesByChatID: [String: [OutgoingMessage]] = [:]
+    @ObservationIgnored private var outgoingSendTasks: [OutgoingMessage.ID: Task<Void, Never>] = [:]
 
     var activeComposerMessage: Message? {
         editingMessage ?? replyingToMessage
@@ -301,7 +303,15 @@ final class ChatStore: RealtimeEventHandler {
 
     func messages(for chatID: String) -> [Message] {
         guard chatID == messagesChatID else { return [] }
-        return displayableMessages
+        let outgoingMessages = outgoingMessagesByChatID[chatID, default: []]
+        guard !outgoingMessages.isEmpty else { return displayableMessages }
+        return displayableMessages.filter { message in
+            !outgoingMessages.contains { $0.suppressesConfirmedMessage(message) }
+        }
+    }
+
+    func outgoingMessages(for chatID: String) -> [OutgoingMessage] {
+        outgoingMessagesByChatID[chatID] ?? []
     }
 
     func hasMoreMessages(for chatID: String) -> Bool {
@@ -380,8 +390,11 @@ final class ChatStore: RealtimeEventHandler {
         messagesError = nil
         replyingToMessage = nil
         editingMessage = nil
-        pendingAttachments = []
-        uploadProgress = nil
+        for task in outgoingSendTasks.values {
+            task.cancel()
+        }
+        outgoingSendTasks = [:]
+        outgoingMessagesByChatID = [:]
         lastNotifiedMessageIDByChatID = [:]
     }
 
@@ -677,15 +690,6 @@ final class ChatStore: RealtimeEventHandler {
 
     // MARK: - Sending / editing
 
-    func clearPendingAttachments() {
-        pendingAttachments = []
-        uploadProgress = nil
-    }
-
-    func removePendingAttachment(id: UUID) {
-        pendingAttachments.removeAll { $0.id == id }
-    }
-
     /// Reloads the open chat (and the sidebar) after the local user mutates it.
     func refreshAfterMessageMutation(chatID: String) async {
         async let chatsRefresh: Void = loadChats()
@@ -693,61 +697,95 @@ final class ChatStore: RealtimeEventHandler {
         _ = await (chatsRefresh, messagesRefresh)
     }
 
-    func sendMessage(text: String, attachments: [PendingAttachment], to chatID: String) async -> Bool {
+    /// Adds a message to the outbox synchronously so the timeline can display it
+    /// before any upload or remote-server request begins.
+    @discardableResult
+    func sendMessage(text: String, attachments: [PendingAttachment], to chatID: String) -> Bool {
         guard !APIClient.accessToken.isEmpty else { return false }
 
         let trimmedText = text.trimmed
         let hasText = !trimmedText.isEmpty
         guard hasText || !attachments.isEmpty else { return false }
 
-        isSendingMessage = true
-        defer {
-            isSendingMessage = false
-            uploadProgress = nil
+        let outgoing = OutgoingMessage(
+            chatID: chatID,
+            text: hasText ? trimmedText : "",
+            attachments: attachments,
+            replyToMessageID: replyingToMessage?.id
+        )
+        outgoingMessagesByChatID[chatID, default: []].append(outgoing)
+        replyingToMessage = nil
+        messagesError = nil
+        startSending(outgoing)
+        return true
+    }
+
+    func retrySending(_ messageID: OutgoingMessage.ID) {
+        guard let outgoing = outgoingMessage(withID: messageID),
+              case .failed = outgoing.state,
+              !APIClient.accessToken.isEmpty else { return }
+
+        updateOutgoingMessage(messageID) { message in
+            message.state = .sending
+            message.uploadProgressByAttachmentID = [:]
         }
+        startSending(outgoing)
+    }
 
-        let replyToID = replyingToMessage?.id
-
-        do {
-            let firstAttachmentInput = try await uploadAttachment(attachments.first, chatID: chatID)
-            _ = try await APIClient.sendMessage(
-                chatID: chatID,
-                text: hasText ? trimmedText : nil,
-                replyToMessageID: replyToID,
-                attachment: firstAttachmentInput
-            )
-
-            for attachment in attachments.dropFirst() {
-                let attachmentInput = try await uploadAttachment(attachment, chatID: chatID)
-                _ = try await APIClient.sendMessage(chatID: chatID, text: nil, attachment: attachmentInput)
-            }
-
-            replyingToMessage = nil
-            messagesError = nil
-            return true
-        } catch {
-            handleMessageError(error)
-            return false
+    private func startSending(_ outgoing: OutgoingMessage) {
+        outgoingSendTasks[outgoing.id]?.cancel()
+        outgoingSendTasks[outgoing.id] = Task { [weak self] in
+            await self?.transmit(outgoing)
         }
     }
 
-    private func uploadAttachment(_ attachment: PendingAttachment?, chatID: String) async throws -> MessageAttachmentInput? {
+    private func transmit(_ outgoing: OutgoingMessage) async {
+        defer { outgoingSendTasks[outgoing.id] = nil }
+        do {
+            let firstAttachmentInput = try await uploadAttachment(outgoing.attachments.first, for: outgoing.id)
+            _ = try await APIClient.sendMessage(
+                chatID: outgoing.chatID,
+                text: outgoing.text.isEmpty ? nil : outgoing.text,
+                replyToMessageID: outgoing.replyToMessageID,
+                attachment: firstAttachmentInput
+            )
+
+            for attachment in outgoing.attachments.dropFirst() {
+                let attachmentInput = try await uploadAttachment(attachment, for: outgoing.id)
+                _ = try await APIClient.sendMessage(chatID: outgoing.chatID, text: nil, attachment: attachmentInput)
+            }
+
+            await refreshAfterMessageMutation(chatID: outgoing.chatID)
+            removeOutgoingMessage(outgoing.id, from: outgoing.chatID)
+        } catch {
+            guard !isCancellationLikeError(error) else { return }
+            updateOutgoingMessage(outgoing.id) { message in
+                message.state = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    private func uploadAttachment(
+        _ attachment: PendingAttachment?,
+        for outgoingMessageID: OutgoingMessage.ID
+    ) async throws -> MessageAttachmentInput? {
         guard let attachment else { return nil }
 
-        uploadProgress = 0
+        updateUploadProgress(0, attachmentID: attachment.id, messageID: outgoingMessageID)
         let uploadResult = try await APIClient.uploadAsset(
             fileData: attachment.fileData,
             fileName: attachment.fileName,
             mimeType: attachment.mimeType,
             onProgress: { [weak self] progress in
-                self?.uploadProgress = progress
+                self?.updateUploadProgress(progress, attachmentID: attachment.id, messageID: outgoingMessageID)
             }
         )
 
         if let error = uploadResult.error, !error.isEmpty {
-            handleMessageError(message: "Upload failed: \(error)")
             throw UploadError.serverError(error)
         }
+
+        updateUploadProgress(1, attachmentID: attachment.id, messageID: outgoingMessageID)
 
         var size: AttachmentSizeInput?
         if let w = uploadResult.width, let h = uploadResult.height {
@@ -764,8 +802,55 @@ final class ChatStore: RealtimeEventHandler {
         )
     }
 
-    private enum UploadError: Error {
+    private func outgoingMessage(withID messageID: OutgoingMessage.ID) -> OutgoingMessage? {
+        for messages in outgoingMessagesByChatID.values {
+            if let message = messages.first(where: { $0.id == messageID }) {
+                return message
+            }
+        }
+        return nil
+    }
+
+    private func updateOutgoingMessage(
+        _ messageID: OutgoingMessage.ID,
+        update: (inout OutgoingMessage) -> Void
+    ) {
+        guard let chatID = outgoingMessagesByChatID.first(where: { _, messages in
+            messages.contains(where: { $0.id == messageID })
+        })?.key,
+        var messages = outgoingMessagesByChatID[chatID],
+        let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+
+        update(&messages[index])
+        outgoingMessagesByChatID[chatID] = messages
+    }
+
+    private func updateUploadProgress(
+        _ progress: Double,
+        attachmentID: PendingAttachment.ID,
+        messageID: OutgoingMessage.ID
+    ) {
+        updateOutgoingMessage(messageID) { message in
+            message.uploadProgressByAttachmentID[attachmentID] = min(max(progress, 0), 1)
+        }
+    }
+
+    private func removeOutgoingMessage(_ messageID: OutgoingMessage.ID, from chatID: String) {
+        outgoingMessagesByChatID[chatID]?.removeAll { $0.id == messageID }
+        if outgoingMessagesByChatID[chatID]?.isEmpty == true {
+            outgoingMessagesByChatID[chatID] = nil
+        }
+    }
+
+    private enum UploadError: LocalizedError {
         case serverError(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .serverError(let message):
+                return "Upload failed: \(message)"
+            }
+        }
     }
 
     func setReplyTo(_ message: Message?) {
@@ -801,8 +886,8 @@ final class ChatStore: RealtimeEventHandler {
         let trimmedText = newText.trimmed
         guard !trimmedText.isEmpty else { return false }
 
-        isSendingMessage = true
-        defer { isSendingMessage = false }
+        isSavingEdit = true
+        defer { isSavingEdit = false }
 
         do {
             _ = try await APIClient.editMessage(chatID: message.chatID, messageID: message.id, text: trimmedText)
@@ -1114,10 +1199,6 @@ final class ChatStore: RealtimeEventHandler {
     private func handleMessageError(_ error: any Error) {
         if isCancellationLikeError(error) { return }
         messagesError = error.localizedDescription
-    }
-
-    private func handleMessageError(message: String) {
-        messagesError = message
     }
 
     private func isCancellationLikeError(_ error: any Error) -> Bool {

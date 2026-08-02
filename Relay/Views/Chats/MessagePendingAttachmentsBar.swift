@@ -10,12 +10,12 @@ struct MessagePendingAttachmentsBar: View {
 
     var body: some View {
         if !input.pendingAttachments.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     ForEach(input.pendingAttachments) { pending in
                         PendingAttachmentPreview(
                             pending: pending,
-                            isSending: input.isSendingMessage,
+                            isSending: false,
                             onRemove: { input.removePendingAttachment(id: pending.id) }
                         )
                     }
@@ -23,6 +23,7 @@ struct MessagePendingAttachmentsBar: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
+            .scrollIndicators(.hidden)
         }
     }
 }

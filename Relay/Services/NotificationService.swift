@@ -211,7 +211,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 return
             }
             Task { @MainActor in
-                _ = await store?.sendMessage(text: replyText, attachments: [], to: chatID)
+                _ = store?.sendMessage(text: replyText, attachments: [], to: chatID)
             }
         } else if !chatID.isEmpty {
             Task { @MainActor in

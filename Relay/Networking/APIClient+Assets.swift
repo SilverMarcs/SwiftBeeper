@@ -13,15 +13,16 @@ extension APIClient {
         var request = request(url: url, method: .post, accessToken: Self.accessToken)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        var body = Data()
-        body.appendString("--\(boundary)\r\n")
-        body.appendString("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n")
-        body.appendString("Content-Type: \(mimeType)\r\n\r\n")
-        body.append(fileData)
-        body.appendString("\r\n--\(boundary)--\r\n")
+        let bodyFileURL = try makeMultipartBodyFile(
+            fileData: fileData,
+            fileName: fileName,
+            mimeType: mimeType,
+            boundary: boundary
+        )
+        defer { try? FileManager.default.removeItem(at: bodyFileURL) }
 
         let delegate = UploadProgressDelegate(onProgress: onProgress)
-        let (data, response) = try await URLSession.shared.upload(for: request, from: body, delegate: delegate)
+        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: bodyFileURL, delegate: delegate)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -35,6 +36,40 @@ extension APIClient {
             return try JSONDecoder.beeper.decode(UploadAssetOutput.self, from: data)
         } catch {
             throw APIError.decoding(error.localizedDescription)
+        }
+    }
+
+    private static func makeMultipartBodyFile(
+        fileData: Data,
+        fileName: String,
+        mimeType: String,
+        boundary: String
+    ) throws -> URL {
+        let bodyFileURL = FileManager.default.temporaryDirectory
+            .appending(path: "relay-upload-\(UUID().uuidString).multipart")
+        guard FileManager.default.createFile(atPath: bodyFileURL.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        let handle = try FileHandle(forWritingTo: bodyFileURL)
+        do {
+            let safeFileName = fileName
+                .replacing("\r", with: "_")
+                .replacing("\n", with: "_")
+                .replacing("\"", with: "_")
+            try handle.write(contentsOf: Data("--\(boundary)\r\n".utf8))
+            try handle.write(contentsOf: Data(
+                "Content-Disposition: form-data; name=\"file\"; filename=\"\(safeFileName)\"\r\n".utf8
+            ))
+            try handle.write(contentsOf: Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
+            try handle.write(contentsOf: fileData)
+            try handle.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
+            try handle.close()
+            return bodyFileURL
+        } catch {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: bodyFileURL)
+            throw error
         }
     }
 }
@@ -57,11 +92,5 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Se
         Task { @MainActor in
             onProgress(progress)
         }
-    }
-}
-
-private extension Data {
-    mutating func appendString(_ string: String) {
-        append(Data(string.utf8))
     }
 }

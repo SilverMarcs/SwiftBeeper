@@ -27,8 +27,14 @@ struct ChatDetailMac: View {
             )
         } else if let selectedChat = chatStore.selectedChat {
             let messages = chatStore.messages(for: selectedChat.id)
+            let outgoingMessages = chatStore.outgoingMessages(for: selectedChat.id)
             let timelineVersion = chatStore.messagesChatID == selectedChat.id ? chatStore.messagesVersion : -1
-            let timelineEntries = timelineCache(TimelineCacheKey(version: timelineVersion, firstUnreadID: firstUnreadID)) {
+            let suppressingOutgoingIDs = outgoingMessages.compactMap(\.suppressionID)
+            let timelineEntries = timelineCache(TimelineCacheKey(
+                version: timelineVersion,
+                firstUnreadID: firstUnreadID,
+                suppressingOutgoingIDs: suppressingOutgoingIDs
+            )) {
                 self.timelineEntries(for: messages)
             }
             let activeComposerMessageID = chatStore.activeComposerMessage?.id
@@ -36,7 +42,8 @@ struct ChatDetailMac: View {
                 ReadIndicatorKey(
                     version: timelineVersion,
                     lastReadByOtherSortKey: chatStore.lastReadByOtherSortKey,
-                    selfParticipantID: selectedChat.participants?.items.first(where: { $0.isSelf == true })?.id
+                    selfParticipantID: selectedChat.participants?.items.first(where: { $0.isSelf == true })?.id,
+                    suppressingOutgoingIDs: suppressingOutgoingIDs
                 )
             ) {
                 self.lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
@@ -121,6 +128,13 @@ struct ChatDetailMac: View {
                         .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2  , trailing: 10))
                     }
 
+                    ForEach(outgoingMessages) { message in
+                        OutgoingMessageRowView(message: message)
+                            .id(message.timelineKey)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+                    }
+
                     Color.clear
                         .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
                         .listRowInsets(.init())
@@ -156,7 +170,10 @@ struct ChatDetailMac: View {
                     settlingOwnsUnmask = true
                     await detail
                 }
-                .onChange(of: MessageListTracker(count: messages.count, lastID: messages.last?.id)) { oldTracker, newTracker in
+                .onChange(of: MessageListTracker(
+                    count: messages.count + outgoingMessages.count,
+                    lastID: outgoingMessages.last?.timelineKey ?? messages.last?.id
+                )) { oldTracker, newTracker in
                     guard !isPreparingInitialScroll else { return }
                     // 2026-06-06: a send lands as two store commits — the WS merge
                     // grows the array but the new message isn't last yet (its sort
@@ -168,6 +185,9 @@ struct ChatDetailMac: View {
                     // stable, deletions shrink the count — both still skipped.
                     guard newTracker.lastID != oldTracker.lastID else { return }
                     guard newTracker.count >= oldTracker.count else { return }
+                    guard !(oldTracker.lastID?.hasPrefix("outgoing-") == true && newTracker.count == oldTracker.count) else {
+                        return
+                    }
 
                     firstUnreadID = nil
                     Task { @MainActor in
@@ -409,6 +429,7 @@ private struct MessageListTracker: Equatable {
 private struct TimelineCacheKey: Equatable {
     let version: Int
     let firstUnreadID: String?
+    let suppressingOutgoingIDs: [OutgoingMessage.ID]
 }
 
 /// Memoization key for the "Read" indicator: it depends on the timeline content,
@@ -417,6 +438,7 @@ private struct ReadIndicatorKey: Equatable {
     let version: Int
     let lastReadByOtherSortKey: String?
     let selfParticipantID: String?
+    let suppressingOutgoingIDs: [OutgoingMessage.ID]
 }
 
 private struct TimelineEntry: Identifiable {
