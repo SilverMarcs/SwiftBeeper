@@ -4,7 +4,10 @@ import Observation
 @MainActor protocol RealtimeEventHandler: AnyObject {
     /// The socket (re)connected — a good time to resync, since events may have
     /// been missed while disconnected.
-    func realtimeDidConnect()
+    func realtimeDidConnect(requiresResync: Bool)
+    /// A sequence discontinuity or unhydrated event means at least one mutation
+    /// could not be applied and the client must recover from REST snapshots.
+    func realtimeNeedsResync()
     /// Carries the fully-hydrated chat summary from the event payload (preview,
     /// unread, ordering, flags) when present, so the handler can patch a single
     /// sidebar row instead of refetching the whole list. `chat` is nil only when
@@ -14,7 +17,7 @@ import Observation
     /// Carries the fully-hydrated messages from the event payload, so the handler
     /// can apply them directly without refetching.
     func realtimeDidUpsertMessages(chatID: String?, messages: [Message])
-    func realtimeDidDeleteMessage(chatID: String?)
+    func realtimeDidDeleteMessages(chatID: String?, messageIDs: [String])
     func realtimeDidUpdateReceipt(chatID: String?, entries: [[String: String]]?)
     func realtimeDidReceiveError(_ message: String)
 }
@@ -28,6 +31,8 @@ final class RealtimeService {
     private var reconnectTask: Task<Void, Never>?
     private var realtimeConnectionID = UUID()
     private var reconnectAttempt = 0
+    private var lastSequence = 0
+    private var hasConnectedBefore = false
     private var shouldRun = false
     private(set) var realtimeError: String?
 
@@ -45,6 +50,7 @@ final class RealtimeService {
         reconnectTask = nil
         closeConnection()
         reconnectAttempt = 0
+        lastSequence = 0
     }
 
     // MARK: - Private
@@ -140,8 +146,11 @@ final class RealtimeService {
         case "ready":
             reconnectAttempt = 0
             realtimeError = nil
+            lastSequence = 0
+            let requiresResync = hasConnectedBefore
+            hasConnectedBefore = true
             await sendSubscriptionsAllChats()
-            eventHandler?.realtimeDidConnect()
+            eventHandler?.realtimeDidConnect(requiresResync: requiresResync)
         case "subscriptions.updated":
             break
         case "error":
@@ -149,24 +158,44 @@ final class RealtimeService {
                 eventHandler?.realtimeDidReceiveError("Realtime error: \(message)")
             }
         case "chat.upserted":
+            trackSequence(in: envelope)
             // The event payload carries the hydrated chat summary; apply it
             // directly rather than refetching the chat list.
             let chat = (try? JSONDecoder.beeper.decode(ChatEntriesPayload.self, from: data))?.entries?.first
             eventHandler?.realtimeDidUpsertChat(chatID: envelope.chatID, chat: chat)
         case "chat.deleted":
+            trackSequence(in: envelope)
             eventHandler?.realtimeDidDeleteChat(chatID: envelope.chatID)
         case "message.upserted":
+            trackSequence(in: envelope)
             // The event payload already contains the hydrated message(s); apply
             // them directly rather than refetching the chat's history.
             let messages = (try? JSONDecoder.beeper.decode(MessageEntriesPayload.self, from: data))?.entries ?? []
-            eventHandler?.realtimeDidUpsertMessages(chatID: envelope.chatID, messages: messages)
+            if messages.isEmpty, !(envelope.ids ?? []).isEmpty {
+                eventHandler?.realtimeNeedsResync()
+            } else {
+                eventHandler?.realtimeDidUpsertMessages(chatID: envelope.chatID, messages: messages)
+            }
         case "message.deleted":
-            eventHandler?.realtimeDidDeleteMessage(chatID: envelope.chatID)
+            trackSequence(in: envelope)
+            eventHandler?.realtimeDidDeleteMessages(chatID: envelope.chatID, messageIDs: envelope.ids ?? [])
         case "receipt.updated":
+            trackSequence(in: envelope)
             eventHandler?.realtimeDidUpdateReceipt(chatID: envelope.chatID, entries: envelope.entries)
         default:
             break
         }
+    }
+
+    private func trackSequence(in envelope: WebSocketEnvelope) {
+        guard let sequence = envelope.seq else {
+            eventHandler?.realtimeNeedsResync()
+            return
+        }
+        if sequence != lastSequence + 1 {
+            eventHandler?.realtimeNeedsResync()
+        }
+        lastSequence = sequence
     }
 
     private func sendSubscriptionsAllChats() async {
@@ -224,9 +253,10 @@ private struct WebSocketEnvelope: Decodable {
     let message: String?
     let ids: [String]?
     let entries: [[String: String]]?
+    let seq: Int?
 
     enum CodingKeys: String, CodingKey {
-        case type, requestID, chatID, message, ids, entries
+        case type, requestID, chatID, message, ids, entries, seq
     }
 
     init(from decoder: Decoder) throws {
@@ -236,6 +266,7 @@ private struct WebSocketEnvelope: Decodable {
         chatID = try? container.decodeIfPresent(String.self, forKey: .chatID)
         message = try? container.decodeIfPresent(String.self, forKey: .message)
         ids = try? container.decodeIfPresent([String].self, forKey: .ids)
+        seq = try? container.decodeIfPresent(Int.self, forKey: .seq)
         // entries may contain non-string values (bools, nulls) in message events;
         // only receipt events use this field, so fall back to nil on type mismatch.
         entries = try? container.decodeIfPresent([[String: String]].self, forKey: .entries)

@@ -1,10 +1,16 @@
 import Foundation
 
 extension APIClient {
-    static func listChats(inbox: String? = nil, cursor: String? = nil, direction: String? = nil) async throws -> ListChatsOutput {
+    static func listChats(
+        inbox: String? = nil,
+        accountIDs: [String] = [],
+        cursor: String? = nil,
+        direction: String? = nil
+    ) async throws -> ListChatsOutput {
         var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats"), resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = []
         if let inbox { queryItems.append(URLQueryItem(name: "inbox", value: inbox)) }
+        queryItems.append(contentsOf: accountIDs.map { URLQueryItem(name: "accountIDs", value: $0) })
         if let cursor { queryItems.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let direction { queryItems.append(URLQueryItem(name: "direction", value: direction)) }
         components.queryItems = queryItems.isEmpty ? nil : queryItems
@@ -16,11 +22,18 @@ extension APIClient {
 
 
 
-    static func searchChats(query: String? = nil, inbox: String? = nil, cursor: String? = nil, direction: String? = nil) async throws -> SearchChatsOutput {
+    static func searchChats(
+        query: String? = nil,
+        inbox: String? = nil,
+        accountIDs: [String] = [],
+        cursor: String? = nil,
+        direction: String? = nil
+    ) async throws -> SearchChatsOutput {
         var components = URLComponents(url: APIConfiguration.baseURL.appending(path: "/v1/chats/search"), resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = []
         if let query { queryItems.append(URLQueryItem(name: "query", value: query)) }
         if let inbox { queryItems.append(URLQueryItem(name: "inbox", value: inbox)) }
+        queryItems.append(contentsOf: accountIDs.map { URLQueryItem(name: "accountIDs", value: $0) })
         if let cursor { queryItems.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let direction { queryItems.append(URLQueryItem(name: "direction", value: direction)) }
         components.queryItems = queryItems.isEmpty ? nil : queryItems
@@ -72,9 +85,9 @@ extension APIClient {
         )
     }
 
-    static func listAccounts() async throws -> [Account] {
-        guard let url = URL(string: "/v1/accounts", relativeTo: APIConfiguration.baseURL) else {
-            throw APIError.invalidURL("/v1/accounts")
+    static func getSession() async throws -> SessionOutput {
+        guard let url = URL(string: "/v1/session", relativeTo: APIConfiguration.baseURL) else {
+            throw APIError.invalidURL("/v1/session")
         }
         return try await get(url: url)
     }

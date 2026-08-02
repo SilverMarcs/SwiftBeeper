@@ -48,10 +48,21 @@ struct RemoveReactionOutput: Decodable {
     let reactionKey: String
 }
 
-struct Account: Decodable, Identifiable, Equatable, Hashable {
+struct Account: Decodable, Identifiable, Equatable {
     let accountID: String
-    let network: String?
+    let user: ChatParticipant
+    let networkID: String
+    let network: String
+    let capabilities: AccountCapabilities
 
     var id: String { accountID }
 }
 
+struct AccountCapabilities: Decodable, Equatable {
+    let unlimitedMessageEdits: Bool
+}
+
+struct SessionOutput: Decodable, Equatable {
+    let user: ChatParticipant
+    let accounts: [Account]
+}

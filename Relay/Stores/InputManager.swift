@@ -178,7 +178,6 @@ final class InputManager {
             if didSave {
                 if let editingChatID {
                     clearDraft(for: editingChatID)
-                    await chatStore.refreshAfterMessageMutation(chatID: editingChatID)
                 }
             } else if
                 let editingChatID,

@@ -26,9 +26,7 @@ struct OutgoingMessageRowView: View {
                         .messageBubbleChrome(isOutgoing: true)
                 }
 
-                if case .sending = message.state, !message.text.isEmpty {
-                    MessageDeliveryStatusView(status: .sending)
-                } else if case .failed(let error) = message.state {
+                if case .failed(let error) = message.state {
                     MessageDeliveryStatusView(
                         status: .failed(
                             error: error,

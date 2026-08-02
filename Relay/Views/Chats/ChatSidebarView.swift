@@ -21,7 +21,10 @@ struct ChatSidebarView: View {
                 chatList
                     .searchable(text: $chatStore.searchQuery, placement: isIPhone ? .automatic : .sidebar, prompt: "Search chats")
                     .searchPresentationToolbarBehavior(.avoidHidingContent)
-                    .task(id: chatStore.searchQuery) {
+                    .task(id: ChatSearchTaskID(
+                        query: chatStore.searchQuery,
+                        filterID: chatStore.selectedFilter.id
+                    )) {
                         if chatStore.searchQuery.isBlank {
                             chatStore.searchResults = nil
                             chatStore.isSearching = false
@@ -125,9 +128,7 @@ struct ChatSidebarView: View {
     }
 
     private var chatList: some View {
-        // `displayedChats` filters (and lowercases for service filters) on every
-        // access; compute it once per body pass instead of re-deriving it for the
-        // ForEach, each row's pagination check, and the animation value.
+        // Compute once for the rows, pagination sentinel, and animation key.
         let displayedChats = chatStore.displayedChats
         let lastChatID = displayedChats.last?.id
         return List(selection: Bindable(chatStore).selectedChatID) {
@@ -185,4 +186,9 @@ struct ChatSidebarView: View {
             }
         }
     }
+}
+
+private struct ChatSearchTaskID: Equatable {
+    let query: String
+    let filterID: String
 }

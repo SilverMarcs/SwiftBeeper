@@ -17,6 +17,8 @@ struct OutgoingMessage: Identifiable, Equatable {
     let createdAt: Date
     var state: OutgoingMessageState
     var uploadProgressByAttachmentID: [PendingAttachment.ID: Double]
+    var pendingMessageIDs: Set<String>
+    var confirmedMessageIDs: Set<String>
 
     init(
         id: UUID = UUID(),
@@ -34,6 +36,8 @@ struct OutgoingMessage: Identifiable, Equatable {
         self.createdAt = createdAt
         self.state = .sending
         self.uploadProgressByAttachmentID = [:]
+        self.pendingMessageIDs = []
+        self.confirmedMessageIDs = []
     }
 
     var timelineKey: String { "outgoing-\(id.uuidString)" }
@@ -46,6 +50,10 @@ struct OutgoingMessage: Identifiable, Equatable {
         return id
     }
 
+    var expectedConfirmationCount: Int {
+        max(attachments.count, 1)
+    }
+
     /// Whether a canonical timeline message is the server-confirmed form of this
     /// optimistic row. This check is active from the moment the row is created,
     /// so a fast WebSocket event cannot briefly render alongside it.
@@ -55,6 +63,11 @@ struct OutgoingMessage: Identifiable, Equatable {
               message.isSender == true,
               message.timestamp >= createdAt.addingTimeInterval(-60)
         else { return false }
+
+        if let transactionID = message.transactionID,
+           pendingMessageIDs.contains(transactionID) {
+            return true
+        }
 
         if attachments.isEmpty {
             return message.text?.trimmed == text

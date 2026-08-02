@@ -69,6 +69,7 @@ struct Chat: Identifiable, Decodable, Equatable {
     var isPinned: Bool?
     var isArchived: Bool?
     var isLowPriority: Bool?
+    var isMarkedUnread: Bool? = nil
     var accountID: String?
     var lastActivity: Date?
     var lastReadMessageSortKey: String?
@@ -92,10 +93,6 @@ struct Chat: Identifiable, Decodable, Equatable {
     var cannotMessage: Bool {
         guard isSingleChat else { return false }
         return otherParticipant?.cannotMessage == true
-    }
-
-    var allowsUnlimitedMessageEdits: Bool {
-        accountID?.localizedStandardContains("telegram") == true
     }
 
     func participant(with id: String) -> ChatParticipant? {
@@ -128,6 +125,7 @@ struct Chat: Identifiable, Decodable, Equatable {
         result.isPinned = detail.isPinned ?? isPinned
         result.isArchived = detail.isArchived ?? isArchived
         result.isLowPriority = detail.isLowPriority ?? isLowPriority
+        result.isMarkedUnread = detail.isMarkedUnread ?? isMarkedUnread
         result.accountID = detail.accountID ?? accountID
         result.lastActivity = detail.lastActivity ?? lastActivity
         result.lastReadMessageSortKey = detail.lastReadMessageSortKey ?? lastReadMessageSortKey

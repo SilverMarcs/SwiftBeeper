@@ -3,7 +3,6 @@ import SwiftUI
 struct MessageDeliveryStatusView: View {
     enum Status {
         case read
-        case sending
         case failed(error: String, retry: () -> Void)
     }
 
@@ -14,9 +13,6 @@ struct MessageDeliveryStatusView: View {
             switch status {
             case .read:
                 Text("Read")
-                    .foregroundStyle(.secondary)
-            case .sending:
-                Text("Sending…")
                     .foregroundStyle(.secondary)
             case .failed(let error, let retry):
                 Button("Not Delivered — Retry", action: retry)

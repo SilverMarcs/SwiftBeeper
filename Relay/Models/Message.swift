@@ -63,6 +63,9 @@ struct Message: Identifiable, Decodable, Equatable {
     let isUnread: Bool?
     let reactions: [Reaction]?
     let linkedMessageID: String?
+    /// Local transaction identifier attached to hydrated realtime events.
+    /// REST history may omit it.
+    let transactionID: String?
 
     var timelineKey: String { sortKey }
 
@@ -72,11 +75,7 @@ struct Message: Identifiable, Decodable, Equatable {
     var isReaction: Bool { type == .reaction }
 
     var isMembershipEvent: Bool {
-        if type == .memberJoin || type == .memberInvite {
-            return true
-        }
-        guard let loweredText = text?.lowercased() else { return false }
-        return loweredText.contains("joined the chat") || loweredText.contains("was invited to the chat")
+        type == .memberJoin || type == .memberInvite
     }
 
     var senderDisplayName: String {
@@ -204,7 +203,8 @@ struct Message: Identifiable, Decodable, Equatable {
             attachments: mergedAttachments,
             isUnread: detail.isUnread ?? isUnread,
             reactions: mergedReactions,
-            linkedMessageID: detail.linkedMessageID ?? linkedMessageID
+            linkedMessageID: detail.linkedMessageID ?? linkedMessageID,
+            transactionID: detail.transactionID ?? transactionID
         )
     }
 }

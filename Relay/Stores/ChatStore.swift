@@ -52,6 +52,11 @@ enum ChatFilter: Hashable, Equatable, Identifiable {
         }
     }
 
+    var accountIDs: [String] {
+        guard case .service(let serviceID, _) = self else { return [] }
+        return [serviceID]
+    }
+
     static func systemImage(for serviceID: String) -> String {
         let id = serviceID.lowercased()
         if id.contains("whatsapp") { return "phone.bubble.fill" }
@@ -67,35 +72,13 @@ enum ChatFilter: Hashable, Equatable, Identifiable {
         if id.contains("hungryserv") || id.contains("matrix") { return "circle.grid.hex.fill" }
         return "bubble.left.and.bubble.right"
     }
-
-    static func cleanNetworkName(for serviceID: String) -> String {
-        let clean = serviceID.replacingOccurrences(of: "go", with: "")
-                            .replacingOccurrences(of: "local-", with: "")
-        switch clean.lowercased() {
-        case "whatsapp": return "WhatsApp"
-        case "telegram": return "Telegram"
-        case "signal": return "Signal"
-        case "discord": return "Discord"
-        case "slack": return "Slack"
-        case "linkedin": return "LinkedIn"
-        case "instagram": return "Instagram"
-        case "facebook", "messenger": return "Messenger"
-        case "gmessages": return "Google Messages"
-        case "gvoice": return "Google Voice"
-        case "twitter", "x": return "Twitter/X"
-        case "imessage": return "iMessage"
-        case "hungryserv": return "Beeper (Matrix)"
-        default:
-            return clean.capitalized
-        }
-    }
 }
 
 /// The app's single source of truth: chat list, the open chat's timeline, the
 /// composer, and realtime event handling. The timeline is *event-sourced* — the
 /// backend hydrates each `message.upserted` event with the full message, so we
-/// apply it directly instead of refetching. Only the open chat keeps messages in
-/// memory; the sidebar is kept current by a light, debounced chat-list refresh.
+/// apply it directly instead of refetching. Only reconnects, sequence gaps, and
+/// unhydrated events recover from REST snapshots.
 @MainActor
 @Observable
 final class ChatStore: RealtimeEventHandler {
@@ -124,15 +107,7 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
     private(set) var connectedAccounts: [Account] = []
-
-    /// The logged-in user as they appear across their chats. There is no
-    /// dedicated "me" endpoint — the backend only surfaces the current user as
-    /// the `isSelf` participant inside each chat — so pick the first such
-    /// participant that carries a usable name/avatar, falling back to any.
-    var currentUserProfile: ChatParticipant? {
-        let selves = chats.compactMap { $0.participants?.items.first(where: { $0.isSelf == true }) }
-        return selves.first(where: { ($0.fullName?.isEmpty == false) || ($0.username?.isEmpty == false) }) ?? selves.first
-    }
+    private(set) var currentUserProfile: ChatParticipant?
 
     var isArchiveSelected: Bool {
         if case .inbox(.archive) = selectedFilter {
@@ -142,35 +117,17 @@ final class ChatStore: RealtimeEventHandler {
     }
     
     var availableServiceFilters: [ChatFilter] {
-        if !connectedAccounts.isEmpty {
-            return connectedAccounts.compactMap { account in
-                guard account.accountID != "hungryserv" else { return .service(serviceID: "hungryserv", name: "Beeper (Matrix)") }
-                let name = account.network ?? ChatFilter.cleanNetworkName(for: account.accountID)
-                return .service(serviceID: account.accountID, name: name)
-            }
-        } else {
-            let fallbackServices = [
-                ("whatsapp", "WhatsApp"),
-                ("telegram", "Telegram"),
-                ("facebookgo", "Messenger"),
-                ("instagramgo", "Instagram"),
-                ("signal", "Signal"),
-                ("discordgo", "Discord"),
-                ("slackgo", "Slack"),
-                ("linkedin", "LinkedIn"),
-                ("gmessages", "Google Messages"),
-                ("gvoice", "Google Voice"),
-                ("twitter", "Twitter/X"),
-                ("imessage", "iMessage")
-            ]
-            return fallbackServices.map { .service(serviceID: $0.0, name: $0.1) }
+        var seen: Set<String> = []
+        return connectedAccounts.compactMap { account in
+            guard seen.insert(account.accountID).inserted else { return nil }
+            return .service(serviceID: account.accountID, name: account.network)
         }
     }
     var searchQuery: String = ""
     var searchResults: [Chat]?
     var isSearching = false
     private var chatsCursor: String?
-    private var lastLoadedInboxFilter: InboxFilter?
+    private var lastLoadedFilterID: String?
     private var chatsByID: [String: Chat] = [:]
 
     var selectedChatID: String? {
@@ -266,18 +223,7 @@ final class ChatStore: RealtimeEventHandler {
     // MARK: - Derived chat-list accessors
 
     var displayedChats: [Chat] {
-        let baseChats = searchQuery.isBlank ? chats : (searchResults ?? chats)
-        switch selectedFilter {
-        case .inbox:
-            return baseChats
-        case .service(let serviceID, _):
-            return baseChats.filter { chat in
-                guard let chatAccountID = chat.accountID else { return false }
-                let target = serviceID.lowercased()
-                let actual = chatAccountID.lowercased()
-                return actual == target || actual.contains(target) || target.contains(actual)
-            }
-        }
+        searchQuery.isBlank ? chats : (searchResults ?? chats)
     }
 
     var selectedChat: Chat? {
@@ -345,16 +291,18 @@ final class ChatStore: RealtimeEventHandler {
         }
 
         await loadChats()
-        await loadConnectedAccounts()
+        await loadSession()
         realtimeService.start()
     }
 
-    func loadConnectedAccounts() async {
+    func loadSession() async {
         guard !APIClient.accessToken.isEmpty else { return }
         do {
-            connectedAccounts = try await APIClient.listAccounts()
+            let session = try await APIClient.getSession()
+            currentUserProfile = session.user
+            connectedAccounts = session.accounts
         } catch {
-            // Non-critical; the service-filter list falls back to defaults.
+            // Non-critical; chat and realtime loading remain usable.
         }
     }
 
@@ -377,6 +325,8 @@ final class ChatStore: RealtimeEventHandler {
 
     func clearState() {
         restoreListState(.empty)
+        connectedAccounts = []
+        currentUserProfile = nil
         searchResults = nil
         searchQuery = ""
         isSearching = false
@@ -411,14 +361,19 @@ final class ChatStore: RealtimeEventHandler {
         }
 
         let snapshot = captureListState()
-        let shouldPreserveExistingChats = lastLoadedInboxFilter == selectedInboxFilter
+        let requestedFilter = selectedFilter
+        let shouldPreserveExistingChats = lastLoadedFilterID == requestedFilter.id
         let tokenAtStart = APIClient.accessToken
 
         isLoadingChats = true
         defer { isLoadingChats = false }
 
         do {
-            let response = try await APIClient.listChats(inbox: selectedInboxFilter.rawValue)
+            let response = try await APIClient.listChats(
+                inbox: selectedInboxFilter.rawValue,
+                accountIDs: requestedFilter.accountIDs
+            )
+            guard selectedFilter.id == requestedFilter.id else { return }
             let refreshedChats = response.items
             let refreshedCursor = response.oldestCursor
             let refreshedHasMoreChats = response.hasMore ?? false
@@ -432,7 +387,7 @@ final class ChatStore: RealtimeEventHandler {
             hasMoreChats = refreshedHasMoreChats
             chatsError = nil
             chatsErrorIsAuth = false
-            lastLoadedInboxFilter = selectedInboxFilter
+            lastLoadedFilterID = requestedFilter.id
 
             // macOS/iPad auto-select the first chat (and on launch / filter
             // change); iPhone navigation is manual, so leave it unselected.
@@ -484,13 +439,16 @@ final class ChatStore: RealtimeEventHandler {
         defer { isLoadingMoreChats = false }
 
         do {
+            let requestedFilter = selectedFilter
             let existingIDs = Set(chats.map(\.id))
 
             let response = try await APIClient.listChats(
                 inbox: selectedInboxFilter.rawValue,
+                accountIDs: requestedFilter.accountIDs,
                 cursor: cursor,
                 direction: "before"
             )
+            guard selectedFilter.id == requestedFilter.id else { return }
             let newChats = response.items.filter { !existingIDs.contains($0.id) }
             setChats(chats + newChats)
             chatsCursor = response.oldestCursor
@@ -514,16 +472,14 @@ final class ChatStore: RealtimeEventHandler {
         defer { isSearching = false }
 
         do {
+            let requestedFilter = selectedFilter
             let response = try await APIClient.searchChats(
                 query: trimmed,
-                inbox: selectedInboxFilter.rawValue
+                inbox: selectedInboxFilter.rawValue,
+                accountIDs: requestedFilter.accountIDs
             )
+            guard selectedFilter.id == requestedFilter.id, searchQuery.trimmed == trimmed else { return }
             searchResults = response.items
-
-            for item in response.items where chatsByID[item.id] == nil {
-                if Task.isCancelled { return }
-                await loadChatDetail(for: item.id)
-            }
         } catch {
             searchResults = []
         }
@@ -607,8 +563,8 @@ final class ChatStore: RealtimeEventHandler {
 
     // MARK: - Message loading (open chat only)
 
-    /// Full-refreshes the open chat's timeline. Used on first appearance, after a
-    /// send/delete, and on reconnect; steady-state updates arrive via realtime.
+    /// Full-refreshes the open chat's timeline on first appearance, reconnect,
+    /// or realtime sequence recovery. Steady-state mutations arrive via events.
     func loadMessages(for chatID: String) async {
         guard !APIClient.accessToken.isEmpty, chatID == selectedChatID else {
             return
@@ -627,11 +583,8 @@ final class ChatStore: RealtimeEventHandler {
                 return
             }
 
-            // 2026-06-05: every write below only fires on real change. Observation
-            // invalidates observers on ANY write (it doesn't compare values), and a
-            // send triggers several overlapping refetches (WS reconcile + post-send
-            // refresh) — unconditional writes re-rendered the whole timeline mid
-            // scroll animation, visibly shifting the scroll position.
+            // Recovery snapshots may equal state already applied from realtime.
+            // Avoid no-op Observation writes that would re-render the timeline.
             if messagesError != nil { messagesError = nil }
             if let readKey = response.lastReadByOtherSortKey, readKey != lastReadByOtherSortKey {
                 lastReadByOtherSortKey = readKey
@@ -639,6 +592,7 @@ final class ChatStore: RealtimeEventHandler {
             let existing = messagesChatID == chatID ? messages : []
             let merged = refreshedMessages(existing: existing, latestPage: response.items)
             if merged != messages { messages = merged }
+            reconcileOutgoingMessages(with: response.items, chatID: chatID)
             if messagesChatID != chatID { messagesChatID = chatID }
             if hasMoreOlderMessages != response.hasMore { hasMoreOlderMessages = response.hasMore }
         } catch {
@@ -688,14 +642,26 @@ final class ChatStore: RealtimeEventHandler {
         if merged != messages { messages = merged }
     }
 
-    // MARK: - Sending / editing
+    /// Assigns each canonical message to at most one optimistic row. Transaction
+    /// IDs are preferred; content matching covers the narrow WS-before-REST race.
+    private func reconcileOutgoingMessages(with incoming: [Message], chatID: String) {
+        guard var outgoing = outgoingMessagesByChatID[chatID], !outgoing.isEmpty else { return }
 
-    /// Reloads the open chat (and the sidebar) after the local user mutates it.
-    func refreshAfterMessageMutation(chatID: String) async {
-        async let chatsRefresh: Void = loadChats()
-        async let messagesRefresh: Void = loadMessages(for: chatID)
-        _ = await (chatsRefresh, messagesRefresh)
+        for message in incoming where message.isSender == true {
+            guard let index = outgoing.firstIndex(where: {
+                !$0.confirmedMessageIDs.contains(message.id) && $0.suppressesConfirmedMessage(message)
+            }) else { continue }
+
+            outgoing[index].confirmedMessageIDs.insert(message.id)
+            if outgoing[index].confirmedMessageIDs.count >= outgoing[index].expectedConfirmationCount {
+                outgoing.remove(at: index)
+            }
+        }
+
+        outgoingMessagesByChatID[chatID] = outgoing.isEmpty ? nil : outgoing
     }
+
+    // MARK: - Sending / editing
 
     /// Adds a message to the outbox synchronously so the timeline can display it
     /// before any upload or remote-server request begins.
@@ -728,6 +694,8 @@ final class ChatStore: RealtimeEventHandler {
         updateOutgoingMessage(messageID) { message in
             message.state = .sending
             message.uploadProgressByAttachmentID = [:]
+            message.pendingMessageIDs = []
+            message.confirmedMessageIDs = []
         }
         startSending(outgoing)
     }
@@ -743,20 +711,23 @@ final class ChatStore: RealtimeEventHandler {
         defer { outgoingSendTasks[outgoing.id] = nil }
         do {
             let firstAttachmentInput = try await uploadAttachment(outgoing.attachments.first, for: outgoing.id)
-            _ = try await APIClient.sendMessage(
+            let firstResponse = try await APIClient.sendMessage(
                 chatID: outgoing.chatID,
                 text: outgoing.text.isEmpty ? nil : outgoing.text,
                 replyToMessageID: outgoing.replyToMessageID,
                 attachment: firstAttachmentInput
             )
+            recordPendingMessageID(firstResponse.pendingMessageID, for: outgoing.id)
 
             for attachment in outgoing.attachments.dropFirst() {
                 let attachmentInput = try await uploadAttachment(attachment, for: outgoing.id)
-                _ = try await APIClient.sendMessage(chatID: outgoing.chatID, text: nil, attachment: attachmentInput)
+                let response = try await APIClient.sendMessage(
+                    chatID: outgoing.chatID,
+                    text: nil,
+                    attachment: attachmentInput
+                )
+                recordPendingMessageID(response.pendingMessageID, for: outgoing.id)
             }
-
-            await refreshAfterMessageMutation(chatID: outgoing.chatID)
-            removeOutgoingMessage(outgoing.id, from: outgoing.chatID)
         } catch {
             guard !isCancellationLikeError(error) else { return }
             updateOutgoingMessage(outgoing.id) { message in
@@ -835,6 +806,13 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
 
+    private func recordPendingMessageID(_ pendingMessageID: String, for messageID: OutgoingMessage.ID) {
+        guard !pendingMessageID.isEmpty else { return }
+        updateOutgoingMessage(messageID) { message in
+            message.pendingMessageIDs.insert(pendingMessageID)
+        }
+    }
+
     private func removeOutgoingMessage(_ messageID: OutgoingMessage.ID, from chatID: String) {
         outgoingMessagesByChatID[chatID]?.removeAll { $0.id == messageID }
         if outgoingMessagesByChatID[chatID]?.isEmpty == true {
@@ -860,7 +838,10 @@ final class ChatStore: RealtimeEventHandler {
 
     func canEdit(_ message: Message, in chat: Chat) -> Bool {
         guard message.isOutgoing(in: chat) else { return false }
-        if chat.allowsUnlimitedMessageEdits { return true }
+        if let accountID = chat.accountID,
+           connectedAccounts.first(where: { $0.accountID == accountID })?.capabilities.unlimitedMessageEdits == true {
+            return true
+        }
         return Date().timeIntervalSince(message.timestamp) <= 15 * 60
     }
 
@@ -929,7 +910,17 @@ final class ChatStore: RealtimeEventHandler {
 
     // MARK: - RealtimeEventHandler
 
-    nonisolated func realtimeDidConnect() {
+    nonisolated func realtimeDidConnect(requiresResync: Bool) {
+        Task { @MainActor in
+            guard requiresResync else { return }
+            scheduleChatsRefresh()
+            if let chatID = selectedChatID {
+                scheduleMessagesRefresh(chatID: chatID)
+            }
+        }
+    }
+
+    nonisolated func realtimeNeedsResync() {
         Task { @MainActor in
             scheduleChatsRefresh()
             if let chatID = selectedChatID {
@@ -960,30 +951,33 @@ final class ChatStore: RealtimeEventHandler {
 
     nonisolated func realtimeDidUpsertMessages(chatID: String?, messages incoming: [Message]) {
         Task { @MainActor in
-            guard let chatID else { scheduleChatsRefresh(); return }
+            guard let chatID else {
+                realtimeNeedsResync()
+                return
+            }
+
+            reconcileOutgoingMessages(with: incoming, chatID: chatID)
 
             if chatID == selectedChatID {
-                // Apply the payload for instant new-message rendering, then reconcile
-                // (debounced) so reactions/edits/deletes — which arrive as separate
-                // events — settle correctly. Both touch only the open chat.
-                //
-                // The sidebar (preview, unread, ordering) is updated by the
-                // `chat.upserted` event that always accompanies a message — now
-                // hydrated with the chat summary — so we no longer refetch the
-                // whole chat list here.
+                // Hydrated events are authoritative. Edits and reactions target
+                // the original message ID, so the normal merge updates in place.
                 applyIncomingMessages(incoming, chatID: chatID)
-                scheduleMessagesRefresh(chatID: chatID)
             } else {
                 await notify(incoming, chatID: chatID)
             }
         }
     }
 
-    nonisolated func realtimeDidDeleteMessage(chatID: String?) {
+    nonisolated func realtimeDidDeleteMessages(chatID: String?, messageIDs: [String]) {
         Task { @MainActor in
-            scheduleChatsRefresh()
-            if let chatID, chatID == selectedChatID {
-                scheduleMessagesRefresh(chatID: chatID)
+            guard let chatID, !messageIDs.isEmpty else {
+                realtimeNeedsResync()
+                return
+            }
+            if chatID == selectedChatID, chatID == messagesChatID {
+                let deletedIDs = Set(messageIDs)
+                let remaining = messages.filter { !deletedIDs.contains($0.id) }
+                if remaining != messages { messages = remaining }
             }
         }
     }
@@ -1021,11 +1015,8 @@ final class ChatStore: RealtimeEventHandler {
     }
 
     /// Applies a hydrated `chat.upserted` summary to the sidebar without a full
-    /// list refetch. Patches the chat in place and re-sorts by recency for the
-    /// common case (an existing chat that still belongs to the open inbox got new
-    /// activity). Falls back to a debounced list refresh only when we lack the
-    /// context to patch locally — a brand-new chat, or one whose inbox membership
-    /// changed (archived/unarchived, low-priority toggled, etc.).
+    /// list refetch. The hydrated summary contains every field needed to decide
+    /// filter membership, patch or remove the row, and restore server ordering.
     private func applyChatUpsert(_ incoming: Chat) {
         // Keep an in-flight search view consistent if it holds this chat.
         if var results = searchResults,
@@ -1034,25 +1025,16 @@ final class ChatStore: RealtimeEventHandler {
             searchResults = results
         }
 
-        let belongs = chatBelongsToCurrentInbox(incoming)
-
-        guard chatsByID[incoming.id] != nil else {
-            // A chat we don't have yet. We lack list context (cursor position,
-            // ordering against unloaded pages), so let the server place it.
-            if belongs { scheduleChatsRefresh() }
-            return
-        }
-
-        guard belongs else {
-            // The chat left the current inbox (archived, marked low-priority,
-            // read, …). Let the server reconcile membership authoritatively.
-            scheduleChatsRefresh()
+        guard chatBelongsToCurrentFilter(incoming) else {
+            removeChatLocally(incoming.id)
             return
         }
 
         var updated = chats
         if let index = updated.firstIndex(where: { $0.id == incoming.id }) {
             updated[index] = updated[index].merging(detail: incoming)
+        } else {
+            updated.append(incoming)
         }
         // The backend orders chats by activity (sorting_timestamp DESC); mirror
         // that so a freshly-active chat moves to the top of the sidebar.
@@ -1060,17 +1042,17 @@ final class ChatStore: RealtimeEventHandler {
         setChats(updated)
     }
 
-    /// Whether a chat belongs to the currently-loaded inbox, mirroring the
-    /// backend's inbox filtering. Used to decide whether a `chat.upserted` can be
-    /// patched locally or needs a server-authoritative refetch. The `unread`
-    /// inbox also keys off marked-unread state, which the client model doesn't
-    /// carry, so we always refetch there to stay correct.
-    private func chatBelongsToCurrentInbox(_ chat: Chat) -> Bool {
+    /// Mirrors server inbox and exact account filtering for hydrated events.
+    private func chatBelongsToCurrentFilter(_ chat: Chat) -> Bool {
+        if case .service(let accountID, _) = selectedFilter,
+           chat.accountID != accountID {
+            return false
+        }
         switch selectedInboxFilter {
         case .primary: return chat.isArchived != true && chat.isLowPriority != true
         case .lowPriority: return chat.isLowPriority == true
         case .archive: return chat.isArchived == true
-        case .unread: return false
+        case .unread: return chat.unreadCount > 0 || chat.isMarkedUnread == true
         }
     }
 
@@ -1090,10 +1072,8 @@ final class ChatStore: RealtimeEventHandler {
     // MARK: - Private storage helpers
 
     private func setChats(_ newChats: [Chat]) {
-        // 2026-06-05: skip identical commits. The sidebar refresh fires several
-        // times around a send; rewriting `chats`/`chatsByID` with equal values
-        // still invalidates every observer (Observation doesn't compare), which
-        // re-rendered the open chat's whole timeline via `selectedChat`.
+        // Skip identical commits: Observation invalidates on any write, even when
+        // a reconnect snapshot is equal to the event-applied sidebar state.
         guard newChats != chats else { return }
         chats = newChats
         chatsByID = Dictionary(newChats.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
@@ -1133,12 +1113,12 @@ final class ChatStore: RealtimeEventHandler {
         var selectedChatID: String?
         var chatsCursor: String?
         var hasMoreChats: Bool
-        var lastLoadedInboxFilter: InboxFilter?
+        var lastLoadedFilterID: String?
         var chatsError: String?
 
         static let empty = ChatListState(
             chats: [], selectedChatID: nil, chatsCursor: nil, hasMoreChats: false,
-            lastLoadedInboxFilter: nil, chatsError: nil
+            lastLoadedFilterID: nil, chatsError: nil
         )
     }
 
@@ -1148,7 +1128,7 @@ final class ChatStore: RealtimeEventHandler {
             selectedChatID: selectedChatID,
             chatsCursor: chatsCursor,
             hasMoreChats: hasMoreChats,
-            lastLoadedInboxFilter: lastLoadedInboxFilter,
+            lastLoadedFilterID: lastLoadedFilterID,
             chatsError: chatsError
         )
     }
@@ -1158,7 +1138,7 @@ final class ChatStore: RealtimeEventHandler {
         selectedChatID = state.selectedChatID
         chatsCursor = state.chatsCursor
         hasMoreChats = state.hasMoreChats
-        lastLoadedInboxFilter = state.lastLoadedInboxFilter
+        lastLoadedFilterID = state.lastLoadedFilterID
         chatsError = state.chatsError
     }
 

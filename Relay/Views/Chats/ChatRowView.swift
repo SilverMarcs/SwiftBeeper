@@ -96,7 +96,8 @@ struct ChatRowView: View {
                 attachments: nil,
                 isUnread: nil,
                 reactions: nil,
-                linkedMessageID: nil
+                linkedMessageID: nil,
+                transactionID: nil
             ),
             isMuted: false,
             type: .single,
@@ -126,7 +127,8 @@ struct ChatRowView: View {
                 attachments: nil,
                 isUnread: nil,
                 reactions: nil,
-                linkedMessageID: nil
+                linkedMessageID: nil,
+                transactionID: nil
             ),
             isMuted: true,
             type: .group,
