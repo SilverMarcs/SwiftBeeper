@@ -117,6 +117,23 @@ final class ChatStore: RealtimeEventHandler {
     }
     
     var availableServiceFilters: [ChatFilter] {
+        guard !connectedAccounts.isEmpty else {
+            return [
+                .service(serviceID: "whatsapp", name: "WhatsApp"),
+                .service(serviceID: "telegram", name: "Telegram"),
+                .service(serviceID: "facebookgo", name: "Messenger"),
+                .service(serviceID: "instagramgo", name: "Instagram"),
+                .service(serviceID: "signal", name: "Signal"),
+                .service(serviceID: "discordgo", name: "Discord"),
+                .service(serviceID: "slackgo", name: "Slack"),
+                .service(serviceID: "linkedin", name: "LinkedIn"),
+                .service(serviceID: "gmessages", name: "Google Messages"),
+                .service(serviceID: "gvoice", name: "Google Voice"),
+                .service(serviceID: "twitter", name: "Twitter/X"),
+                .service(serviceID: "imessage", name: "iMessage")
+            ]
+        }
+
         var seen: Set<String> = []
         return connectedAccounts.compactMap { account in
             guard seen.insert(account.accountID).inserted else { return nil }
