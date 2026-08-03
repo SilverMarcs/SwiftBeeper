@@ -24,6 +24,9 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        #if REMOTE_ONLY
+        .terminateNow
+        #else
         let backend = EasyMatrixBackend.shared
         guard backend.isRunning else { return .terminateNow }
 
@@ -32,6 +35,7 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate {
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+        #endif
     }
     #else
     func application(

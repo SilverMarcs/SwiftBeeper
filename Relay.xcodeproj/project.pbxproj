@@ -10,7 +10,6 @@
 		08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBC2F665F1B00950962 /* SwiftOGG */; };
 		08974BC02F66600000950962 /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBF2F66600000950962 /* SwiftMediaViewer */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
-		08F100000000000000000002 /* EasyMatrix.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08F100000000000000000001 /* EasyMatrix.xcframework */; };
 		A11000000000000000000001 /* RelayNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A11000000000000000000002 /* RelayNotificationService.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -43,9 +42,19 @@
 		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 		08F100000000000000000001 /* EasyMatrix.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EasyMatrix.xcframework; path = Frameworks/EasyMatrix.xcframework; sourceTree = SOURCE_ROOT; };
 		A11000000000000000000002 /* RelayNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RelayNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C33000000000000000000001 /* Active.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Active.xcconfig; sourceTree = "<group>"; };
+		C33000000000000000000002 /* Remote.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Remote.xcconfig; sourceTree = "<group>"; };
+		C33000000000000000000003 /* Embedded.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Embedded.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D44000000000000000000001 /* Exceptions for "Relay" folder in "Relay" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Helpers/build-easymatrix-xcframework.sh,
+			);
+			target = 0865737C2F58F64E0084BD91 /* Relay */;
+		};
 		A11000000000000000000006 /* Exceptions for "RelayNotificationService" folder in "RelayNotificationService" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -58,6 +67,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0865737F2F58F64E0084BD91 /* Relay */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D44000000000000000000001 /* Exceptions for "Relay" folder in "Relay" target */,
+			);
 			path = Relay;
 			sourceTree = "<group>";
 		};
@@ -81,7 +93,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				08F100000000000000000002 /* EasyMatrix.xcframework in Frameworks */,
 				08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */,
 				08974BC02F66600000950962 /* SwiftMediaViewer in Frameworks */,
 				08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */,
@@ -101,6 +112,7 @@
 		086573742F58F64E0084BD91 = {
 			isa = PBXGroup;
 			children = (
+				C33000000000000000000004 /* BuildVariants */,
 				A11000000000000000000008 /* SharedNotifications */,
 				0865737F2F58F64E0084BD91 /* Relay */,
 				A11000000000000000000007 /* RelayNotificationService */,
@@ -127,6 +139,16 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		C33000000000000000000004 /* BuildVariants */ = {
+			isa = PBXGroup;
+			children = (
+				C33000000000000000000001 /* Active.xcconfig */,
+				C33000000000000000000002 /* Remote.xcconfig */,
+				C33000000000000000000003 /* Embedded.xcconfig */,
+			);
+			path = BuildVariants;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -134,10 +156,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "Relay" */;
 			buildPhases = (
+				08E4517A1A2B3C4D5E6F0001 /* Ensure EasyMatrix xcframework */,
 				086573792F58F64E0084BD91 /* Sources */,
 				0865737A2F58F64E0084BD91 /* Frameworks */,
 				0865737B2F58F64E0084BD91 /* Resources */,
-				08E4517A1A2B3C4D5E6F0001 /* Ensure EasyMatrix xcframework */,
 				A11000000000000000000005 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -258,7 +280,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "# The Go backend ships as a prebuilt static-library xcframework. Build it\n# once if missing; regenerate manually after Go changes with:\n#   Relay/Helpers/build-easymatrix-xcframework.sh\nif [ ! -d \"$SRCROOT/Frameworks/EasyMatrix.xcframework\" ]; then\n  \"$SRCROOT/Relay/Helpers/build-easymatrix-xcframework.sh\" all\nfi\n";
+			shellScript = "# Remote builds must not require or generate the Go backend. Embedded\n# builds create it before Swift compiles the bridging header and before link.\nif [ \"${RELAY_REMOTE_ONLY:-NO}\" != \"YES\" ] && [ ! -d \"$SRCROOT/Frameworks/EasyMatrix.xcframework\" ]; then\n  \"$SRCROOT/Relay/Helpers/build-easymatrix-xcframework.sh\" all\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -411,6 +433,7 @@
 		};
 		086573892F58F64F0084BD91 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C33000000000000000000001 /* Active.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -476,6 +499,7 @@
 		};
 		0865738A2F58F64F0084BD91 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C33000000000000000000001 /* Active.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

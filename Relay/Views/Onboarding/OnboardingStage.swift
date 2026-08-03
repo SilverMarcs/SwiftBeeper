@@ -1,7 +1,8 @@
+#if REMOTE_ONLY
 enum OnboardingStage {
     case automatic
-    case serverChoice
     case remoteConnection
     case remoteSetup
     case beeperSignIn
 }
+#endif

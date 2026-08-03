@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+#if REMOTE_ONLY
 @MainActor
 @Observable
 final class ServerSetupModel {
@@ -15,13 +16,7 @@ final class ServerSetupModel {
     func configure(using serverConnection: ServerConnection) {
         guard stage == .automatic else { return }
         remoteURL = serverConnection.remoteURLString
-        if serverConnection.needsInitialSelection {
-            stage = .serverChoice
-        } else if serverConnection.usesEmbeddedServer {
-            stage = .beeperSignIn
-        } else {
-            stage = .remoteConnection
-        }
+        stage = .remoteConnection
     }
 
     func showRemoteConnection() {
@@ -32,33 +27,6 @@ final class ServerSetupModel {
     func showRemoteSetup() {
         errorMessage = nil
         stage = .remoteSetup
-    }
-
-    func showServerChoice() {
-        errorMessage = nil
-        stage = .serverChoice
-    }
-
-    func useEmbeddedServer(
-        serverConnection: ServerConnection,
-        sessionStore: SessionStore,
-        chatStore: ChatStore,
-        notificationService: NotificationService
-    ) async {
-        await run {
-            await notificationService.unregisterRemoteRegistration()
-            await chatStore.updateAccessToken("")
-
-            if serverConnection.needsInitialSelection {
-                await serverConnection.selectEmbeddedServer()
-            } else {
-                _ = try await serverConnection.switchServer(remoteURL: "")
-            }
-
-            sessionStore.switchEndpoint(to: serverConnection.endpoint.identity)
-            await chatStore.updateAccessToken(sessionStore.accessToken)
-            stage = sessionStore.accessToken.isEmpty ? .beeperSignIn : .automatic
-        }
     }
 
     func connectToExistingServer(
@@ -80,7 +48,7 @@ final class ServerSetupModel {
             )
             await notificationService.unregisterRemoteRegistration()
             await chatStore.updateAccessToken("")
-            _ = try await serverConnection.switchServer(remoteURL: remoteURL)
+            _ = try await serverConnection.updateRemoteServer(remoteURL: remoteURL)
             sessionStore.switchEndpoint(
                 to: serverConnection.endpoint.identity,
                 suppliedToken: normalizedKey
@@ -110,7 +78,7 @@ final class ServerSetupModel {
             )
             await notificationService.unregisterRemoteRegistration()
             await chatStore.updateAccessToken("")
-            _ = try await serverConnection.switchServer(
+            _ = try await serverConnection.updateRemoteServer(
                 remoteURL: remoteURL,
                 manageSecret: normalizedSecret
             )
@@ -142,3 +110,4 @@ final class ServerSetupModel {
         isWorking = false
     }
 }
+#endif

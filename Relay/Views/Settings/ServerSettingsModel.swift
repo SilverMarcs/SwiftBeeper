@@ -1,24 +1,21 @@
 import Foundation
 import Observation
 
+#if REMOTE_ONLY
 @MainActor
 @Observable
 final class ServerSettingsModel {
-    var location: ServerLocation = .onDevice
     var remoteURL = ""
     var accessKey = ""
     var errorMessage: String?
     var savedMessage: String?
 
     func configure(using serverConnection: ServerConnection) {
-        location = serverConnection.usesEmbeddedServer ? .onDevice : .remote
         remoteURL = serverConnection.remoteURLString
     }
 
     func hasChanges(using serverConnection: ServerConnection) -> Bool {
-        let selectedRemoteURL = location == .remote
-            ? remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            : ""
+        let selectedRemoteURL = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
         return selectedRemoteURL != serverConnection.remoteURLString
             || !accessKey.isEmpty
     }
@@ -32,13 +29,13 @@ final class ServerSettingsModel {
         errorMessage = nil
         savedMessage = nil
 
-        let targetURL = location == .remote ? remoteURL : ""
+        let targetURL = remoteURL
         let suppliedKey = accessKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let newEndpoint = try? ServerEndpoint.remote(from: targetURL)
         let endpointWillChange = newEndpoint != nil && newEndpoint != serverConnection.endpoint
 
         do {
-            if location == .remote, !suppliedKey.isEmpty {
+            if !suppliedKey.isEmpty {
                 try await serverConnection.validateRemoteAccess(
                     remoteURL: targetURL,
                     accessKey: suppliedKey
@@ -48,7 +45,7 @@ final class ServerSettingsModel {
                 await notificationService.unregisterRemoteRegistration()
             }
 
-            let changed = try await serverConnection.switchServer(remoteURL: targetURL)
+            let changed = try await serverConnection.updateRemoteServer(remoteURL: targetURL)
             if changed {
                 await chatStore.updateAccessToken("")
                 sessionStore.switchEndpoint(
@@ -63,9 +60,7 @@ final class ServerSettingsModel {
             await notificationService.syncRemoteRegistration()
             configure(using: serverConnection)
             accessKey = ""
-            savedMessage = serverConnection.usesEmbeddedServer
-                ? "EasyMatrix is running on this device."
-                : "Connected to \(serverConnection.endpoint.baseURL.host() ?? "the remote server")."
+            savedMessage = "Connected to \(serverConnection.endpoint.baseURL.host() ?? "the remote server")."
         } catch {
             if endpointWillChange {
                 await notificationService.syncRemoteRegistration()
@@ -74,3 +69,4 @@ final class ServerSettingsModel {
         }
     }
 }
+#endif

@@ -16,7 +16,10 @@ struct RelayApp: App {
 
     init() {
         let serverConnection = ServerConnection()
-        let sessionStore = SessionStore(endpointIdentity: serverConnection.endpoint.identity)
+        let sessionIdentity = serverConnection.needsRemoteConfiguration
+            ? "unconfigured"
+            : serverConnection.endpoint.identity
+        let sessionStore = SessionStore(endpointIdentity: sessionIdentity)
         let notificationService = NotificationService()
         let audioPlayerService = AudioPlayerService()
         let chatStore = ChatStore(
@@ -24,7 +27,6 @@ struct RelayApp: App {
             notificationService: notificationService
         )
         notificationService.store = chatStore
-        notificationService.serverConnection = serverConnection
         notificationService.sessionStore = sessionStore
         #if os(macOS)
         AppDelegate.chatStore = chatStore

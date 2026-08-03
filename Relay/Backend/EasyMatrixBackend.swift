@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import OSLog
 
+#if !REMOTE_ONLY
 /// Runs the EasyMatrix Go backend **in-process** on both macOS and iOS.
 ///
 /// The backend ships as `EasyMatrix.xcframework` (a C static library, see
@@ -273,3 +274,4 @@ private extension String {
         return body(copy)
     }
 }
+#endif

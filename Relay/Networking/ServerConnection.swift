@@ -17,7 +17,7 @@ struct ServerEndpoint: Equatable, Sendable {
 
     nonisolated static func remote(from input: String) throws -> ServerEndpoint {
         var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return .embedded }
+        guard !value.isEmpty else { throw ServerConnectionError.invalidURL }
 
         if !value.contains("://") {
             value = "https://\(value)"
@@ -67,129 +67,119 @@ enum ServerConnectionError: LocalizedError {
     }
 }
 
-/// Owns the only client/server choice in the app. Views and stores keep using
-/// the same API surface regardless of whether it is backed by the embedded
-/// runtime or a remote EasyMatrix instance.
+/// Configures the single server runtime selected by the active build variant.
 @MainActor
 @Observable
 final class ServerConnection {
+    #if REMOTE_ONLY
     private static let remoteURLKey = "server.remoteURL"
-    private static let selectionCompletedKey = "server.selectionCompleted"
-    private static let embeddedAccessTokenKey = "beeperAccessToken|embedded"
-    private static let legacyAccessTokenKey = "beeperAccessToken"
     nonisolated private static let manageSecretKeyPrefix = "serverManageSecret|"
 
-    let backend: EasyMatrixBackend
     private let defaults: UserDefaults
     private let keychain: KeychainManager
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "Relay",
         category: "ServerConnection"
     )
+    #else
+    let backend: EasyMatrixBackend
+    #endif
 
     private(set) var endpoint: ServerEndpoint
-    private(set) var isSwitching = false
-    private(set) var needsInitialSelection: Bool
+    #if REMOTE_ONLY
+    private(set) var isUpdatingRemoteServer = false
+    #endif
     private var activeManageSecret: String
 
     convenience init() {
+        #if REMOTE_ONLY
         self.init(
-            backend: .shared,
             defaults: .standard,
             keychain: .shared
         )
+        #else
+        self.init(backend: .shared)
+        #endif
     }
 
+    #if REMOTE_ONLY
     init(
-        backend: EasyMatrixBackend,
         defaults: UserDefaults,
         keychain: KeychainManager
     ) {
-        self.backend = backend
         self.defaults = defaults
         self.keychain = keychain
 
         let savedURL = defaults.string(forKey: Self.remoteURLKey) ?? ""
-        let initialEndpoint = (try? ServerEndpoint.remote(from: savedURL)) ?? .embedded
-        let hasExistingEmbeddedSession =
-            keychain.load(key: Self.embeddedAccessTokenKey) != nil
-            || keychain.load(key: Self.legacyAccessTokenKey) != nil
-        needsInitialSelection =
-            !defaults.bool(forKey: Self.selectionCompletedKey)
-            && savedURL.isEmpty
-            && !hasExistingEmbeddedSession
-        let initialManageSecret = initialEndpoint.isEmbedded
-            ? backend.manageSecret
-            : keychain.load(key: Self.manageSecretKey(for: initialEndpoint)) ?? ""
+        let savedEndpoint = try? ServerEndpoint.remote(from: savedURL)
+        let initialEndpoint = savedEndpoint ?? .embedded
+        let initialManageSecret = savedEndpoint.flatMap {
+            keychain.load(key: Self.manageSecretKey(for: $0))
+        } ?? ""
         endpoint = initialEndpoint
         activeManageSecret = initialManageSecret
-        APIConfiguration.configure(endpoint: initialEndpoint, manageSecret: initialManageSecret)
+        APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
     }
+    #else
+    init(backend: EasyMatrixBackend) {
+        self.backend = backend
+        endpoint = .embedded
+        activeManageSecret = backend.manageSecret
+        APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
+    }
+    #endif
 
+    #if REMOTE_ONLY
     var remoteURLString: String {
         endpoint.isEmbedded ? "" : endpoint.baseURL.absoluteString
     }
+    #endif
 
-    var usesEmbeddedServer: Bool {
+    var needsRemoteConfiguration: Bool {
+        #if REMOTE_ONLY
         endpoint.isEmbedded
-    }
-
-    var hasRemoteManageSecret: Bool {
-        !usesEmbeddedServer && !activeManageSecret.isEmpty
-    }
-
-    var isReady: Bool {
-        needsInitialSelection || !usesEmbeddedServer || backend.state == .ready
+        #else
+        false
+        #endif
     }
 
     var hasEverBeenReady: Bool {
-        needsInitialSelection || !usesEmbeddedServer || backend.hasEverBeenReady
+        #if REMOTE_ONLY
+        true
+        #else
+        backend.hasEverBeenReady
+        #endif
     }
 
     var failureMessage: String? {
-        guard usesEmbeddedServer, case .crashed(let message) = backend.state else {
+        #if REMOTE_ONLY
+        nil
+        #else
+        guard case .crashed(let message) = backend.state else {
             return nil
         }
         return message
+        #endif
     }
 
     func prepare() async {
         APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
-        guard !needsInitialSelection else { return }
-        guard usesEmbeddedServer else {
-            // The remote path intentionally does not initialize or probe the
-            // embedded Go/Matrix runtime.
-            if backend.isRunning {
-                await backend.stop()
-            }
-            return
-        }
+        #if !REMOTE_ONLY
         await backend.start()
+        #endif
     }
 
-    func selectEmbeddedServer() async {
-        defaults.set(true, forKey: Self.selectionCompletedKey)
-        needsInitialSelection = false
-        endpoint = .embedded
-        activeManageSecret = backend.manageSecret
-        APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
-        defaults.removeObject(forKey: Self.remoteURLKey)
-        await backend.start()
-    }
-
-    /// Validates and persists a new endpoint, then transitions runtimes without
-    /// requiring the rest of the app to know which transport is in use.
+    #if REMOTE_ONLY
+    /// Validates and persists a remote endpoint for the remote-only edition.
     @discardableResult
-    func switchServer(
+    func updateRemoteServer(
         remoteURL input: String,
         manageSecret suppliedManageSecret: String? = nil
     ) async throws -> Bool {
         let newEndpoint = try ServerEndpoint.remote(from: input)
         let endpointChanged = newEndpoint != endpoint
         let newManageSecret: String
-        if newEndpoint.isEmbedded {
-            newManageSecret = backend.manageSecret
-        } else if let suppliedManageSecret, !suppliedManageSecret.isEmpty {
+        if let suppliedManageSecret, !suppliedManageSecret.isEmpty {
             newManageSecret = suppliedManageSecret
         } else if endpointChanged {
             newManageSecret = keychain.load(key: Self.manageSecretKey(for: newEndpoint)) ?? ""
@@ -201,65 +191,44 @@ final class ServerConnection {
             return false
         }
 
-        isSwitching = true
-        defer { isSwitching = false }
+        isUpdatingRemoteServer = true
+        defer { isUpdatingRemoteServer = false }
 
-        if endpointChanged && !newEndpoint.isEmbedded {
+        if endpointChanged {
             try await validate(newEndpoint)
-        }
-
-        if endpointChanged && backend.isRunning {
-            await backend.stop()
         }
 
         endpoint = newEndpoint
         activeManageSecret = newManageSecret
-        needsInitialSelection = false
-        defaults.set(true, forKey: Self.selectionCompletedKey)
         APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
-
-        if endpoint.isEmbedded {
-            defaults.removeObject(forKey: Self.remoteURLKey)
-            if endpointChanged {
-                await backend.start()
-            }
-        } else {
-            defaults.set(endpoint.baseURL.absoluteString, forKey: Self.remoteURLKey)
-            if let suppliedManageSecret, !suppliedManageSecret.isEmpty {
-                keychain.save(
-                    key: Self.manageSecretKey(for: endpoint),
-                    data: suppliedManageSecret
-                )
-            }
+        defaults.set(endpoint.baseURL.absoluteString, forKey: Self.remoteURLKey)
+        if let suppliedManageSecret, !suppliedManageSecret.isEmpty {
+            keychain.save(
+                key: Self.manageSecretKey(for: endpoint),
+                data: suppliedManageSecret
+            )
         }
 
-        logger.info("Using \(self.endpoint.isEmbedded ? "embedded" : "remote", privacy: .public) server")
+        logger.info("Using remote server \(self.endpoint.baseURL.absoluteString, privacy: .public)")
         return true
     }
-
-    func clearRemoteManageSecret() {
-        guard !usesEmbeddedServer else { return }
-        keychain.delete(key: Self.manageSecretKey(for: endpoint))
-        activeManageSecret = ""
-        APIConfiguration.configure(endpoint: endpoint, manageSecret: "")
-    }
+    #endif
 
     func retry() async {
-        if usesEmbeddedServer {
-            await backend.start()
-        }
+        #if !REMOTE_ONLY
+        await backend.start()
+        #endif
     }
 
     func recoverIfNeeded() async {
-        guard usesEmbeddedServer else { return }
+        #if !REMOTE_ONLY
         await backend.recoverIfNeeded()
+        #endif
     }
 
+    #if REMOTE_ONLY
     func validateRemoteAccess(remoteURL input: String, accessKey: String) async throws {
         let endpoint = try ServerEndpoint.remote(from: input)
-        guard !endpoint.isEmbedded else {
-            throw ServerConnectionError.invalidURL
-        }
         try await validate(endpoint)
 
         let url = endpoint.baseURL.appending(path: "/v1/accounts")
@@ -275,9 +244,6 @@ final class ServerConnection {
 
     func validateRemoteManagement(remoteURL input: String, setupSecret: String) async throws {
         let endpoint = try ServerEndpoint.remote(from: input)
-        guard !endpoint.isEmbedded else {
-            throw ServerConnectionError.invalidURL
-        }
         try await validate(endpoint)
 
         let url = endpoint.baseURL.appending(path: "/manage/state")
@@ -312,4 +278,5 @@ final class ServerConnection {
     nonisolated private static func manageSecretKey(for endpoint: ServerEndpoint) -> String {
         "\(manageSecretKeyPrefix)\(endpoint.identity)"
     }
+    #endif
 }

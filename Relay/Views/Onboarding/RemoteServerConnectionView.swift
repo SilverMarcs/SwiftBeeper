@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if REMOTE_ONLY
 struct RemoteServerConnectionView: View {
     @Environment(ServerConnection.self) private var serverConnection
     @Environment(SessionStore.self) private var sessionStore
@@ -73,16 +74,6 @@ struct RemoteServerConnectionView: View {
                     }
                 }
 
-                Button("Run on This Device", systemImage: "laptopcomputer") {
-                    Task {
-                        await model.useEmbeddedServer(
-                            serverConnection: serverConnection,
-                            sessionStore: sessionStore,
-                            chatStore: chatStore,
-                            notificationService: notificationService
-                        )
-                    }
-                }
             }
 
             if model.isWorking {
@@ -102,3 +93,4 @@ struct RemoteServerConnectionView: View {
         .disabled(model.isWorking)
     }
 }
+#endif

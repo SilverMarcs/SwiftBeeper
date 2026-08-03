@@ -5,4 +5,6 @@
 //  in-process on both macOS and iOS — see EasyMatrixServer.swift.
 //
 
+#if !defined(REMOTE_ONLY)
 #import "libeasymatrix.h"
+#endif

@@ -17,7 +17,6 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     private(set) var isAuthorized = false
     private(set) var prefersRemoteNotifications = false
     weak var store: ChatStore?
-    weak var serverConnection: ServerConnection?
     weak var sessionStore: SessionStore?
     #if os(iOS)
     private var deviceToken: String?
@@ -45,9 +44,11 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             isAuthorized = granted
             logger.info("Notification authorization: \(granted, privacy: .public)")
             #if os(iOS)
+            #if REMOTE_ONLY
             if granted {
                 registerForRemoteNotifications()
             }
+            #endif
             #else
             // macOS notifications are generated locally from the live event
             // stream. Ensure an APNs token from an older build is invalidated.
@@ -75,10 +76,9 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     #endif
 
     func syncRemoteRegistration() async {
-        #if os(iOS)
+        #if os(iOS) && REMOTE_ONLY
         guard isAuthorized,
               let deviceToken,
-              serverConnection?.usesEmbeddedServer == false,
               sessionStore?.accessToken.isEmpty == false else {
             prefersRemoteNotifications = false
             return
@@ -98,8 +98,8 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     func unregisterRemoteRegistration() async {
         #if os(iOS)
+        #if REMOTE_ONLY
         guard let deviceToken,
-              serverConnection?.usesEmbeddedServer == false,
               sessionStore?.accessToken.isEmpty == false else {
             prefersRemoteNotifications = false
             return
@@ -111,6 +111,9 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             logger.error("Could not unregister push device: \(error.localizedDescription, privacy: .public)")
         }
         prefersRemoteNotifications = false
+        #else
+        prefersRemoteNotifications = false
+        #endif
         #else
         NSApplication.shared.unregisterForRemoteNotifications()
         prefersRemoteNotifications = false

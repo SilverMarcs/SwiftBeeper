@@ -1,0 +1,4 @@
+// Builds the client without generating, importing, or linking the Go backend.
+RELAY_REMOTE_ONLY = YES
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) REMOTE_ONLY
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) REMOTE_ONLY=1

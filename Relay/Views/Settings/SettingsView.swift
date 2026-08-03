@@ -13,7 +13,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                #if REMOTE_ONLY
                 ServerSettingsSection()
+                #endif
 
                 Section {
                     if sessionStore.accessToken.isEmpty {
