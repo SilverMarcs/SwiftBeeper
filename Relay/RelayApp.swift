@@ -26,7 +26,10 @@ struct RelayApp: App {
         notificationService.store = chatStore
         notificationService.serverConnection = serverConnection
         notificationService.sessionStore = sessionStore
-        #if os(iOS)
+        #if os(macOS)
+        AppDelegate.chatStore = chatStore
+        chatStore.handleAppActivation(NSApplication.shared.isActive)
+        #else
         AppDelegate.notificationService = notificationService
         #endif
         _serverConnection = State(initialValue: serverConnection)

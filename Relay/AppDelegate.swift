@@ -8,11 +8,21 @@ typealias PlatformApplicationDelegate = UIApplicationDelegate
 
 @MainActor
 final class AppDelegate: NSObject, PlatformApplicationDelegate {
-    #if os(iOS)
+    #if os(macOS)
+    static weak var chatStore: ChatStore?
+    #else
     static weak var notificationService: NotificationService?
     #endif
 
     #if os(macOS)
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Self.chatStore?.handleAppActivation(true)
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        Self.chatStore?.handleAppActivation(false)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let backend = EasyMatrixBackend.shared
         guard backend.isRunning else { return .terminateNow }

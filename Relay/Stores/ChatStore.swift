@@ -340,6 +340,10 @@ final class ChatStore: RealtimeEventHandler {
         realtimeService.stop()
     }
 
+    func handleAppActivation(_ isActive: Bool) {
+        realtimeService.setAppIsActive(isActive)
+    }
+
     func clearState() {
         restoreListState(.empty)
         connectedAccounts = []
