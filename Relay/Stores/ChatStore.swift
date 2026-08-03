@@ -670,7 +670,7 @@ final class ChatStore: RealtimeEventHandler {
 
         for message in incoming where message.isSender == true {
             guard let index = outgoing.firstIndex(where: {
-                !$0.confirmedMessageIDs.contains(message.id) && $0.suppressesConfirmedMessage(message)
+                !$0.confirmedMessageIDs.contains(message.id) && $0.matchesConfirmedMessage(message)
             }) else { continue }
 
             outgoing[index].confirmedMessageIDs.insert(message.id)
@@ -764,10 +764,12 @@ final class ChatStore: RealtimeEventHandler {
         guard let attachment else { return nil }
 
         updateUploadProgress(0, attachmentID: attachment.id, messageID: outgoingMessageID)
+        let uploadAttachment = await ImageAttachmentPreparer.prepare(attachment)
+        recordUploadMetadata(uploadAttachment, originalAttachmentID: attachment.id, messageID: outgoingMessageID)
         let uploadResult = try await APIClient.uploadAsset(
-            fileData: attachment.fileData,
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
+            fileData: uploadAttachment.fileData,
+            fileName: uploadAttachment.fileName,
+            mimeType: uploadAttachment.mimeType,
             onProgress: { [weak self] progress in
                 self?.updateUploadProgress(progress, attachmentID: attachment.id, messageID: outgoingMessageID)
             }
@@ -786,8 +788,8 @@ final class ChatStore: RealtimeEventHandler {
 
         return MessageAttachmentInput(
             uploadID: uploadResult.uploadID,
-            mimeType: attachment.mimeType,
-            fileName: attachment.fileName,
+            mimeType: uploadAttachment.mimeType,
+            fileName: uploadAttachment.fileName,
             size: size,
             duration: uploadResult.duration,
             type: nil
@@ -831,6 +833,17 @@ final class ChatStore: RealtimeEventHandler {
         guard !pendingMessageID.isEmpty else { return }
         updateOutgoingMessage(messageID) { message in
             message.pendingMessageIDs.insert(pendingMessageID)
+        }
+    }
+
+    private func recordUploadMetadata(
+        _ attachment: PendingAttachment,
+        originalAttachmentID: PendingAttachment.ID,
+        messageID: OutgoingMessage.ID
+    ) {
+        updateOutgoingMessage(messageID) { message in
+            message.uploadFileNameByAttachmentID[originalAttachmentID] = attachment.fileName
+            message.uploadMimeTypeByAttachmentID[originalAttachmentID] = attachment.mimeType
         }
     }
 

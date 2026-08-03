@@ -17,6 +17,8 @@ struct OutgoingMessage: Identifiable, Equatable {
     let createdAt: Date
     var state: OutgoingMessageState
     var uploadProgressByAttachmentID: [PendingAttachment.ID: Double]
+    var uploadFileNameByAttachmentID: [PendingAttachment.ID: String]
+    var uploadMimeTypeByAttachmentID: [PendingAttachment.ID: String]
     var pendingMessageIDs: Set<String>
     var confirmedMessageIDs: Set<String>
 
@@ -36,6 +38,8 @@ struct OutgoingMessage: Identifiable, Equatable {
         self.createdAt = createdAt
         self.state = .sending
         self.uploadProgressByAttachmentID = [:]
+        self.uploadFileNameByAttachmentID = [:]
+        self.uploadMimeTypeByAttachmentID = [:]
         self.pendingMessageIDs = []
         self.confirmedMessageIDs = []
     }
@@ -58,10 +62,18 @@ struct OutgoingMessage: Identifiable, Equatable {
     /// optimistic row. This check is active from the moment the row is created,
     /// so a fast WebSocket event cannot briefly render alongside it.
     func suppressesConfirmedMessage(_ message: Message) -> Bool {
-        guard case .sending = state,
-              message.chatID == chatID,
+        guard case .sending = state else { return false }
+        return matchesConfirmedMessage(message)
+    }
+
+    /// Whether a canonical message is the server-confirmed form of this row.
+    /// Matching remains active after a transport failure because the server may
+    /// have committed the send before its acknowledgement was lost.
+    func matchesConfirmedMessage(_ message: Message) -> Bool {
+        guard message.chatID == chatID,
               message.isSender == true,
-              message.timestamp >= createdAt.addingTimeInterval(-60)
+              message.timestamp >= createdAt.addingTimeInterval(-60),
+              message.timestamp <= createdAt.addingTimeInterval(60 * 60)
         else { return false }
 
         if let transactionID = message.transactionID,
@@ -76,8 +88,14 @@ struct OutgoingMessage: Identifiable, Equatable {
         guard let confirmedAttachments = message.attachments else { return false }
         return attachments.contains { pending in
             confirmedAttachments.contains { confirmed in
-                guard confirmed.fileName == pending.fileName else { return false }
-                return confirmed.mimeType == nil || confirmed.mimeType == pending.mimeType
+                let uploadFileName = uploadFileNameByAttachmentID[pending.id]
+                guard confirmed.fileName == pending.fileName || confirmed.fileName == uploadFileName else {
+                    return false
+                }
+                let uploadMimeType = uploadMimeTypeByAttachmentID[pending.id]
+                return confirmed.mimeType == nil
+                    || confirmed.mimeType == pending.mimeType
+                    || confirmed.mimeType == uploadMimeType
             }
         }
     }
