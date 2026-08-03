@@ -185,7 +185,18 @@ struct ChatDetailMac: View {
                     // stable, deletions shrink the count — both still skipped.
                     guard newTracker.lastID != oldTracker.lastID else { return }
                     guard newTracker.count >= oldTracker.count else { return }
-                    guard !(oldTracker.lastID?.hasPrefix("outgoing-") == true && newTracker.count == oldTracker.count) else {
+
+                    let confirmedOptimisticMessage = oldTracker.lastID?.hasPrefix("outgoing-") == true
+                        && newTracker.count == oldTracker.count
+                    if confirmedOptimisticMessage {
+                        // The outgoing and canonical rows have different List
+                        // identities. Re-pin after List commits that replacement;
+                        // otherwise AppKit preserves the obsolete row's offset and
+                        // leaves a small scrollable gap below the new row.
+                        Task { @MainActor in
+                            await Task.yield()
+                            scrollToBottom(with: proxy, animated: false)
+                        }
                         return
                     }
 
