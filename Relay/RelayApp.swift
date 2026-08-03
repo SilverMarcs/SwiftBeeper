@@ -33,6 +33,10 @@ struct RelayApp: App {
         chatStore.handleAppActivation(NSApplication.shared.isActive)
         #else
         AppDelegate.notificationService = notificationService
+        PhoneWatchConnectivityService.shared.start(
+            sessionStore: sessionStore,
+            serverConnection: serverConnection
+        )
         #endif
         _serverConnection = State(initialValue: serverConnection)
         _sessionStore = State(initialValue: sessionStore)

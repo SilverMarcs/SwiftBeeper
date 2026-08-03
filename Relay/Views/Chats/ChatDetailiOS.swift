@@ -356,6 +356,8 @@ struct ChatDetailiOS: View {
                     }
                 }
             }
+        } else if chatStore.selectedChatID != nil {
+            OpeningChatView()
         } else {
             ContentUnavailableView(
                 "Pick a Chat",

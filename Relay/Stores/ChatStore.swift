@@ -1111,18 +1111,31 @@ final class ChatStore: RealtimeEventHandler {
         guard newChats != chats else { return }
         chats = newChats
         chatsByID = Dictionary(newChats.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        publishPrimaryInboxToWatch()
     }
 
     private func updateChat(_ chatID: String, _ mutate: (inout Chat) -> Void) {
+        var didUpdateChat = false
         if let index = chats.firstIndex(where: { $0.id == chatID }) {
             mutate(&chats[index])
             chatsByID[chatID] = chats[index]
+            didUpdateChat = true
         }
         if var results = searchResults,
            let searchIndex = results.firstIndex(where: { $0.id == chatID }) {
             mutate(&results[searchIndex])
             searchResults = results
         }
+        if didUpdateChat {
+            publishPrimaryInboxToWatch()
+        }
+    }
+
+    private func publishPrimaryInboxToWatch() {
+        #if os(iOS)
+        guard selectedFilter == .inbox(.primary) else { return }
+        PhoneWatchConnectivityService.shared.publish(chats: chats)
+        #endif
     }
 
     private func mergedChatsPreservingExistingContext(

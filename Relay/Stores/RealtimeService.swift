@@ -138,12 +138,9 @@ final class RealtimeService {
 
     private func ping(_ task: URLSessionWebSocketTask) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let gate = PingContinuationGate(continuation)
             task.sendPing { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
+                gate.resume(with: error)
             }
         }
     }
@@ -277,6 +274,33 @@ final class RealtimeService {
             guard !Task.isCancelled, self.shouldRun else { return }
             self.reconnectTask = nil
             self.connect()
+        }
+    }
+}
+
+/// URLSession has been observed invoking a websocket ping callback more than
+/// once while a connection is being cancelled. Checked continuations must be
+/// resumed exactly once, so this gate atomically discards duplicate callbacks.
+private final class PingContinuationGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    init(_ continuation: CheckedContinuation<Void, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(with error: Error?) {
+        let continuation = lock.withLock {
+            let continuation = self.continuation
+            self.continuation = nil
+            return continuation
+        }
+
+        guard let continuation else { return }
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
         }
     }
 }
