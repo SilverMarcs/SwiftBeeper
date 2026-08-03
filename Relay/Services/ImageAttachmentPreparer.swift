@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// source on the main actor. Images already below the byte limit pass through
 /// unchanged, as do animated images whose frames must be preserved.
 enum ImageAttachmentPreparer {
-    nonisolated static let maximumByteCount = 800 * 1024
+    nonisolated static let maximumByteCount = 500 * 1024
     nonisolated static let initialMaximumPixelSize = 2_048
 
     nonisolated static func prepare(_ attachment: PendingAttachment) async -> PendingAttachment {
