@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WatchMessageListView: View {
     @Environment(WatchChatStore.self) private var store
+    @Environment(WatchNavigationCoordinator.self) private var navigation
     let chatID: String
 
     var body: some View {
@@ -16,6 +17,8 @@ struct WatchMessageListView: View {
                             systemImage: "message",
                             description: Text(store.errorMessage ?? "Refresh with your paired iPhone nearby.")
                         )
+                    } else if store.isLoadingMessages(for: chatID) && store.messages(for: chatID).isEmpty {
+                        ProgressView()
                     } else {
                         ForEach(messages.enumerated(), id: \.element.id) { index, message in
                             WatchMessageRow(message: message)
@@ -70,6 +73,12 @@ struct WatchMessageListView: View {
         }
         .task(id: chatID) {
             await store.refreshMessages(for: chatID)
+        }
+        .onAppear {
+            navigation.show(chatID: chatID)
+        }
+        .onDisappear {
+            navigation.hide(chatID: chatID)
         }
     }
 }

@@ -23,7 +23,6 @@ struct WatchChatListView: View {
                 }
             }
             .navigationTitle("Chats")
-            .toolbarTitleDisplayMode(.)
             .navigationDestination(for: String.self) { chatID in
                 WatchMessageListView(chatID: chatID)
             }

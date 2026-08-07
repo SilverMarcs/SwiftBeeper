@@ -15,9 +15,13 @@ struct WatchChatRow: View {
                     if chat.unreadCount > 0 {
                         Image(systemName: "circle.fill")
                             .font(.footnote)
-                            .foregroundStyle(.tint)
+                            .foregroundStyle(
+                                chat.isMuted == true
+                                    ? AnyShapeStyle(.secondary)
+                                    : AnyShapeStyle(.tint)
+                            )
                             .background(.background, in: .circle)
-                            .accessibilityLabel("Unread")
+                            .accessibilityLabel(chat.isMuted == true ? "Unread, muted" : "Unread")
                     }
                 }
 
@@ -26,16 +30,10 @@ struct WatchChatRow: View {
                         .bold()
                         .lineLimit(1)
 
-                    if let lastActivity = chat.lastActivity {
-                        if Calendar.current.isDateInToday(lastActivity) {
-                            Text(lastActivity, format: .dateTime.hour().minute())
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(lastActivity, format: .dateTime.month(.abbreviated).day())
-                                .font(.caption2)
+                    if let lastActivityText = chat.lastActivityText {
+                        Text(lastActivityText)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
-                        }
                     }
                 }
             }

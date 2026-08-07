@@ -7,6 +7,7 @@ final class WatchNavigationCoordinator {
     static let shared = WatchNavigationCoordinator()
 
     private(set) var pendingChatID: String?
+    private(set) var visibleChatID: String?
 
     private init() {}
 
@@ -18,5 +19,14 @@ final class WatchNavigationCoordinator {
     func takePendingChatID() -> String? {
         defer { pendingChatID = nil }
         return pendingChatID
+    }
+
+    func show(chatID: String) {
+        visibleChatID = chatID
+    }
+
+    func hide(chatID: String) {
+        guard visibleChatID == chatID else { return }
+        visibleChatID = nil
     }
 }

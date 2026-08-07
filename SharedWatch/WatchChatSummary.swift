@@ -7,6 +7,24 @@ struct WatchChatSummary: Codable, Hashable, Identifiable, Sendable {
     let unreadCount: Int
     let lastActivity: Date?
     let avatarURL: String?
+    let isMuted: Bool?
+
+    var lastActivityText: String? {
+        guard let lastActivity else { return nil }
+        let calendar = Calendar.current
+
+        if calendar.isDateInToday(lastActivity) {
+            return lastActivity.formatted(date: .omitted, time: .shortened)
+        }
+        if calendar.isDateInYesterday(lastActivity) {
+            return "Yesterday"
+        }
+        if let daysAgo = calendar.dateComponents([.day], from: lastActivity, to: .now).day,
+           daysAgo < 7 {
+            return lastActivity.formatted(.dateTime.weekday(.abbreviated))
+        }
+        return lastActivity.formatted(date: .numeric, time: .omitted)
+    }
 
     init(
         id: String,
@@ -14,7 +32,8 @@ struct WatchChatSummary: Codable, Hashable, Identifiable, Sendable {
         preview: String,
         unreadCount: Int,
         lastActivity: Date?,
-        avatarURL: String? = nil
+        avatarURL: String? = nil,
+        isMuted: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -22,5 +41,6 @@ struct WatchChatSummary: Codable, Hashable, Identifiable, Sendable {
         self.unreadCount = unreadCount
         self.lastActivity = lastActivity
         self.avatarURL = avatarURL
+        self.isMuted = isMuted
     }
 }

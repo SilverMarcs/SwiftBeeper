@@ -173,7 +173,8 @@ private extension WatchChatSummary {
             preview: chat.previewText ?? "No messages",
             unreadCount: chat.unreadCount,
             lastActivity: chat.lastActivity,
-            avatarURL: AuthenticatedImageLoader.displayURL(for: rawAvatarURL)?.absoluteString
+            avatarURL: AuthenticatedImageLoader.displayURL(for: rawAvatarURL)?.absoluteString,
+            isMuted: chat.isMuted
         )
     }
 }
