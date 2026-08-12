@@ -190,6 +190,32 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Removes every delivered notification for a conversation once that
+    /// conversation is being viewed or has explicitly been marked as read.
+    func clearDeliveredNotifications(for chatID: String) {
+        Self.clearDeliveredNotifications(for: chatID, in: .current())
+    }
+
+    nonisolated private static func clearDeliveredNotifications(
+        for chatID: String,
+        in center: UNUserNotificationCenter
+    ) {
+        guard !chatID.isEmpty else { return }
+
+        center.getDeliveredNotifications { notifications in
+            let identifiers = notifications.compactMap { notification in
+                let content = notification.request.content
+                let notificationChatID = content.userInfo["chatID"] as? String
+                    ?? content.threadIdentifier
+                return notificationChatID == chatID
+                    ? notification.request.identifier
+                    : nil
+            }
+            guard !identifiers.isEmpty else { return }
+            center.removeDeliveredNotifications(withIdentifiers: identifiers)
+        }
+    }
+
     // Show banner + play sound even when the app is in the foreground
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -204,7 +230,11 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let chatID = response.notification.request.content.userInfo["chatID"] as? String ?? ""
+        let content = response.notification.request.content
+        let chatID = content.userInfo["chatID"] as? String
+            ?? content.threadIdentifier
+
+        Self.clearDeliveredNotifications(for: chatID, in: center)
 
         if response.actionIdentifier == Self.replyAction,
            let textResponse = response as? UNTextInputNotificationResponse {

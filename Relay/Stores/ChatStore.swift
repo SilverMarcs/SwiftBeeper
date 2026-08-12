@@ -179,6 +179,7 @@ final class ChatStore: RealtimeEventHandler {
             // cancel it only when the selection actually changes.
             loadMessagesTask?.cancel()
             if let chatID = selectedChatID {
+                notificationService.clearDeliveredNotifications(for: chatID)
                 activateCachedTimeline(for: chatID)
                 loadMessagesTask = Task { [weak self] in await self?.loadMessages(for: chatID) }
             } else {
@@ -371,6 +372,7 @@ final class ChatStore: RealtimeEventHandler {
         guard !APIClient.accessToken.isEmpty else { return }
         realtimeService.start()
         if let chatID = selectedChatID {
+            notificationService.clearDeliveredNotifications(for: chatID)
             loadMessagesTask?.cancel()
             loadMessagesTask = Task { [weak self] in await self?.loadMessages(for: chatID) }
         }
@@ -383,6 +385,9 @@ final class ChatStore: RealtimeEventHandler {
 
     func handleAppActivation(_ isActive: Bool) {
         realtimeService.setAppIsActive(isActive)
+        if isActive, let chatID = selectedChatID {
+            notificationService.clearDeliveredNotifications(for: chatID)
+        }
     }
 
     func clearState() {
@@ -620,6 +625,7 @@ final class ChatStore: RealtimeEventHandler {
     func markChatAsRead(_ chatID: String) async {
         guard !APIClient.accessToken.isEmpty else { return }
 
+        notificationService.clearDeliveredNotifications(for: chatID)
         let previous = chatsByID[chatID]
         updateChat(chatID) { $0.unreadCount = 0 }
 
