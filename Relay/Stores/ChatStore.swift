@@ -84,6 +84,10 @@ enum ChatFilter: Hashable, Equatable, Identifiable {
 final class ChatStore: RealtimeEventHandler {
     private let realtimeService: RealtimeService
     private let notificationService: NotificationService
+    @ObservationIgnored private let cache: ChatCache
+    @ObservationIgnored private var cacheSnapshot = ChatCacheSnapshot.empty
+    @ObservationIgnored private var activeCacheIdentity: String?
+    @ObservationIgnored private var cacheSaveTask: Task<Void, Never>?
 
     // MARK: Chat list
 
@@ -94,7 +98,12 @@ final class ChatStore: RealtimeEventHandler {
     private(set) var chatsError: String?
     private(set) var chatsErrorIsAuth: Bool = false
     private(set) var isRecoveringAuth: Bool = false
-    var selectedFilter: ChatFilter = .inbox(.primary)
+    var selectedFilter: ChatFilter = .inbox(.primary) {
+        didSet {
+            guard oldValue.id != selectedFilter.id else { return }
+            activateCachedChatList(for: selectedFilter.id)
+        }
+    }
     var selectedInboxFilter: InboxFilter {
         get {
             switch selectedFilter {
@@ -150,6 +159,8 @@ final class ChatStore: RealtimeEventHandler {
     var selectedChatID: String? {
         didSet {
             guard oldValue != selectedChatID else { return }
+            cacheCurrentTimeline()
+
             // Only the open chat keeps a timeline in memory — reset it on switch.
             messages = []
             messagesChatID = nil
@@ -168,6 +179,7 @@ final class ChatStore: RealtimeEventHandler {
             // cancel it only when the selection actually changes.
             loadMessagesTask?.cancel()
             if let chatID = selectedChatID {
+                activateCachedTimeline(for: chatID)
                 loadMessagesTask = Task { [weak self] in await self?.loadMessages(for: chatID) }
             } else {
                 loadMessagesTask = nil
@@ -226,9 +238,14 @@ final class ChatStore: RealtimeEventHandler {
     private var loadMessagesTask: Task<Void, Never>?
     private var lastNotifiedMessageIDByChatID: [String: String] = [:]
 
-    init(realtimeService: RealtimeService, notificationService: NotificationService) {
+    init(
+        realtimeService: RealtimeService,
+        notificationService: NotificationService,
+        cache: ChatCache = ChatCache()
+    ) {
         self.realtimeService = realtimeService
         self.notificationService = notificationService
+        self.cache = cache
         realtimeService.eventHandler = self
     }
 
@@ -298,13 +315,36 @@ final class ChatStore: RealtimeEventHandler {
     func updateAccessToken(_ accessToken: String) async {
         if accessToken == APIClient.accessToken { return }
 
+        let previousAccessToken = APIClient.accessToken
+        let previousCacheIdentity = activeCacheIdentity
         APIClient.accessToken = accessToken
 
         if accessToken.isEmpty {
             realtimeService.stop()
             selectedChatID = nil
             clearState()
+            if let previousCacheIdentity {
+                await cache.remove(endpointIdentity: previousCacheIdentity)
+            }
             return
+        }
+
+        let cacheIdentity = APIConfiguration.endpointIdentity
+        activeCacheIdentity = cacheIdentity
+
+        // A direct non-empty token replacement can represent a different user
+        // on the same endpoint. Do not briefly expose the previous user's cache.
+        if previousAccessToken.isEmpty {
+            let restoredSnapshot = await cache.load(endpointIdentity: cacheIdentity)
+            guard APIClient.accessToken == accessToken, !Task.isCancelled else { return }
+            cacheSnapshot = restoredSnapshot
+            activateCachedChatList(for: selectedFilter.id)
+        } else {
+            clearState()
+            activeCacheIdentity = cacheIdentity
+            if let previousCacheIdentity {
+                await cache.remove(endpointIdentity: previousCacheIdentity)
+            }
         }
 
         await loadChats()
@@ -338,6 +378,7 @@ final class ChatStore: RealtimeEventHandler {
 
     func handleAppBackground() {
         realtimeService.stop()
+        persistCacheImmediately()
     }
 
     func handleAppActivation(_ isActive: Bool) {
@@ -345,6 +386,10 @@ final class ChatStore: RealtimeEventHandler {
     }
 
     func clearState() {
+        cacheSaveTask?.cancel()
+        cacheSaveTask = nil
+        cacheSnapshot = .empty
+        activeCacheIdentity = nil
         restoreListState(.empty)
         connectedAccounts = []
         currentUserProfile = nil
@@ -421,6 +466,7 @@ final class ChatStore: RealtimeEventHandler {
             } else if chatsByID[selectedChatID ?? ""] == nil {
                 selectedChatID = autoSelectedChatID
             }
+            cacheCurrentChatList()
         } catch {
             if retriesRemaining > 0,
                case APIError.http(401, _) = error,
@@ -474,6 +520,7 @@ final class ChatStore: RealtimeEventHandler {
             setChats(chats + newChats)
             chatsCursor = response.oldestCursor
             hasMoreChats = response.hasMore ?? false
+            cacheCurrentChatList()
         } catch {
             // Silently fail on pagination errors; the user can scroll again to retry.
         }
@@ -533,6 +580,7 @@ final class ChatStore: RealtimeEventHandler {
         if selectedChatID == chatID {
             selectedChatID = autoSelectedChatID
         }
+        cacheCurrentChatList()
     }
 
     func archiveChat(_ chatID: String) async { await setArchived(chatID, archived: true) }
@@ -546,6 +594,7 @@ final class ChatStore: RealtimeEventHandler {
             if selectedChatID == chatID {
                 selectedChatID = autoSelectedChatID
             }
+            cacheCurrentChatList()
         } catch {
             chatsError = error.localizedDescription
         }
@@ -616,15 +665,22 @@ final class ChatStore: RealtimeEventHandler {
             reconcileOutgoingMessages(with: response.items, chatID: chatID)
             if messagesChatID != chatID { messagesChatID = chatID }
             if hasMoreOlderMessages != response.hasMore { hasMoreOlderMessages = response.hasMore }
+            cacheCurrentTimeline()
         } catch {
             guard latestLoadRequestID == requestID else { return }
             handleMessageError(error)
         }
     }
 
-    /// Awaitable handle for the store-owned open-chat load, so the detail view can
-    /// sequence its scroll/unread UI without owning the request's lifetime.
-    func awaitCurrentMessagesLoad() async {
+    /// Whether a server or cache snapshot is already available for this chat.
+    func hasLoadedTimeline(for chatID: String) -> Bool {
+        messagesChatID == chatID
+    }
+
+    /// Cached timelines return immediately so views can lay them out while the
+    /// store-owned network refresh continues in the background.
+    func awaitInitialMessages(for chatID: String) async {
+        guard !hasLoadedTimeline(for: chatID) else { return }
         await loadMessagesTask?.value
     }
 
@@ -649,6 +705,7 @@ final class ChatStore: RealtimeEventHandler {
             let changed = merged != messages
             if changed { messages = merged }
             hasMoreOlderMessages = response.hasMore
+            cacheCurrentTimeline()
             return changed
         } catch {
             handleMessageError(error)
@@ -661,6 +718,7 @@ final class ChatStore: RealtimeEventHandler {
         guard chatID == selectedChatID, chatID == messagesChatID, !incoming.isEmpty else { return }
         let merged = mergedMessages(existing: messages, incoming: normalizedMessages(incoming))
         if merged != messages { messages = merged }
+        cacheCurrentTimeline()
     }
 
     /// Assigns each canonical message to at most one optimistic row. Transaction
@@ -871,7 +929,7 @@ final class ChatStore: RealtimeEventHandler {
     }
 
     func canEdit(_ message: Message, in chat: Chat) -> Bool {
-        guard message.isOutgoing(in: chat) else { return false }
+        guard !message.isDeletedMessage, message.isOutgoing(in: chat) else { return false }
         if let accountID = chat.accountID,
            connectedAccounts.first(where: { $0.accountID == accountID })?.capabilities.unlimitedMessageEdits == true {
             return true
@@ -1002,25 +1060,12 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
 
-    nonisolated func realtimeDidDeleteMessages(chatID: String?, messageIDs: [String]) {
-        Task { @MainActor in
-            guard let chatID, !messageIDs.isEmpty else {
-                realtimeNeedsResync()
-                return
-            }
-            if chatID == selectedChatID, chatID == messagesChatID {
-                let deletedIDs = Set(messageIDs)
-                let remaining = messages.filter { !deletedIDs.contains($0.id) }
-                if remaining != messages { messages = remaining }
-            }
-        }
-    }
-
     nonisolated func realtimeDidUpdateReceipt(chatID: String?, entries: [[String: String]]?) {
         Task { @MainActor in
             guard let chatID, chatID == selectedChatID,
                   let readKey = entries?.first?["lastReadByOtherSortKey"] else { return }
             lastReadByOtherSortKey = readKey
+            cacheCurrentTimeline()
         }
     }
 
@@ -1074,6 +1119,7 @@ final class ChatStore: RealtimeEventHandler {
         // that so a freshly-active chat moves to the top of the sidebar.
         updated.sort { ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast) }
         setChats(updated)
+        cacheCurrentChatList()
     }
 
     /// Mirrors server inbox and exact account filtering for hydrated events.
@@ -1103,6 +1149,124 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
 
+    // MARK: - Durable cache
+
+    private func activateCachedChatList(for filterID: String) {
+        guard let cachedList = cacheSnapshot.chatListsByFilterID[filterID] else {
+            setChats([])
+            chatsCursor = nil
+            hasMoreChats = false
+            lastLoadedFilterID = nil
+            selectedChatID = nil
+            return
+        }
+
+        chatsCursor = cachedList.cursor
+        hasMoreChats = cachedList.hasMore
+        lastLoadedFilterID = filterID
+        chatsError = nil
+        chatsErrorIsAuth = false
+        setChats(cachedList.chats)
+
+        if let selectedChatID, chatsByID[selectedChatID] != nil {
+            self.selectedChatID = selectedChatID
+        } else {
+            selectedChatID = autoSelectedChatID
+        }
+    }
+
+    private func activateCachedTimeline(for chatID: String) {
+        guard let cachedTimeline = cacheSnapshot.timelinesByChatID[chatID] else { return }
+
+        messages = cachedTimeline.messages
+        messagesChatID = chatID
+        hasMoreOlderMessages = cachedTimeline.hasMore
+        lastReadByOtherSortKey = cachedTimeline.lastReadByOtherSortKey
+
+        cacheSnapshot.timelinesByChatID[chatID] = CachedChatTimeline(
+            chatID: chatID,
+            messages: cachedTimeline.messages,
+            hasMore: cachedTimeline.hasMore,
+            lastReadByOtherSortKey: cachedTimeline.lastReadByOtherSortKey,
+            updatedAt: .now
+        )
+        scheduleCacheSave()
+    }
+
+    private func cacheCurrentChatList() {
+        guard activeCacheIdentity != nil,
+              lastLoadedFilterID == selectedFilter.id else { return }
+
+        let retainedChats = Array(chats.prefix(500))
+        cacheSnapshot.chatListsByFilterID[selectedFilter.id] = CachedChatList(
+            filterID: selectedFilter.id,
+            chats: retainedChats,
+            cursor: retainedChats.count == chats.count ? chatsCursor : nil,
+            hasMore: retainedChats.count == chats.count ? hasMoreChats : false,
+            updatedAt: .now
+        )
+        trimCachedChatListsIfNeeded()
+        scheduleCacheSave()
+    }
+
+    private func cacheCurrentTimeline() {
+        guard activeCacheIdentity != nil, let chatID = messagesChatID else { return }
+
+        let retainedMessages = Array(messages.suffix(100))
+        cacheSnapshot.timelinesByChatID[chatID] = CachedChatTimeline(
+            chatID: chatID,
+            messages: retainedMessages,
+            hasMore: hasMoreOlderMessages || retainedMessages.count < messages.count,
+            lastReadByOtherSortKey: lastReadByOtherSortKey,
+            updatedAt: .now
+        )
+        trimCachedTimelinesIfNeeded()
+        scheduleCacheSave()
+    }
+
+    private func trimCachedChatListsIfNeeded() {
+        guard cacheSnapshot.chatListsByFilterID.count > 12 else { return }
+        let expiredIDs = cacheSnapshot.chatListsByFilterID.values
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .dropFirst(12)
+            .map(\.filterID)
+        for filterID in expiredIDs {
+            cacheSnapshot.chatListsByFilterID[filterID] = nil
+        }
+    }
+
+    private func trimCachedTimelinesIfNeeded() {
+        guard cacheSnapshot.timelinesByChatID.count > 20 else { return }
+        let expiredIDs = cacheSnapshot.timelinesByChatID.values
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .dropFirst(20)
+            .map(\.chatID)
+        for chatID in expiredIDs {
+            cacheSnapshot.timelinesByChatID[chatID] = nil
+        }
+    }
+
+    private func scheduleCacheSave() {
+        cacheSaveTask?.cancel()
+        cacheSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard let self, !Task.isCancelled,
+                  let cacheIdentity = self.activeCacheIdentity else { return }
+            let snapshot = self.cacheSnapshot
+            await self.cache.save(snapshot, endpointIdentity: cacheIdentity)
+        }
+    }
+
+    private func persistCacheImmediately() {
+        cacheSaveTask?.cancel()
+        cacheSaveTask = nil
+        guard let cacheIdentity = activeCacheIdentity else { return }
+        let snapshot = cacheSnapshot
+        Task { [cache] in
+            await cache.save(snapshot, endpointIdentity: cacheIdentity)
+        }
+    }
+
     // MARK: - Private storage helpers
 
     private func setChats(_ newChats: [Chat]) {
@@ -1128,6 +1292,7 @@ final class ChatStore: RealtimeEventHandler {
         }
         if didUpdateChat {
             publishPrimaryInboxToWatch()
+            cacheCurrentChatList()
         }
     }
 

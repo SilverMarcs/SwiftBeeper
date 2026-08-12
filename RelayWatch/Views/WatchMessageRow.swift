@@ -12,6 +12,7 @@ struct WatchMessageRow: View {
 
             Text(message.text)
                 .foregroundStyle(message.isOutgoing ? .white : .primary)
+                .strikethrough(message.isDeleted == true)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)

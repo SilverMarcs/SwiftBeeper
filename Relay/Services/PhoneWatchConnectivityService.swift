@@ -186,7 +186,8 @@ private extension WatchMessageSummary {
             senderName: message.senderDisplayName,
             text: message.displayText,
             timestamp: message.timestamp,
-            isOutgoing: message.isSender == true
+            isOutgoing: message.isSender == true,
+            isDeleted: message.hasRetainedDeletedContent
         )
     }
 }

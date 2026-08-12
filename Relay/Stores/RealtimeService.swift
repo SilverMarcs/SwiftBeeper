@@ -17,7 +17,6 @@ import Observation
     /// Carries the fully-hydrated messages from the event payload, so the handler
     /// can apply them directly without refetching.
     func realtimeDidUpsertMessages(chatID: String?, messages: [Message])
-    func realtimeDidDeleteMessages(chatID: String?, messageIDs: [String])
     func realtimeDidUpdateReceipt(chatID: String?, entries: [[String: String]]?)
     func realtimeDidReceiveError(_ message: String)
 }
@@ -193,7 +192,14 @@ final class RealtimeService {
             }
         case "message.deleted":
             trackSequence(in: envelope)
-            eventHandler?.realtimeDidDeleteMessages(chatID: envelope.chatID, messageIDs: envelope.ids ?? [])
+            // Deleted events are hydrated with their retained original content
+            // and an isDeleted marker, so merge them instead of removing rows.
+            let messages = (try? JSONDecoder.beeper.decode(MessageEntriesPayload.self, from: data))?.entries ?? []
+            if messages.isEmpty {
+                eventHandler?.realtimeNeedsResync()
+            } else {
+                eventHandler?.realtimeDidUpsertMessages(chatID: envelope.chatID, messages: messages)
+            }
         case "receipt.updated":
             trackSequence(in: envelope)
             eventHandler?.realtimeDidUpdateReceipt(chatID: envelope.chatID, entries: envelope.entries)

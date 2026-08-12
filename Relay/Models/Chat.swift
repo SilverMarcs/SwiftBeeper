@@ -1,6 +1,6 @@
 import Foundation
 
-struct ChatParticipant: Identifiable, Decodable, Equatable {
+struct ChatParticipant: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let username: String?
     let fullName: String?
@@ -19,13 +19,13 @@ struct ChatParticipant: Identifiable, Decodable, Equatable {
     }
 }
 
-struct ChatParticipants: Decodable, Equatable {
+struct ChatParticipants: Codable, Equatable, Sendable {
     let items: [ChatParticipant]
     let hasMore: Bool?
     let total: Int?
 }
 
-enum ChatKind: RawRepresentable, Decodable, Equatable {
+enum ChatKind: RawRepresentable, Codable, Equatable, Sendable {
     case single
     case group
     case unknown(String)
@@ -56,9 +56,14 @@ enum ChatKind: RawRepresentable, Decodable, Equatable {
         let container = try decoder.singleValueContainer()
         self = ChatKind(rawValue: try container.decode(String.self))
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
-struct Chat: Identifiable, Decodable, Equatable {
+struct Chat: Identifiable, Codable, Equatable, Sendable {
     let id: String
     var title: String
     var unreadCount: Int

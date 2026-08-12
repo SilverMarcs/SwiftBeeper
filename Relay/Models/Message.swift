@@ -1,7 +1,7 @@
 import Foundation
 
 
-enum MessageKind: RawRepresentable, Decodable, Equatable {
+enum MessageKind: RawRepresentable, Codable, Equatable, Sendable {
     case reaction
     case memberJoin
     case memberInvite
@@ -37,9 +37,14 @@ enum MessageKind: RawRepresentable, Decodable, Equatable {
         let container = try decoder.singleValueContainer()
         self = MessageKind(rawValue: try container.decode(String.self))
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
-struct Reaction: Codable, Identifiable, Hashable {
+struct Reaction: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let reactionKey: String
     let imgURL: String?
@@ -47,7 +52,7 @@ struct Reaction: Codable, Identifiable, Hashable {
     let emoji: Bool?
 }
 
-struct Message: Identifiable, Decodable, Equatable {
+struct Message: Identifiable, Codable, Equatable, Sendable {
 
 
     let id: String
@@ -63,6 +68,9 @@ struct Message: Identifiable, Decodable, Equatable {
     let isUnread: Bool?
     let reactions: [Reaction]?
     let linkedMessageID: String?
+    /// True when the server has redacted this message. Its original content may
+    /// still be present when the server observed it before the redaction.
+    let isDeleted: Bool?
     /// Local transaction identifier attached to hydrated realtime events.
     /// REST history may omit it.
     let transactionID: String?
@@ -95,8 +103,8 @@ struct Message: Identifiable, Decodable, Equatable {
             return "\(name) reacted \(emoji)"
         }
 
-        if hasText {
-            return text!.trimmed
+        if hasText, let text {
+            return text.trimmed
         }
 
         if let attachments, let first = attachments.first {
@@ -106,12 +114,22 @@ struct Message: Identifiable, Decodable, Equatable {
         return "Deleted message"
     }
 
-    var isEmptyDeleted: Bool {
+    private var isLegacyDeletedTombstone: Bool {
         !hasText && (attachments ?? []).isEmpty
     }
 
+    /// Includes the empty tombstone emitted by older server versions.
+    var isDeletedMessage: Bool {
+        isDeleted == true || isLegacyDeletedTombstone
+    }
+
+    var hasRetainedDeletedContent: Bool {
+        isDeleted == true && (hasText || (attachments ?? []).isEmpty == false)
+    }
+
     /// Whether this message represents real user content (not a reaction or membership event).
-    /// Deleted (empty) messages are still displayable — they show a "deleted" tombstone in the timeline.
+    /// Deleted messages remain displayable with their retained content or a
+    /// tombstone when the original content is unavailable.
     var isDisplayable: Bool {
         !isReaction && !isMembershipEvent
     }
@@ -204,6 +222,7 @@ struct Message: Identifiable, Decodable, Equatable {
             isUnread: detail.isUnread ?? isUnread,
             reactions: mergedReactions,
             linkedMessageID: detail.linkedMessageID ?? linkedMessageID,
+            isDeleted: detail.isDeleted ?? isDeleted,
             transactionID: detail.transactionID ?? transactionID
         )
     }

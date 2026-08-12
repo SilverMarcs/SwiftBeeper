@@ -134,6 +134,7 @@ struct ChatDetailiOS: View {
                         .listRowInsets(.init())
                         .id(bottomAnchorID)
                 }
+                .defaultScrollAnchor(.bottom)
                 .scrollDismissesKeyboard(.interactively)
                 .environment(\.defaultMinListRowHeight, 1)
                 .listStyle(.plain)
@@ -170,7 +171,7 @@ struct ChatDetailiOS: View {
                     async let detail: () = chatStore.loadChatDetail(for: chatID)
                     // The load itself is owned by the store (survives view churn);
                     // here we just wait for it to settle before sequencing scroll.
-                    await chatStore.awaitCurrentMessagesLoad()
+                    await chatStore.awaitInitialMessages(for: chatID)
                     firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: chatID), chat: selectedChat)
                     try? await Task.sleep(for: .milliseconds(50))
                     scrollToBottomSettling(with: proxy, animateFirst: false)
@@ -247,7 +248,8 @@ struct ChatDetailiOS: View {
                     ParticipantProfileSheet(participant: participant)
                 }
                 .overlay {
-                    if isPreparingInitialScroll {
+                    if isPreparingInitialScroll,
+                       !chatStore.hasLoadedTimeline(for: selectedChat.id) {
                         ZStack {
                             Rectangle()
                                 .fill(.background)

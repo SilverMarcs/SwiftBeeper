@@ -100,10 +100,11 @@ struct MessageRowView: View {
     }
 
     private var lastBubbleSlot: BubbleSlot? {
+        if message.isDeletedMessage { return .text }
         if let urls = message.extractedURLs, let last = urls.last {
             return .linkPill(last.absoluteString)
         }
-        if message.hasText || message.isEmptyDeleted { return .text }
+        if message.hasText { return .text }
         if let attachments = message.attachments, let last = attachments.last {
             return .attachment(last.id)
         }
@@ -131,7 +132,24 @@ struct MessageRowView: View {
         let otherSideName = isOutgoing ? chat.displayTitle : message.senderDisplayName
         let avatarURL = isOutgoing ? chat.imgURL : senderAvatarImageURL
         VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
-            if let attachments = message.attachments, attachments.isEmpty == false {
+            if message.isDeletedMessage {
+                Group {
+                    if message.hasRetainedDeletedContent {
+                        Text(message.displayText.markdownAttributed)
+                            .strikethrough()
+                    } else {
+                        Label(message.displayText, systemImage: "trash")
+                            .italic()
+                    }
+                }
+                .foregroundStyle(isOutgoing ? .white : .primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .messageBubbleChrome(isOutgoing: isOutgoing)
+                .overlay(alignment: alignment) {
+                    reactionsOverlay(if: .text, isOutgoing: isOutgoing)
+                }
+            } else if let attachments = message.attachments, attachments.isEmpty == false {
                 ForEach(attachments) { attachment in
                     AttachmentView(attachment: attachment, isOutgoing: isOutgoing, chatTitle: otherSideName, avatarURL: avatarURL)
                         .overlay(alignment: alignment) {
@@ -140,7 +158,7 @@ struct MessageRowView: View {
                 }
             }
 
-            if let urls = message.extractedURLs, !urls.isEmpty {
+            if !message.isDeletedMessage, let urls = message.extractedURLs, !urls.isEmpty {
                 let textWithoutURLs = message.textWithoutURLs
                 if let textWithoutURLs, !textWithoutURLs.isEmpty {
                     Text(textWithoutURLs.markdownAttributed)
@@ -159,22 +177,15 @@ struct MessageRowView: View {
                             reactionsOverlay(if: .linkPill(url.absoluteString), isOutgoing: isOutgoing)
                         }
                 }
-            } else if message.hasText || message.isEmptyDeleted {
-                Group {
-                    if message.isEmptyDeleted {
-                        Label(message.displayText, systemImage: "trash")
-                            .italic()
-                    } else {
-                        Text(message.displayText.markdownAttributed)
+            } else if !message.isDeletedMessage, message.hasText {
+                Text(message.displayText.markdownAttributed)
+                    .foregroundStyle(isOutgoing ? .white : .primary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .messageBubbleChrome(isOutgoing: isOutgoing)
+                    .overlay(alignment: alignment) {
+                        reactionsOverlay(if: .text, isOutgoing: isOutgoing)
                     }
-                }
-                .foregroundStyle(isOutgoing ? .white : .primary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .messageBubbleChrome(isOutgoing: isOutgoing)
-                .overlay(alignment: alignment) {
-                    reactionsOverlay(if: .text, isOutgoing: isOutgoing)
-                }
             }
         }
         #if !os(macOS)
@@ -238,7 +249,7 @@ struct MessageRowView: View {
                 Label("Reply", systemImage: "arrowshape.turn.up.left")
             }
 
-            if message.hasText || message.isEmptyDeleted {
+            if message.hasText || message.isDeletedMessage {
                 Button {
                     copyMessageText()
                 } label: {
@@ -267,7 +278,7 @@ struct MessageRowView: View {
             Label("Reply", systemImage: "arrowshape.turn.up.left")
         }
 
-        if message.hasText || message.isEmptyDeleted {
+        if message.hasText || message.isDeletedMessage {
             Button {
                 copyMessageText()
             } label: {
@@ -297,7 +308,7 @@ struct MessageRowView: View {
             }
         }
 
-        if !message.isEmptyDeleted && message.isOutgoing(in: chat) {
+        if !message.isDeletedMessage && message.isOutgoing(in: chat) {
             Divider()
             Button(role: .destructive) {
                 Task {

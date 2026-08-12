@@ -40,12 +40,12 @@ struct PendingAttachment: Identifiable, Equatable, Sendable {
     }
 }
 
-struct AttachmentSize: Decodable, Equatable {
+struct AttachmentSize: Codable, Equatable, Sendable {
     let width: Int?
     let height: Int?
 }
 
-enum AttachmentKind: RawRepresentable, Decodable, Equatable {
+enum AttachmentKind: RawRepresentable, Codable, Equatable, Sendable {
     case image
     case video
     case audio
@@ -81,9 +81,14 @@ enum AttachmentKind: RawRepresentable, Decodable, Equatable {
         let container = try decoder.singleValueContainer()
         self = AttachmentKind(rawValue: try container.decode(String.self))
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
-struct Attachment: Identifiable, Decodable, Equatable {
+struct Attachment: Identifiable, Codable, Equatable, Sendable {
     var id: String? { _id ?? srcURL ?? fileName }
 
     let type: AttachmentKind?

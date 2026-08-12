@@ -6,4 +6,5 @@ struct WatchMessageSummary: Codable, Hashable, Identifiable, Sendable {
     let text: String
     let timestamp: Date
     let isOutgoing: Bool
+    let isDeleted: Bool?
 }

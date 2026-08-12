@@ -22,6 +22,7 @@ struct ReplyPreviewView: View {
                 Text(linkedMessage?.displayText ?? "Original message")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .strikethrough(linkedMessage?.hasRetainedDeletedContent == true)
                     .lineLimit(1)
             }
         }

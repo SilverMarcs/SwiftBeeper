@@ -77,7 +77,8 @@ final class WatchChatStore {
                 senderName: "You",
                 text: text,
                 timestamp: .now,
-                isOutgoing: true
+                isOutgoing: true,
+                isDeleted: false
             )
             let existingItems = messagePages[chatID]?.items ?? []
             let page = WatchMessagePage(
