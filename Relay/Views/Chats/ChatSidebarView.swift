@@ -21,17 +21,8 @@ struct ChatSidebarView: View {
                 chatList
                     .searchable(text: $chatStore.searchQuery, placement: isIPhone ? .automatic : .sidebar, prompt: "Search chats")
                     .searchPresentationToolbarBehavior(.avoidHidingContent)
-                    .task(id: ChatSearchTaskID(
-                        query: chatStore.searchQuery,
-                        filterID: chatStore.selectedFilter.id
-                    )) {
-                        if chatStore.searchQuery.isBlank {
-                            chatStore.searchResults = nil
-                            chatStore.isSearching = false
-                            return
-                        }
-                        try? await Task.sleep(for: .milliseconds(300))
-                        await chatStore.searchChats()
+                    .onSubmit(of: .search) {
+                        chatStore.submitSearch()
                     }
                     .task(id: chatStore.chatsErrorIsAuth) {
                         if chatStore.chatsErrorIsAuth {
@@ -166,29 +157,7 @@ struct ChatSidebarView: View {
         // sequence), not on in-place row edits like a chat's last-message text.
         .animation(.default, value: displayedChats.map(\.id))
         .overlay {
-            if chatStore.chats.isEmpty {
-                if chatStore.isSearching
-                    || chatStore.isLoadingChats
-                    || chatStore.isRecoveringAuth
-                    || chatStore.chatsErrorIsAuth {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let chatsError = chatStore.chatsError {
-                    ContentUnavailableView(
-                        "Could Not Load Chats",
-                        systemImage: "exclamationmark.triangle",
-                        description: Text(chatsError)
-                    )
-                }
-            } else if chatStore.isSearching {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            ChatListOverlay(isEmpty: displayedChats.isEmpty)
         }
     }
-}
-
-private struct ChatSearchTaskID: Equatable {
-    let query: String
-    let filterID: String
 }

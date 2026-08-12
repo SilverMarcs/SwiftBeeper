@@ -101,6 +101,7 @@ final class ChatStore: RealtimeEventHandler {
     var selectedFilter: ChatFilter = .inbox(.primary) {
         didSet {
             guard oldValue.id != selectedFilter.id else { return }
+            resetSearch()
             activateCachedChatList(for: selectedFilter.id)
         }
     }
@@ -149,9 +150,16 @@ final class ChatStore: RealtimeEventHandler {
             return .service(serviceID: account.accountID, name: account.network)
         }
     }
-    var searchQuery: String = ""
+    var searchQuery: String = "" {
+        didSet {
+            guard oldValue != searchQuery else { return }
+            resetSearch()
+        }
+    }
     var searchResults: [Chat]?
     var isSearching = false
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var latestSearchRequestID: UUID?
     private var chatsCursor: String?
     private var lastLoadedFilterID: String?
     private var chatsByID: [String: Chat] = [:]
@@ -400,6 +408,9 @@ final class ChatStore: RealtimeEventHandler {
         currentUserProfile = nil
         searchResults = nil
         searchQuery = ""
+        searchTask?.cancel()
+        searchTask = nil
+        latestSearchRequestID = nil
         isSearching = false
         loadMessagesTask?.cancel()
         loadMessagesTask = nil
@@ -533,29 +544,70 @@ final class ChatStore: RealtimeEventHandler {
 
     // MARK: - Search
 
-    func searchChats() async {
+    func submitSearch() {
         let trimmed = searchQuery.trimmed
         guard !trimmed.isEmpty else {
-            searchResults = nil
-            isSearching = false
+            resetSearch()
             return
         }
 
+        searchTask?.cancel()
+        let requestID = UUID()
+        latestSearchRequestID = requestID
+        searchResults = []
         isSearching = true
-        defer { isSearching = false }
+
+        let requestedFilter = selectedFilter
+        searchTask = Task { [weak self] in
+            await self?.performSearch(
+                query: trimmed,
+                filter: requestedFilter,
+                requestID: requestID
+            )
+        }
+    }
+
+    private func performSearch(
+        query: String,
+        filter: ChatFilter,
+        requestID: UUID
+    ) async {
+        let inboxFilter: InboxFilter = switch filter {
+        case .inbox(let inbox): inbox
+        case .service: .primary
+        }
+
+        defer {
+            if latestSearchRequestID == requestID {
+                isSearching = false
+                searchTask = nil
+                latestSearchRequestID = nil
+            }
+        }
 
         do {
-            let requestedFilter = selectedFilter
             let response = try await APIClient.searchChats(
-                query: trimmed,
-                inbox: selectedInboxFilter.rawValue,
-                accountIDs: requestedFilter.accountIDs
+                query: query,
+                inbox: inboxFilter.rawValue,
+                accountIDs: filter.accountIDs
             )
-            guard selectedFilter.id == requestedFilter.id, searchQuery.trimmed == trimmed else { return }
+            guard !Task.isCancelled,
+                  latestSearchRequestID == requestID,
+                  selectedFilter.id == filter.id,
+                  searchQuery.trimmed == query else { return }
             searchResults = response.items
         } catch {
+            guard !Task.isCancelled, latestSearchRequestID == requestID else { return }
             searchResults = []
         }
+    }
+
+    private func resetSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        latestSearchRequestID = nil
+        searchResults = nil
+        isSearching = false
     }
 
     func loadChatDetail(for chatID: String) async {
