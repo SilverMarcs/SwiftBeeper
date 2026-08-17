@@ -4,12 +4,24 @@ struct OutgoingMessageRowView: View {
     @Environment(ChatStore.self) private var chatStore
 
     let message: OutgoingMessage
+    /// The quoted message for a reply, pre-resolved by the timeline grouping so
+    /// the optimistic bubble shows the same header the confirmed one will.
+    var linkedMessage: Message? = nil
+    var onTapLinkedMessage: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .bottom) {
             Spacer(minLength: 50)
 
             VStack(alignment: .trailing, spacing: 4) {
+                if let replyToMessageID = message.replyToMessageID, !replyToMessageID.isEmpty {
+                    ReplyPreviewView(
+                        linkedMessage: linkedMessage,
+                        isOutgoing: true,
+                        onTap: { onTapLinkedMessage?(replyToMessageID) }
+                    )
+                }
+
                 ForEach(message.attachments) { attachment in
                     OutgoingAttachmentView(
                         attachment: attachment,

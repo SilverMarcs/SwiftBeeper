@@ -26,6 +26,10 @@ struct ChatDetailiOS: View {
     // Timeline grouping does per-message `Calendar` work; cache it so unrelated
     // store changes (a sidebar refresh) don't recompute it on every body pass.
     @State private var timelineCache = MemoizedValue<TimelineCacheKey, [TimelineEntry]>()
+    // Same idea for the optimistic tail: its dividers and quoted replies only
+    // change when the timeline or the outgoing rows themselves change, not on
+    // every upload-progress tick.
+    @State private var outgoingTimelineCache = MemoizedValue<OutgoingTimelineKey, [OutgoingTimelineEntry]>()
     // The read indicator scans every message (isOutgoing + isReadByOther); memoize
     // it so an unrelated store change doesn't re-scan the timeline on each body pass.
     @State private var readIndicatorCache = MemoizedValue<ReadIndicatorKey, String?>()
@@ -51,6 +55,13 @@ struct ChatDetailiOS: View {
                 suppressingOutgoingIDs: suppressingOutgoingIDs
             )) {
                 self.timelineEntries(for: messages)
+            }
+            let outgoingTimelineEntries = outgoingTimelineCache(OutgoingTimelineKey(
+                version: timelineVersion,
+                suppressingOutgoingIDs: suppressingOutgoingIDs,
+                outgoingKeys: outgoingMessages.map(\.timelineKey)
+            )) {
+                TimelineTimestampRule.outgoingEntries(for: outgoingMessages, following: messages)
             }
             let activeComposerMessageID = chatStore.activeComposerMessage?.id
             let readIndicatorMessageID = readIndicatorCache(
@@ -120,11 +131,24 @@ struct ChatDetailiOS: View {
                         .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
                     }
 
-                    ForEach(outgoingMessages) { message in
-                        OutgoingMessageRowView(message: message)
-                            .id(message.timelineKey)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+                    ForEach(outgoingTimelineEntries) { entry in
+                        if entry.showsTimestamp {
+                            TimestampDividerView(timestamp: entry.message.createdAt)
+                                .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 6, trailing: 10))
+                        }
+
+                        OutgoingMessageRowView(
+                            message: entry.message,
+                            linkedMessage: entry.linkedMessage,
+                            onTapLinkedMessage: { linkedID in
+                                scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                            }
+                        )
+                        .id(entry.id)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
                     }
 
                     Color.clear
@@ -289,10 +313,10 @@ struct ChatDetailiOS: View {
                                 try? await Task.sleep(for: .milliseconds(50))
                                 isSearchFocused = true
                             }
-                            // 2026-06-05: the sent message lands almost instantly
-                            // (in-process backend), so the tracker's scroll fires
-                            // mid search-bar dismissal and gets swallowed by the
-                            // inset animation. Re-scroll after it settles.
+                            // 2026-06-05: the sent message can land before the
+                            // search bar finishes dismissing, so the tracker's
+                            // scroll fires mid-dismissal and gets swallowed by
+                            // the inset animation. Re-scroll after it settles.
                             scrollToBottom(with: proxy, animated: true, delay: .milliseconds(350))
                         }
                         .onChange(of: isSearchFocused) { _, focused in
@@ -542,14 +566,7 @@ struct ChatDetailiOS: View {
     }
 
     private func shouldShowTimestamp(before message: Message, previousMessage: Message?) -> Bool {
-        guard let previousMessage else { return true }
-
-        let calendar = Calendar.app
-        if calendar.isDate(message.timestamp, inSameDayAs: previousMessage.timestamp) == false {
-            return true
-        }
-
-        return message.timestamp.timeIntervalSince(previousMessage.timestamp) >= 30 * 60
+        TimelineTimestampRule.showsDivider(before: message.timestamp, previous: previousMessage?.timestamp)
     }
 
     private func navigationSubtitle(for chat: Chat) -> Text {
