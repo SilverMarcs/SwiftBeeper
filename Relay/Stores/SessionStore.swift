@@ -5,7 +5,6 @@ import Observation
 @Observable
 final class SessionStore {
     private let keychain = KeychainManager.shared
-    private static let legacyAccessTokenKey = "beeperAccessToken"
     private var endpointIdentity: String
 
     private var accessTokenKey: String {
@@ -16,19 +15,9 @@ final class SessionStore {
         didSet { persistAccessToken(accessToken) }
     }
 
-    init(endpointIdentity: String = "embedded") {
+    init(endpointIdentity: String = ServerEndpoint.unconfigured.identity) {
         self.endpointIdentity = endpointIdentity
-
-        let scopedToken = keychain.load(key: "beeperAccessToken|\(endpointIdentity)")
-        if let scopedToken {
-            accessToken = scopedToken
-        } else if endpointIdentity == ServerEndpoint.embedded.identity,
-                  let legacyToken = keychain.load(key: Self.legacyAccessTokenKey) {
-            accessToken = legacyToken
-            keychain.save(key: "beeperAccessToken|\(endpointIdentity)", data: legacyToken)
-        } else {
-            accessToken = ""
-        }
+        accessToken = keychain.load(key: "beeperAccessToken|\(endpointIdentity)") ?? ""
     }
 
     func clearToken() {

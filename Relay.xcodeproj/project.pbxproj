@@ -10,7 +10,7 @@
 		08974BBD2F665F1B00950962 /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBC2F665F1B00950962 /* SwiftOGG */; };
 		08974BC02F66600000950962 /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = 08974BBF2F66600000950962 /* SwiftMediaViewer */; };
 		08A6E0102F5975A200A2ECF4 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08A6E00F2F5975A200A2ECF4 /* AVKit.framework */; };
-		A11000000000000000000001 /* RelayNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A11000000000000000000002 /* RelayNotificationService.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A11000000000000000000001 /* RelayNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A11000000000000000000002 /* RelayNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B22000000000000000000001 /* RelayWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B22000000000000000000003 /* RelayWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B24000000000000000000002 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = B24000000000000000000001 /* AppIcon.icon */; };
 		B24000000000000000000003 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = B24000000000000000000001 /* AppIcon.icon */; };
@@ -61,13 +61,9 @@
 /* Begin PBXFileReference section */
 		0865737D2F58F64E0084BD91 /* Relay.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		08A6E00F2F5975A200A2ECF4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
-		08F100000000000000000001 /* EasyMatrix.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EasyMatrix.xcframework; path = Frameworks/EasyMatrix.xcframework; sourceTree = SOURCE_ROOT; };
 		A11000000000000000000002 /* RelayNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RelayNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B22000000000000000000003 /* RelayWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RelayWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B24000000000000000000001 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
-		C33000000000000000000001 /* Active.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Active.xcconfig; sourceTree = "<group>"; };
-		C33000000000000000000002 /* Remote.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Remote.xcconfig; sourceTree = "<group>"; };
-		C33000000000000000000003 /* Embedded.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Embedded.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -152,7 +148,6 @@
 		086573742F58F64E0084BD91 = {
 			isa = PBXGroup;
 			children = (
-				C33000000000000000000004 /* BuildVariants */,
 				A11000000000000000000008 /* SharedNotifications */,
 				B24000000000000000000001 /* AppIcon.icon */,
 				B22000000000000000000007 /* SharedWatch */,
@@ -177,20 +172,9 @@
 		08A6E00E2F5975A200A2ECF4 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				08F100000000000000000001 /* EasyMatrix.xcframework */,
 				08A6E00F2F5975A200A2ECF4 /* AVKit.framework */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		C33000000000000000000004 /* BuildVariants */ = {
-			isa = PBXGroup;
-			children = (
-				C33000000000000000000001 /* Active.xcconfig */,
-				C33000000000000000000002 /* Remote.xcconfig */,
-				C33000000000000000000003 /* Embedded.xcconfig */,
-			);
-			path = BuildVariants;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -200,7 +184,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 086573882F58F64F0084BD91 /* Build configuration list for PBXNativeTarget "Relay" */;
 			buildPhases = (
-				08E4517A1A2B3C4D5E6F0001 /* Ensure EasyMatrix xcframework */,
 				086573792F58F64E0084BD91 /* Sources */,
 				0865737A2F58F64E0084BD91 /* Frameworks */,
 				0865737B2F58F64E0084BD91 /* Resources */,
@@ -345,28 +328,6 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		08E4517A1A2B3C4D5E6F0001 /* Ensure EasyMatrix xcframework */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Ensure EasyMatrix xcframework";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "# Remote builds must not require or generate the Go backend. Embedded\n# builds create it before Swift compiles the bridging header and before link.\nif [ \"${RELAY_REMOTE_ONLY:-NO}\" != \"YES\" ] && [ ! -d \"$SRCROOT/Frameworks/EasyMatrix.xcframework\" ]; then\n  \"$SRCROOT/Relay/Helpers/build-easymatrix-xcframework.sh\" all\nfi\n";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		086573792F58F64E0084BD91 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -394,7 +355,6 @@
 /* Begin PBXTargetDependency section */
 		A1100000000000000000000A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			platformFilter = ios;
 			target = A11000000000000000000004 /* RelayNotificationService */;
 			targetProxy = A11000000000000000000003 /* PBXContainerItemProxy */;
 		};
@@ -529,7 +489,6 @@
 		};
 		086573892F58F64F0084BD91 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C33000000000000000000001 /* Active.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -585,7 +544,6 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Relay/Relay-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -595,7 +553,6 @@
 		};
 		0865738A2F58F64F0084BD91 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C33000000000000000000001 /* Active.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -651,7 +608,6 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Relay/Relay-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -669,6 +625,10 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RelayNotificationService/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
+				"ENABLE_OUTGOING_NETWORK_CONNECTIONS[sdk=macosx*]" = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -677,9 +637,10 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.SwiftBeeper.NotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
+				SDKROOT = auto;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -700,6 +661,10 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RelayNotificationService/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
+				"ENABLE_OUTGOING_NETWORK_CONNECTIONS[sdk=macosx*]" = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -708,9 +673,10 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.SwiftBeeper.NotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
+				SDKROOT = auto;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;

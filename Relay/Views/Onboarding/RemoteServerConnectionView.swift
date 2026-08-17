@@ -1,6 +1,5 @@
 import SwiftUI
 
-#if REMOTE_ONLY
 struct RemoteServerConnectionView: View {
     @Environment(ServerConnection.self) private var serverConnection
     @Environment(SessionStore.self) private var sessionStore
@@ -93,4 +92,3 @@ struct RemoteServerConnectionView: View {
         .disabled(model.isWorking)
     }
 }
-#endif

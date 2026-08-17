@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 
-#if REMOTE_ONLY
 @MainActor
 @Observable
 final class ServerSetupModel {
@@ -110,4 +109,3 @@ final class ServerSetupModel {
         isWorking = false
     }
 }
-#endif

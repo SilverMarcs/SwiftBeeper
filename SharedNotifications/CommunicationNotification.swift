@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 @preconcurrency import Intents
 @preconcurrency import UserNotifications
@@ -13,24 +12,6 @@ struct CommunicationNotificationInfo: Sendable {
     let isGroupChat: Bool
     let messageBody: String
     let recipients: [CommunicationNotificationParticipant]
-
-    init(
-        conversationID: String,
-        senderID: String,
-        senderName: String,
-        chatTitle: String,
-        isGroupChat: Bool,
-        messageBody: String,
-        recipients: [CommunicationNotificationParticipant] = []
-    ) {
-        self.conversationID = conversationID
-        self.senderID = senderID
-        self.senderName = senderName
-        self.chatTitle = chatTitle
-        self.isGroupChat = isGroupChat
-        self.messageBody = messageBody
-        self.recipients = Array(recipients.prefix(Self.maximumRecipientCount))
-    }
 
     init?(userInfo: [AnyHashable: Any], fallbackBody: String) {
         guard
@@ -63,11 +44,21 @@ enum CommunicationNotification {
         avatarData: Data?
     ) async -> UNNotificationContent {
         let avatar = avatarData.flatMap(INImage.init(imageData:))
+        // For a group the avatar is the room's, which iOS attaches to the
+        // intent's `speakableGroupName` parameter. That API
+        // (`INIntent.setImage(_:forParameterNamed:)`) does not exist on macOS,
+        // so there we hang the same image on the sender instead — the banner
+        // renders the room avatar either way.
+        #if os(macOS)
+        let senderImage = avatar
+        #else
+        let senderImage = information.isGroupChat ? nil : avatar
+        #endif
         let sender = INPerson(
             personHandle: INPersonHandle(value: information.senderID, type: .unknown),
             nameComponents: nil,
             displayName: information.senderName,
-            image: information.isGroupChat ? nil : avatar,
+            image: senderImage,
             contactIdentifier: nil,
             customIdentifier: information.senderID
         )
@@ -97,9 +88,11 @@ enum CommunicationNotification {
             attachments: nil
         )
 
+        #if !os(macOS)
         if information.isGroupChat, let avatar {
             intent.setImage(avatar, forParameterNamed: \.speakableGroupName)
         }
+        #endif
 
         let interaction = INInteraction(intent: intent, response: nil)
         interaction.direction = .incoming
@@ -139,12 +132,6 @@ enum NotificationAvatarLoader {
         guard let url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 4)
         request.setValue("image/*", forHTTPHeaderField: "Accept")
-        return await data(for: request)
-    }
-
-    nonisolated static func data(for request: URLRequest?) async -> Data? {
-        guard var request else { return nil }
-        request.timeoutInterval = min(request.timeoutInterval, 4)
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -161,4 +148,3 @@ enum NotificationAvatarLoader {
         }
     }
 }
-#endif

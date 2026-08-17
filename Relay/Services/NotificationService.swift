@@ -7,20 +7,33 @@ import AppKit
 import UIKit
 #endif
 
+/// The client half of Relay's single notification path.
+///
+/// Every alert Relay shows on every platform originates as an APNs push sent by
+/// the server (`internal/server/push.go`). The client never synthesises a
+/// notification from the live WebSocket stream — the app being connected is
+/// exactly the case where a locally-generated alert would double up with the
+/// push. This type therefore only ever: registers the device with APNs, keeps
+/// that registration in sync with the signed-in server, decides whether an
+/// arriving push should be shown while the app is in the foreground, and
+/// handles taps and inline replies.
 @MainActor
 @Observable
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
-    nonisolated private static let messageCategory = "MESSAGE"
+    nonisolated static let messageCategory = "MESSAGE"
     nonisolated private static let replyAction = "REPLY_ACTION"
+
+    #if os(macOS)
+    nonisolated private static let platform = "macos"
+    #else
+    nonisolated private static let platform = "ios"
+    #endif
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Relay", category: "NotificationService")
     private(set) var isAuthorized = false
-    private(set) var prefersRemoteNotifications = false
     weak var store: ChatStore?
     weak var sessionStore: SessionStore?
-    #if os(iOS)
     private var deviceToken: String?
-    #endif
 
     func requestAuthorization() async {
         let center = UNUserNotificationCenter.current()
@@ -43,26 +56,21 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             isAuthorized = granted
             logger.info("Notification authorization: \(granted, privacy: .public)")
-            #if os(iOS)
-            #if REMOTE_ONLY
             if granted {
-                registerForRemoteNotifications()
+                // Apple recommends asking APNs for the current token on every
+                // launch rather than treating a saved value as permanent.
+                #if os(macOS)
+                NSApplication.shared.registerForRemoteNotifications()
+                #else
+                UIApplication.shared.registerForRemoteNotifications()
+                #endif
             }
-            #endif
-            #else
-            // macOS notifications are generated locally from the live event
-            // stream. Ensure an APNs token from an older build is invalidated.
-            NSApplication.shared.unregisterForRemoteNotifications()
-            #endif
         } catch {
             logger.error("Failed to request notification authorization: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    #if os(iOS)
     func didRegisterForRemoteNotifications(_ data: Data) {
-        // Apple recommends asking APNs for the current token on every launch,
-        // rather than treating a previously saved value as permanent.
         deviceToken = data.map { byte in
             let value = String(byte, radix: 16)
             return value.count == 1 ? "0\(value)" : value
@@ -73,135 +81,45 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     func didFailToRegisterForRemoteNotifications(_ error: Error) {
         logger.error("APNs registration failed: \(error.localizedDescription, privacy: .public)")
     }
-    #endif
 
+    /// Points the current APNs token at the currently signed-in server. Safe to
+    /// call repeatedly; the server keys registrations by token.
     func syncRemoteRegistration() async {
-        #if os(iOS) && REMOTE_ONLY
         guard isAuthorized,
               let deviceToken,
-              sessionStore?.accessToken.isEmpty == false else {
-            prefersRemoteNotifications = false
-            return
-        }
+              sessionStore?.accessToken.isEmpty == false else { return }
 
         do {
-            prefersRemoteNotifications = try await APIClient.registerPushDevice(token: deviceToken)
-            logger.info("Registered this device for remote notifications")
+            try await APIClient.registerPushDevice(token: deviceToken, platform: Self.platform)
+            logger.info("Registered this device for push notifications")
         } catch {
-            prefersRemoteNotifications = false
             logger.error("Could not register push device: \(error.localizedDescription, privacy: .public)")
         }
-        #else
-        prefersRemoteNotifications = false
-        #endif
     }
 
+    /// Detaches this device from the server it is currently registered with.
+    /// Call before switching servers or signing out, while the old access token
+    /// is still valid.
     func unregisterRemoteRegistration() async {
-        #if os(iOS)
-        #if REMOTE_ONLY
-        guard let deviceToken,
-              sessionStore?.accessToken.isEmpty == false else {
-            prefersRemoteNotifications = false
-            return
-        }
+        guard let deviceToken, sessionStore?.accessToken.isEmpty == false else { return }
 
         do {
             try await APIClient.unregisterPushDevice(token: deviceToken)
         } catch {
             logger.error("Could not unregister push device: \(error.localizedDescription, privacy: .public)")
         }
-        prefersRemoteNotifications = false
-        #else
-        prefersRemoteNotifications = false
-        #endif
-        #else
-        NSApplication.shared.unregisterForRemoteNotifications()
-        prefersRemoteNotifications = false
-        #endif
-    }
-
-    #if os(iOS)
-    private func registerForRemoteNotifications() {
-        UIApplication.shared.registerForRemoteNotifications()
-    }
-    #endif
-
-    func postNewMessageNotification(message: Message, chat: Chat) {
-        guard isAuthorized else { return }
-
-        Task {
-            let mutableContent = UNMutableNotificationContent()
-            mutableContent.title = chat.isGroupChat ? chat.displayTitle : message.senderDisplayName
-            mutableContent.subtitle = chat.isGroupChat ? message.senderDisplayName : ""
-            mutableContent.body = message.displayText
-            mutableContent.sound = .default
-            mutableContent.threadIdentifier = message.chatID
-            mutableContent.categoryIdentifier = Self.messageCategory
-            mutableContent.userInfo = ["chatID": message.chatID, "messageID": message.id]
-
-            let content: UNNotificationContent
-            #if os(iOS)
-            let avatarURLString: String?
-            if chat.isGroupChat {
-                avatarURLString = chat.imgURL
-            } else {
-                avatarURLString = chat.participant(with: message.senderID)?.imgURL
-                    ?? chat.otherParticipant?.imgURL
-            }
-            let avatarRequest = avatarURLString.flatMap(AuthenticatedImageLoader.buildRequest(for:))
-            let avatarData = await NotificationAvatarLoader.data(for: avatarRequest)
-            let information = CommunicationNotificationInfo(
-                conversationID: message.chatID,
-                senderID: message.senderID,
-                senderName: message.senderDisplayName,
-                chatTitle: chat.displayTitle,
-                isGroupChat: chat.isGroupChat,
-                messageBody: message.displayText,
-                recipients: chat.isGroupChat
-                    ? (chat.participants?.items ?? [])
-                        .filter { $0.isSelf != true && $0.id != message.senderID }
-                        .map {
-                            CommunicationNotificationParticipant(
-                                id: $0.id,
-                                name: $0.displayName
-                            )
-                        }
-                    : []
-            )
-            content = await CommunicationNotification.updatedContent(
-                from: mutableContent,
-                information: information,
-                avatarData: avatarData
-            )
-            #else
-            content = mutableContent
-            #endif
-
-            let request = UNNotificationRequest(
-                identifier: "msg-\(message.id)",
-                content: content,
-                trigger: nil
-            )
-            do {
-                try await UNUserNotificationCenter.current().add(request)
-            } catch {
-                logger.error("Failed to post notification: \(error.localizedDescription, privacy: .public)")
-            }
-        }
     }
 
     /// Removes every delivered notification for a conversation once that
     /// conversation is being viewed or has explicitly been marked as read.
     func clearDeliveredNotifications(for chatID: String) {
-        Self.clearDeliveredNotifications(for: chatID, in: .current())
+        Self.clearDeliveredNotifications(for: chatID)
     }
 
-    nonisolated private static func clearDeliveredNotifications(
-        for chatID: String,
-        in center: UNUserNotificationCenter
-    ) {
+    nonisolated private static func clearDeliveredNotifications(for chatID: String) {
         guard !chatID.isEmpty else { return }
 
+        let center = UNUserNotificationCenter.current()
         center.getDeliveredNotifications { notifications in
             let identifiers = notifications.compactMap { notification in
                 let content = notification.request.content
@@ -212,17 +130,31 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     : nil
             }
             guard !identifiers.isEmpty else { return }
-            center.removeDeliveredNotifications(withIdentifiers: identifiers)
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
         }
     }
 
-    // Show banner + play sound even when the app is in the foreground
+    /// The server pushes to every registered device unconditionally — it has no
+    /// reliable view of which one you are looking at. Suppression is a client
+    /// decision, made here: stay quiet only for the conversation that is open
+    /// on screen right now, and alert for everything else even in the
+    /// foreground.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        let content = notification.request.content
+        let chatID = content.userInfo["chatID"] as? String ?? content.threadIdentifier
+
+        Task { @MainActor [weak self] in
+            if !chatID.isEmpty, self?.store?.selectedChatID == chatID {
+                self?.clearDeliveredNotifications(for: chatID)
+                completionHandler([])
+            } else {
+                completionHandler([.banner, .sound])
+            }
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -234,7 +166,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         let chatID = content.userInfo["chatID"] as? String
             ?? content.threadIdentifier
 
-        Self.clearDeliveredNotifications(for: chatID, in: center)
+        Self.clearDeliveredNotifications(for: chatID)
 
         if response.actionIdentifier == Self.replyAction,
            let textResponse = response as? UNTextInputNotificationResponse {

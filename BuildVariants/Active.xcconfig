@@ -1,2 +1,0 @@
-// Replace only the include path below to switch the app build variant.
-#include "Remote.xcconfig"

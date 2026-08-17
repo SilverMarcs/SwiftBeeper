@@ -3,16 +3,19 @@ import Observation
 import OSLog
 
 struct ServerEndpoint: Equatable, Sendable {
-    nonisolated static let embedded = ServerEndpoint(
-        baseURL: URL(string: "http://127.0.0.1:23374")!,
-        isEmbedded: true
+    /// Stand-in for "Relay has not been pointed at a server yet". `.invalid` is
+    /// a reserved TLD, so any request that slips past the onboarding gate fails
+    /// fast instead of quietly reaching something real.
+    nonisolated static let unconfigured = ServerEndpoint(
+        baseURL: URL(string: "https://unconfigured.invalid")!,
+        isConfigured: false
     )
 
     let baseURL: URL
-    let isEmbedded: Bool
+    let isConfigured: Bool
 
     nonisolated var identity: String {
-        isEmbedded ? "embedded" : baseURL.absoluteString
+        isConfigured ? baseURL.absoluteString : "unconfigured"
     }
 
     nonisolated static func remote(from input: String) throws -> ServerEndpoint {
@@ -43,7 +46,7 @@ struct ServerEndpoint: Equatable, Sendable {
         guard let url = components.url else {
             throw ServerConnectionError.invalidURL
         }
-        return ServerEndpoint(baseURL: url, isEmbedded: false)
+        return ServerEndpoint(baseURL: url, isConfigured: true)
     }
 }
 
@@ -67,11 +70,12 @@ enum ServerConnectionError: LocalizedError {
     }
 }
 
-/// Configures the single server runtime selected by the active build variant.
+/// Owns the remote EasyMatrix server Relay talks to: which URL, and the
+/// administrative secret for it. Every runtime is remote — the client never
+/// hosts a backend itself.
 @MainActor
 @Observable
 final class ServerConnection {
-    #if REMOTE_ONLY
     private static let remoteURLKey = "server.remoteURL"
     nonisolated private static let manageSecretKeyPrefix = "serverManageSecret|"
 
@@ -81,96 +85,37 @@ final class ServerConnection {
         subsystem: Bundle.main.bundleIdentifier ?? "Relay",
         category: "ServerConnection"
     )
-    #else
-    let backend: EasyMatrixBackend
-    #endif
 
     private(set) var endpoint: ServerEndpoint
-    #if REMOTE_ONLY
     private(set) var isUpdatingRemoteServer = false
-    #endif
     private var activeManageSecret: String
 
     convenience init() {
-        #if REMOTE_ONLY
-        self.init(
-            defaults: .standard,
-            keychain: .shared
-        )
-        #else
-        self.init(backend: .shared)
-        #endif
+        self.init(defaults: .standard, keychain: .shared)
     }
 
-    #if REMOTE_ONLY
-    init(
-        defaults: UserDefaults,
-        keychain: KeychainManager
-    ) {
+    init(defaults: UserDefaults, keychain: KeychainManager) {
         self.defaults = defaults
         self.keychain = keychain
 
         let savedURL = defaults.string(forKey: Self.remoteURLKey) ?? ""
         let savedEndpoint = try? ServerEndpoint.remote(from: savedURL)
-        let initialEndpoint = savedEndpoint ?? .embedded
-        let initialManageSecret = savedEndpoint.flatMap {
+        endpoint = savedEndpoint ?? .unconfigured
+        activeManageSecret = savedEndpoint.flatMap {
             keychain.load(key: Self.manageSecretKey(for: $0))
         } ?? ""
-        endpoint = initialEndpoint
-        activeManageSecret = initialManageSecret
         APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
     }
-    #else
-    init(backend: EasyMatrixBackend) {
-        self.backend = backend
-        endpoint = .embedded
-        activeManageSecret = backend.manageSecret
-        APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
-    }
-    #endif
 
-    #if REMOTE_ONLY
     var remoteURLString: String {
-        endpoint.isEmbedded ? "" : endpoint.baseURL.absoluteString
+        endpoint.isConfigured ? endpoint.baseURL.absoluteString : ""
     }
-    #endif
 
     var needsRemoteConfiguration: Bool {
-        #if REMOTE_ONLY
-        endpoint.isEmbedded
-        #else
-        false
-        #endif
+        !endpoint.isConfigured
     }
 
-    var hasEverBeenReady: Bool {
-        #if REMOTE_ONLY
-        true
-        #else
-        backend.hasEverBeenReady
-        #endif
-    }
-
-    var failureMessage: String? {
-        #if REMOTE_ONLY
-        nil
-        #else
-        guard case .crashed(let message) = backend.state else {
-            return nil
-        }
-        return message
-        #endif
-    }
-
-    func prepare() async {
-        APIConfiguration.configure(endpoint: endpoint, manageSecret: activeManageSecret)
-        #if !REMOTE_ONLY
-        await backend.start()
-        #endif
-    }
-
-    #if REMOTE_ONLY
-    /// Validates and persists a remote endpoint for the remote-only edition.
+    /// Validates and persists a new remote endpoint.
     @discardableResult
     func updateRemoteServer(
         remoteURL input: String,
@@ -212,21 +157,7 @@ final class ServerConnection {
         logger.info("Using remote server \(self.endpoint.baseURL.absoluteString, privacy: .public)")
         return true
     }
-    #endif
 
-    func retry() async {
-        #if !REMOTE_ONLY
-        await backend.start()
-        #endif
-    }
-
-    func recoverIfNeeded() async {
-        #if !REMOTE_ONLY
-        await backend.recoverIfNeeded()
-        #endif
-    }
-
-    #if REMOTE_ONLY
     func validateRemoteAccess(remoteURL input: String, accessKey: String) async throws {
         let endpoint = try ServerEndpoint.remote(from: input)
         try await validate(endpoint)
@@ -278,5 +209,4 @@ final class ServerConnection {
     nonisolated private static func manageSecretKey(for endpoint: ServerEndpoint) -> String {
         "\(manageSecretKeyPrefix)\(endpoint.identity)"
     }
-    #endif
 }

@@ -16,10 +16,7 @@ struct RelayApp: App {
 
     init() {
         let serverConnection = ServerConnection()
-        let sessionIdentity = serverConnection.needsRemoteConfiguration
-            ? "unconfigured"
-            : serverConnection.endpoint.identity
-        let sessionStore = SessionStore(endpointIdentity: sessionIdentity)
+        let sessionStore = SessionStore(endpointIdentity: serverConnection.endpoint.identity)
         let notificationService = NotificationService()
         let audioPlayerService = AudioPlayerService()
         let chatStore = ChatStore(
@@ -28,11 +25,11 @@ struct RelayApp: App {
         )
         notificationService.store = chatStore
         notificationService.sessionStore = sessionStore
+        AppDelegate.notificationService = notificationService
         #if os(macOS)
         AppDelegate.chatStore = chatStore
         chatStore.handleAppActivation(NSApplication.shared.isActive)
         #else
-        AppDelegate.notificationService = notificationService
         PhoneWatchConnectivityService.shared.start(
             sessionStore: sessionStore,
             serverConnection: serverConnection

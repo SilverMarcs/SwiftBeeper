@@ -101,7 +101,7 @@ extension APIClient {
 }
 
 extension APIClient {
-    static func registerPushDevice(token: String) async throws -> Bool {
+    static func registerPushDevice(token: String, platform: String) async throws {
         struct Body: Encodable {
             let token: String
             let platform: String
@@ -109,19 +109,17 @@ extension APIClient {
         }
         struct Response: Decodable {
             let success: Bool
-            let enabled: Bool
         }
 
         let url = APIConfiguration.baseURL.appending(path: "/v1/push/devices")
-        let response: Response = try await post(
+        let _: Response = try await post(
             url: url,
             body: Body(
                 token: token,
-                platform: "apple",
+                platform: platform,
                 serverURL: APIConfiguration.baseURL.absoluteString
             )
         )
-        return response.enabled
     }
 
     static func unregisterPushDevice(token: String) async throws {

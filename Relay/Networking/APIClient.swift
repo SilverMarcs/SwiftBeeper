@@ -60,11 +60,9 @@ enum APIClient {
     }
 
     static func request(url: URL, method: HTTPMethod, accessToken: String) -> URLRequest {
-        // The backend is in-process on localhost, so healthy requests return
-        // in well under a second. Cap the wait far below URLSession's 60 s
-        // default so that a request caught mid-rebind (e.g. connecting just as
-        // iOS reaps the socket on foreground) fails fast and lets the caller
-        // retry, instead of leaving a tap hanging for a minute.
+        // Cap the wait far below URLSession's 60 s default so a request that
+        // lands on an unreachable server fails fast and lets the caller retry,
+        // instead of leaving a tap hanging for a minute.
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.httpMethod = method.rawValue
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")

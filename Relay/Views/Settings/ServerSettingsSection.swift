@@ -1,6 +1,5 @@
 import SwiftUI
 
-#if REMOTE_ONLY
 struct ServerSettingsSection: View {
     @Environment(ServerConnection.self) private var serverConnection
     @Environment(SessionStore.self) private var sessionStore
@@ -57,4 +56,3 @@ struct ServerSettingsSection: View {
         }
     }
 }
-#endif

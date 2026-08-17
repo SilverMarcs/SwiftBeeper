@@ -1,16 +1,13 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    #if REMOTE_ONLY
     @Environment(ServerConnection.self) private var serverConnection
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
     @Environment(NotificationService.self) private var notificationService
     @State private var model = ServerSetupModel()
-    #endif
 
     var body: some View {
-        #if REMOTE_ONLY
         Group {
             switch model.stage {
             case .automatic:
@@ -30,9 +27,6 @@ struct OnboardingView: View {
         .environment(sessionStore)
         .environment(chatStore)
         .environment(notificationService)
-        #else
-        BeeperSignInView(startsWithRecoveryKey: false)
-        #endif
     }
 }
 

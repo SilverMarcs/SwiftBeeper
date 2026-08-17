@@ -33,8 +33,6 @@ final class RealtimeService {
     private var lastSequence = 0
     private var hasConnectedBefore = false
     private var shouldRun = false
-    private var appIsActive = true
-    private var supportsPresence = false
     private(set) var realtimeError: String?
 
     weak var eventHandler: RealtimeEventHandler?
@@ -54,22 +52,12 @@ final class RealtimeService {
         lastSequence = 0
     }
 
-    func setAppIsActive(_ isActive: Bool) {
-        guard appIsActive != isActive else { return }
-        appIsActive = isActive
-
-        Task { [weak self] in
-            await self?.sendPresence()
-        }
-    }
-
     // MARK: - Private
 
     private func connect() {
         guard shouldRun else { return }
         closeConnection()
         realtimeConnectionID = UUID()
-        supportsPresence = false
 
         let webSocketTask = APIClient.makeWebSocketTask()
         self.webSocketTask = webSocketTask
@@ -157,15 +145,9 @@ final class RealtimeService {
             lastSequence = 0
             let requiresResync = hasConnectedBefore
             hasConnectedBefore = true
-            supportsPresence = (envelope.version ?? 1) >= 2
-            // Report presence before subscribing so an inactive-but-connected
-            // client never briefly suppresses push delivery.
-            await sendPresence()
             await sendSubscriptionsAllChats()
             eventHandler?.realtimeDidConnect(requiresResync: requiresResync)
         case "subscriptions.updated":
-            break
-        case "presence.updated":
             break
         case "error":
             if let message = envelope.message {
@@ -235,23 +217,6 @@ final class RealtimeService {
         }
     }
 
-    private func sendPresence() async {
-        guard supportsPresence, let webSocketTask else { return }
-
-        let command = PresenceSetCommand(
-            requestID: "presence-\(UUID().uuidString)",
-            active: appIsActive
-        )
-
-        do {
-            let payload = try JSONEncoder().encode(command)
-            try await webSocketTask.send(.data(payload))
-        } catch {
-            guard shouldRun else { return }
-            eventHandler?.realtimeDidReceiveError("Could not update realtime presence: \(error.localizedDescription)")
-        }
-    }
-
     private func scheduleReconnect(connectionID: UUID, error: Error) {
         guard shouldRun,
               connectionID == realtimeConnectionID,
@@ -313,7 +278,6 @@ private final class PingContinuationGate: @unchecked Sendable {
 
 private struct WebSocketEnvelope: Decodable {
     let type: String
-    let version: Int?
     let requestID: String?
     let chatID: String?
     let message: String?
@@ -322,13 +286,12 @@ private struct WebSocketEnvelope: Decodable {
     let seq: Int?
 
     enum CodingKeys: String, CodingKey {
-        case type, version, requestID, chatID, message, ids, entries, seq
+        case type, requestID, chatID, message, ids, entries, seq
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         type = try container.decode(String.self, forKey: .type)
-        version = try? container.decodeIfPresent(Int.self, forKey: .version)
         requestID = try? container.decodeIfPresent(String.self, forKey: .requestID)
         chatID = try? container.decodeIfPresent(String.self, forKey: .chatID)
         message = try? container.decodeIfPresent(String.self, forKey: .message)
@@ -352,10 +315,4 @@ private struct SubscriptionsSetCommand: Encodable {
     let type = "subscriptions.set"
     let requestID: String
     let chatIDs: [String]
-}
-
-private struct PresenceSetCommand: Encodable {
-    let type = "presence.set"
-    let requestID: String
-    let active: Bool
 }

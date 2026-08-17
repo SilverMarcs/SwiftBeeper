@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 
-#if REMOTE_ONLY
 @MainActor
 @Observable
 final class ServerSettingsModel {
@@ -69,4 +68,3 @@ final class ServerSettingsModel {
         }
     }
 }
-#endif

@@ -11,10 +11,6 @@ enum APIConfiguration {
         storage.snapshot.endpoint.identity
     }
 
-    static var isEmbedded: Bool {
-        storage.snapshot.endpoint.isEmbedded
-    }
-
     static var manageSecret: String {
         storage.snapshot.manageSecret
     }
@@ -41,7 +37,7 @@ private final class Storage: @unchecked Sendable {
     }
 
     private let lock = NSLock()
-    private var value = Snapshot(endpoint: .embedded, manageSecret: "")
+    private var value = Snapshot(endpoint: .unconfigured, manageSecret: "")
 
     var snapshot: Snapshot {
         lock.withLock { value }

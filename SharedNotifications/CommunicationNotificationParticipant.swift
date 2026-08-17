@@ -1,14 +1,8 @@
-#if os(iOS)
 import Foundation
 
 struct CommunicationNotificationParticipant: Sendable, Equatable {
     let id: String
     let name: String
-
-    init(id: String, name: String) {
-        self.id = id
-        self.name = name
-    }
 
     init?(userInfo: [String: Any]) {
         guard
@@ -19,7 +13,7 @@ struct CommunicationNotificationParticipant: Sendable, Equatable {
         else {
             return nil
         }
-        self.init(id: id, name: name)
+        self.id = id
+        self.name = name
     }
 }
-#endif

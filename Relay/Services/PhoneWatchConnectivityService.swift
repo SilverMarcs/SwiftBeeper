@@ -41,8 +41,8 @@ final class PhoneWatchConnectivityService: NSObject, WCSessionDelegate {
     }
 
     private func response(for operation: String, chatID: String?, text: String?) async -> [String: Any] {
-        guard serverConnection?.endpoint.isEmbedded == false else {
-            return ["error": "The watch companion requires Relay's remote-server edition."]
+        guard serverConnection?.endpoint.isConfigured == true else {
+            return ["error": "Open Relay on iPhone and connect it to your server first."]
         }
         guard let accessToken = sessionStore?.accessToken, !accessToken.isEmpty else {
             return ["error": "Open Relay on iPhone and sign in first."]

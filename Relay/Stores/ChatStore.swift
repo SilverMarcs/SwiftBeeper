@@ -245,7 +245,6 @@ final class ChatStore: RealtimeEventHandler {
     private var scheduledChatsRefreshTask: Task<Void, Never>?
     private var scheduledMessagesRefreshTask: Task<Void, Never>?
     private var loadMessagesTask: Task<Void, Never>?
-    private var lastNotifiedMessageIDByChatID: [String: String] = [:]
 
     init(
         realtimeService: RealtimeService,
@@ -282,10 +281,6 @@ final class ChatStore: RealtimeEventHandler {
 
     func chat(byID chatID: String) -> Chat? {
         chatsByID[chatID] ?? searchResults?.first(where: { $0.id == chatID })
-    }
-
-    func isPrimaryInboxChat(_ chat: Chat) -> Bool {
-        chat.isLowPriority != true && chat.isArchived != true
     }
 
     // MARK: - Open-chat accessors
@@ -372,10 +367,10 @@ final class ChatStore: RealtimeEventHandler {
         }
     }
 
-    /// Called once the embedded backend is confirmed running after the app
-    /// returns to the foreground. The websocket and any in-flight requests die
-    /// while the app is suspended, so reconnect realtime (its `ready` event
-    /// re-syncs the chat list) and reload the open chat's timeline.
+    /// Called when the app returns to the foreground. The websocket and any
+    /// in-flight requests die while the app is suspended, so reconnect realtime
+    /// (its `ready` event re-syncs the chat list) and reload the open chat's
+    /// timeline.
     func handleAppForeground() {
         guard !APIClient.accessToken.isEmpty else { return }
         realtimeService.start()
@@ -391,11 +386,12 @@ final class ChatStore: RealtimeEventHandler {
         persistCacheImmediately()
     }
 
+    /// macOS window focus. Unlike scene-phase changes this does not tear the
+    /// websocket down — the app is still running — it only clears alerts for
+    /// the conversation the user is now looking at.
     func handleAppActivation(_ isActive: Bool) {
-        realtimeService.setAppIsActive(isActive)
-        if isActive, let chatID = selectedChatID {
-            notificationService.clearDeliveredNotifications(for: chatID)
-        }
+        guard isActive, let chatID = selectedChatID else { return }
+        notificationService.clearDeliveredNotifications(for: chatID)
     }
 
     func clearState() {
@@ -427,7 +423,6 @@ final class ChatStore: RealtimeEventHandler {
         }
         outgoingSendTasks = [:]
         outgoingMessagesByChatID = [:]
-        lastNotifiedMessageIDByChatID = [:]
     }
 
     // MARK: - Chat list loading
@@ -1108,12 +1103,12 @@ final class ChatStore: RealtimeEventHandler {
 
             reconcileOutgoingMessages(with: incoming, chatID: chatID)
 
+            // Hydrated events are authoritative. Edits and reactions target
+            // the original message ID, so the normal merge updates in place.
+            // Background chats are not merged here — they reload on open — and
+            // alerting for them is the server's job (see `push.go`).
             if chatID == selectedChatID {
-                // Hydrated events are authoritative. Edits and reactions target
-                // the original message ID, so the normal merge updates in place.
                 applyIncomingMessages(incoming, chatID: chatID)
-            } else {
-                await notify(incoming, chatID: chatID)
             }
         }
     }
@@ -1191,19 +1186,6 @@ final class ChatStore: RealtimeEventHandler {
         case .lowPriority: return chat.isLowPriority == true
         case .archive: return chat.isArchived == true
         case .unread: return chat.unreadCount > 0 || chat.isMarkedUnread == true
-        }
-    }
-
-    /// Posts notifications for a background chat directly from the realtime payload.
-    private func notify(_ incoming: [Message], chatID: String) async {
-        guard let chat = chat(byID: chatID), chat.isMuted != true, isPrimaryInboxChat(chat) else { return }
-
-        for message in incoming {
-            if message.isOutgoing(in: chat) || message.isMembershipEvent || message.isReaction { continue }
-            if Date().timeIntervalSince(message.timestamp) > 60 { continue }
-            if message.id == lastNotifiedMessageIDByChatID[chatID] { continue }
-            lastNotifiedMessageIDByChatID[chatID] = message.id
-            notificationService.postNewMessageNotification(message: message, chat: chat)
         }
     }
 
