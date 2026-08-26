@@ -94,16 +94,11 @@ struct MessageRowView: View {
 
     private enum BubbleSlot: Equatable {
         case attachment(String?)
-        case textWithUrls
-        case linkPill(String)
         case text
     }
 
     private var lastBubbleSlot: BubbleSlot? {
         if message.isDeletedMessage { return .text }
-        if let urls = message.extractedURLs, let last = urls.last {
-            return .linkPill(last.absoluteString)
-        }
         if message.hasText { return .text }
         if let attachments = message.attachments, let last = attachments.last {
             return .attachment(last.id)
@@ -135,7 +130,7 @@ struct MessageRowView: View {
             if message.isDeletedMessage {
                 Group {
                     if message.hasRetainedDeletedContent {
-                        Text(message.displayText.markdownAttributed)
+                        Text(styledMessageText(message.displayText, isOutgoing: isOutgoing))
                             .strikethrough()
                     } else {
                         Label(message.displayText, systemImage: "trash")
@@ -158,27 +153,8 @@ struct MessageRowView: View {
                 }
             }
 
-            if !message.isDeletedMessage, let urls = message.extractedURLs, !urls.isEmpty {
-                let textWithoutURLs = message.textWithoutURLs
-                if let textWithoutURLs, !textWithoutURLs.isEmpty {
-                    Text(textWithoutURLs.markdownAttributed)
-                        .foregroundStyle(isOutgoing ? .white : .primary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .messageBubbleChrome(isOutgoing: isOutgoing)
-                        .overlay(alignment: alignment) {
-                            reactionsOverlay(if: .textWithUrls, isOutgoing: isOutgoing)
-                        }
-                }
-
-                ForEach(urls, id: \.absoluteString) { url in
-                    LinkPillView(url: url)
-                        .overlay(alignment: alignment) {
-                            reactionsOverlay(if: .linkPill(url.absoluteString), isOutgoing: isOutgoing)
-                        }
-                }
-            } else if !message.isDeletedMessage, message.hasText {
-                Text(message.displayText.markdownAttributed)
+            if !message.isDeletedMessage, let visibleText = message.visibleText {
+                Text(styledMessageText(visibleText, isOutgoing: isOutgoing))
                     .foregroundStyle(isOutgoing ? .white : .primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -322,6 +298,14 @@ struct MessageRowView: View {
 
     private var currentParticipant: ChatParticipant? {
         chat.participants?.items.first(where: { $0.isSelf == true })
+    }
+
+    private func styledMessageText(_ text: String, isOutgoing: Bool) -> AttributedString {
+        text.messageAttributed(
+            mentionIDs: message.mentions,
+            participants: chat.participants?.items ?? [],
+            isOutgoing: isOutgoing
+        )
     }
 
     private var showIncomingIdentity: Bool {

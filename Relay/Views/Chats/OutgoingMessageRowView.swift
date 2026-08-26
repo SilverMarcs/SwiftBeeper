@@ -31,7 +31,11 @@ struct OutgoingMessageRowView: View {
                 }
 
                 if !message.text.isEmpty {
-                    Text(message.text.markdownAttributed)
+                    Text(message.text.messageAttributed(
+                        mentionIDs: nil,
+                        participants: [],
+                        isOutgoing: true
+                    ))
                         .foregroundStyle(.white)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)

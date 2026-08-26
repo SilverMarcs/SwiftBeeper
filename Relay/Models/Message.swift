@@ -66,6 +66,9 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let isSender: Bool?
     let attachments: [Attachment]?
     let isUnread: Bool?
+    /// Mentioned participant IDs. A nil value represents legacy messages whose
+    /// mentions must be inferred from their displayed text.
+    let mentions: [String]?
     let reactions: [Reaction]?
     let linkedMessageID: String?
     /// True when the server has redacted this message. Its original content may
@@ -103,8 +106,8 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
             return "\(name) reacted \(emoji)"
         }
 
-        if hasText, let text {
-            return text.trimmed
+        if let visibleText {
+            return visibleText
         }
 
         if let attachments, let first = attachments.first {
@@ -134,31 +137,31 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         !isReaction && !isMembershipEvent
     }
 
-    var hasText: Bool {
-        guard let trimmed = text?.trimmed, !trimmed.isEmpty else { return false }
+    /// User-visible body text after suppressing Matrix's required media
+    /// filename fallback. Media captions remain visible.
+    var visibleText: String? {
+        guard let trimmed = text?.trimmed, !trimmed.isEmpty else { return nil }
+        guard trimmed.unicodeScalars.contains(where: { scalar in
+            !CharacterSet.whitespacesAndNewlines.contains(scalar)
+                && scalar.properties.generalCategory != .control
+                && scalar.properties.generalCategory != .format
+        }) else { return nil }
+
         // The API echoes the attachment filename as message text for media messages.
         // Suppress it so we don't show a redundant text bubble (e.g. "image" or "IMG_2647.jpeg").
         if let attachments, !attachments.isEmpty {
-            if attachments.contains(where: { $0.fileName == trimmed }) { return false }
+            if attachments.contains(where: { attachment in
+                guard let fileName = attachment.fileName?.trimmed, !fileName.isEmpty else { return false }
+                return fileName.localizedStandardCompare(trimmed) == .orderedSame
+            }) {
+                return nil
+            }
         }
-        return true
+
+        return trimmed
     }
 
-    var extractedURLs: [URL]? {
-        let urls = text?.extractedURLs ?? []
-        return urls.isEmpty ? nil : urls
-    }
-
-    var textWithoutURLs: String? {
-        guard let text = text?.trimmed, !text.isEmpty else { return nil }
-        guard let urls = extractedURLs else { return text }
-        var result = text
-        for url in urls {
-            result = result.replacingOccurrences(of: url.absoluteString, with: "")
-        }
-        let trimmed = result.trimmed
-        return trimmed.isEmpty ? nil : trimmed
-    }
+    var hasText: Bool { visibleText != nil }
 
     var timestampText: String {
         let calendar = Calendar.app
@@ -220,6 +223,7 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
             isSender: detail.isSender ?? isSender,
             attachments: mergedAttachments,
             isUnread: detail.isUnread ?? isUnread,
+            mentions: detail.mentions ?? mentions,
             reactions: mergedReactions,
             linkedMessageID: detail.linkedMessageID ?? linkedMessageID,
             isDeleted: detail.isDeleted ?? isDeleted,
