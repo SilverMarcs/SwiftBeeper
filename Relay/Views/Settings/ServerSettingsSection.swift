@@ -54,5 +54,9 @@ struct ServerSettingsSection: View {
         .onAppear {
             model.configure(using: serverConnection)
         }
+
+        #if DEBUG && os(macOS)
+        PushPrivacyTestSection(model: model)
+        #endif
     }
 }

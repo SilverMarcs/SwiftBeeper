@@ -44,6 +44,24 @@ struct AccessTokenResponse: Decodable {
     }
 }
 
+struct PushPrivacyTestState: Decodable {
+    let registered: Bool
+    let gatewayURL: String?
+    let registeredAt: Date?
+    let lastNotification: PushPrivacyTestNotification?
+}
+
+struct PushPrivacyTestNotification: Decodable {
+    let receivedAt: Date
+    let eventID: String?
+    let roomID: String?
+    let unreadCount: Int
+    let deviceCount: Int
+    let fields: [String]
+    let hadContent: Bool
+    let hadSender: Bool
+}
+
 extension APIClient {
     static func manageState() async throws -> ManageState {
         try await get(url: manageURL("state"))
@@ -93,6 +111,44 @@ extension APIClient {
     static func mintAccessToken() async throws -> AccessTokenResponse {
         struct Empty: Encodable {}
         return try await post(url: manageURL("access-token"), body: Empty())
+    }
+
+    static func pushPrivacyTestState(manageSecret: String) async throws -> PushPrivacyTestState {
+        let request = pushPrivacyTestRequest(method: .get, manageSecret: manageSecret)
+        return try await send(request)
+    }
+
+    static func registerPushPrivacyTest(
+        gatewayURL: String,
+        manageSecret: String
+    ) async throws -> PushPrivacyTestState {
+        struct Body: Encodable { let gatewayURL: String }
+        var request = try request(
+            url: manageURL("push-privacy-test"),
+            method: .post,
+            body: Body(gatewayURL: gatewayURL),
+            accessToken: accessToken
+        )
+        request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
+        return try await send(request)
+    }
+
+    static func removePushPrivacyTest(manageSecret: String) async throws -> PushPrivacyTestState {
+        let request = pushPrivacyTestRequest(method: .delete, manageSecret: manageSecret)
+        return try await send(request)
+    }
+
+    private static func pushPrivacyTestRequest(
+        method: HTTPMethod,
+        manageSecret: String
+    ) -> URLRequest {
+        var request = request(
+            url: manageURL("push-privacy-test"),
+            method: method,
+            accessToken: accessToken
+        )
+        request.setValue(manageSecret, forHTTPHeaderField: "X-EasyMatrix-Manage-Secret")
+        return request
     }
 
     private static func manageURL(_ path: String) -> URL {
