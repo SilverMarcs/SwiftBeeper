@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "relay-push",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-12",
+  "workers_dev": true,
+  "vars": {
+    "APNS_TOPIC": "com.SilverMarcs.RelayEmbedded",
+    "APNS_ENVIRONMENT": "sandbox"
+  },
+  "d1_databases": [
+    {
+      "binding": "DEVICES",
+      "database_name": "relay-push-devices",
+      "database_id": "2f71e858-43c9-4745-983d-a722b02997a8"
+    }
+  ]
+}

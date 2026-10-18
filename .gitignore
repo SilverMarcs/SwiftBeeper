@@ -1,10 +1,14 @@
-SwiftTerminal/Claude/Bridge/node_modules/
-node_modules
-run.sh
-build.sh
-.codex/
+/.codex/
+/.DS_Store
 /build/
-
-# EasyMatrix Go backend — large prebuilt artifact, regenerate with
-# Relay/Helpers/build-easymatrix-xcframework.sh
-Frameworks/EasyMatrix.xcframework/
+/Matrix/Build/
+/Matrix/SDKSource/
+*.xcuserstate
+xcuserdata/
+/PushServer/node_modules/
+/PushServer/.wrangler/
+/PushServer/dist/
+/PushServer/.dev.vars*
+/PushServer/.env*
+*.p8
+/App/Configuration/*.private.json

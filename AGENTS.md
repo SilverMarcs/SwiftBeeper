@@ -67,11 +67,13 @@ If SwiftData is configured to use CloudKit:
 
 ## Project structure
 
+- Maintain `Relay.xcodeproj` directly in Xcode. Do not add project generators or a second project specification.
+- Keep one multiplatform `Relay` app target and shared scheme for macOS, iPhone, and iPad.
+- The `App` folder uses Xcode folder synchronization; app source files do not need individual project entries.
 - Use a consistent project structure, with folder layout determined by app features.
 - Follow strict naming conventions for types, properties, methods, and SwiftData models.
 - Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
-- Write unit tests for core application logic.
-- Only write UI tests if unit tests are not possible.
+- Do not add test files, test targets, probe apps, or test harnesses. Validate with builds and the app itself.
 - Add code comments and documentation comments as needed.
 - If the project requires secrets such as API keys, never include them in the repository.
 
@@ -79,8 +81,3 @@ If SwiftData is configured to use CloudKit:
 ## PR instructions
 
 - If installed, make sure SwiftLint returns no warnings or errors before committing.
-
-
-## API Specifications
-
-For the complete HTTP REST API (OpenAPI) and WebSocket live event stream specifications, refer to **[API_SPECS.md](API_SPECS.md)**. This file contains all endpoint definitions, request/response schemas, authentication details, and the WebSocket subscription model.

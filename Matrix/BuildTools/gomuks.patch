@@ -1,0 +1,144 @@
+--- a/pkg/hicli/database/room.go
++++ b/pkg/hicli/database/room.go
+@@ -72,2 +72,4 @@
+-		  AND COALESCE((SELECT rowid FROM timeline WHERE event_rowid = $2), -1)
+-		          > COALESCE((SELECT rowid FROM timeline WHERE event_rowid = preview_event_rowid), 0)
++		  AND (preview_event_rowid IS NULL OR preview_event_rowid = 0
++		       OR NOT EXISTS (SELECT 1 FROM timeline WHERE event_rowid = preview_event_rowid)
++		       OR (SELECT rowid FROM timeline WHERE event_rowid = $2)
++		          > (SELECT rowid FROM timeline WHERE event_rowid = preview_event_rowid))
+--- a/pkg/hicli/hicli.go
++++ b/pkg/hicli/hicli.go
+@@ -37,8 +37,10 @@
+-	DB          *database.Database
+-	CryptoDB    *dbutil.Database
+-	Account     *database.Account
+-	Client      *mautrix.Client
+-	Crypto      *crypto.OlmMachine
+-	CryptoStore *crypto.SQLCryptoStore
+-	ClientStore *database.ClientStateStore
+-	Log         zerolog.Logger
++	syncFilterID    string
++	syncFilterScope string
++	DB              *database.Database
++	CryptoDB        *dbutil.Database
++	Account         *database.Account
++	Client          *mautrix.Client
++	Crypto          *crypto.OlmMachine
++	CryptoStore     *crypto.SQLCryptoStore
++	ClientStore     *database.ClientStateStore
++	Log             zerolog.Logger
+@@ -175,0 +178,8 @@
++	return h.startClient(ctx, userID, expectedAccount, false)
++}
++
++func (h *HiClient) StartLocal(ctx context.Context, userID id.UserID) error {
++	return h.startClient(ctx, userID, nil, true)
++}
++
++func (h *HiClient) startClient(ctx context.Context, userID id.UserID, expectedAccount *database.Account, localOnly bool) error {
+@@ -211,16 +221,2 @@
+-		err = h.CheckServerVersions(ctx)
+-		if err != nil {
+-			return err
+-		}
+-		err = h.Crypto.Load(ctx)
+-		if err != nil {
+-			return fmt.Errorf("failed to load olm machine: %w", err)
+-		}
+-
+-		h.Verified, err = h.checkIsCurrentDeviceVerified(ctx)
+-		if err != nil {
+-			return err
+-		}
+-		zerolog.Ctx(ctx).Debug().Bool("verified", h.Verified).Msg("Checked current device verification status")
+-		if h.Verified {
+-			err = h.loadPrivateKeys(ctx)
++		if !localOnly {
++			err = h.CheckServerVersions(ctx)
+@@ -230 +226,19 @@
+-			go h.Sync()
++		}
++		err = h.Crypto.Load(ctx)
++		if err != nil {
++			return fmt.Errorf("failed to load olm machine: %w", err)
++		}
++
++		h.Verified, err = h.checkIsCurrentDeviceVerified(ctx)
++		if err != nil {
++			return err
++		}
++		zerolog.Ctx(ctx).Debug().Bool("verified", h.Verified).Msg("Checked current device verification status")
++		if h.Verified {
++			err = h.loadPrivateKeys(ctx, !localOnly)
++			if err != nil {
++				return err
++			}
++			if !localOnly {
++				go h.Sync()
++			}
+@@ -260 +274,6 @@
+-func (h *HiClient) Sync() {
++func (h *HiClient) Sync() { h.SyncLocalContext(context.Background()) }
++
++func (h *HiClient) SyncLocalContext(parent context.Context) {
++	if parent.Err() != nil {
++		return
++	}
+@@ -273 +292,5 @@
+-	ctx, cancel := context.WithCancel(context.Background())
++	ctx, cancel := context.WithCancel(parent)
++	if ctx.Err() != nil {
++		cancel()
++		return
++	}
+@@ -277 +300,5 @@
+-	go h.LoadPushRules(h.Log.WithContext(ctx))
++	if h.PushRules.Load() == nil {
++		go func() {
++			h.LoadPushRules(h.Log.WithContext(ctx))
++		}()
++	}
+--- /dev/null
++++ b/pkg/hicli/local_sync.go
+@@ -0,0 +1,10 @@
++package hicli
++
++// PauseLocalSync keeps the account, crypto state and database open. Sync() owns
++// its request queue context; cancelling it also stops background key requests.
++func (h *HiClient) PauseLocalSync() {
++	h.Client.StopSync()
++	if cancel := h.stopSync.Swap(nil); cancel != nil {
++		(*cancel)()
++	}
++}
+--- a/pkg/hicli/syncwrap.go
++++ b/pkg/hicli/syncwrap.go
+@@ -112,4 +112,14 @@
+-// Filter ID save and load are intentionally no-ops: we want to recreate filters when restarting syncing
+-
+-func (h *hiStore) SaveFilterID(_ context.Context, _ id.UserID, _ string) error { return nil }
+-func (h *hiStore) LoadFilterID(_ context.Context, _ id.UserID) (string, error) { return "", nil }
++// Reuse this session's filter across background/foreground sync restarts.
++func (h *hiStore) filterScope(userID id.UserID) string {
++	return fmt.Sprintf("%s|%s|%t", userID, h.Client.HomeserverURL, h.Verified)
++}
++func (h *hiStore) SaveFilterID(_ context.Context, userID id.UserID, filterID string) error {
++	h.syncFilterID, h.syncFilterScope = filterID, h.filterScope(userID)
++	return nil
++}
++func (h *hiStore) LoadFilterID(_ context.Context, userID id.UserID) (string, error) {
++	if h.syncFilterScope != h.filterScope(userID) {
++		return "", nil
++	}
++	return h.syncFilterID, nil
++}
+--- a/pkg/hicli/verify.go
++++ b/pkg/hicli/verify.go
+@@ -71 +71 @@
+-func (h *HiClient) loadPrivateKeys(ctx context.Context) error {
++func (h *HiClient) loadPrivateKeys(ctx context.Context, online bool) error {
+@@ -102 +102,2 @@
+-	zerolog.Ctx(ctx).Debug().Msg("Fetching key backup version")
++	if !online { return nil }
++zerolog.Ctx(ctx).Debug().Msg("Fetching key backup version")

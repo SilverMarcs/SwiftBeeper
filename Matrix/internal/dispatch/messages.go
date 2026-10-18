@@ -1,0 +1,849 @@
+package dispatch
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
+	"go.mau.fi/gomuks/pkg/hicli"
+	"go.mau.fi/gomuks/pkg/hicli/database"
+	"go.mau.fi/util/emojirunes"
+	"io"
+	"maunium.net/go/mautrix"
+	matrixattachment "maunium.net/go/mautrix/crypto/attachment"
+	"maunium.net/go/mautrix/event"
+	"maunium.net/go/mautrix/id"
+
+	"relay/core/internal/compat"
+	errs "relay/core/internal/errors"
+)
+
+const (
+	messagePageSize = 40
+)
+
+const timelineSelectBase = `
+	SELECT event.rowid, timeline.rowid,
+	       event.room_id, event_id, sender, type, state_key, timestamp, content, decrypted, decrypted_type,
+	       unsigned, local_content, transaction_id, redacted_by, relates_to, relation_type,
+	       megolm_session_id, decryption_error, send_error, reactions, last_edit_rowid, unread_type
+	FROM timeline
+	JOIN event ON event.rowid = timeline.event_rowid
+	WHERE timeline.room_id = ?
+`
+
+var errSkipEvent = errors.New("skip event")
+
+func (s *Dispatcher) listMessages(w http.ResponseWriter, r *http.Request) error {
+	chatID := readChatID(r, "")
+	if chatID == "" {
+		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+	}
+	direction, err := parseDirection(r.URL.Query().Get("direction"))
+	if err != nil {
+		return err
+	}
+	cursorValue, err := parseMessageCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		return err
+	}
+
+	lookup, err := s.buildAccountLookup(r.Context())
+	if err != nil {
+		return err
+	}
+	room, err := s.rt.Client().DB.Room.Get(r.Context(), id.RoomID(chatID))
+	if err != nil {
+		return errs.Internal(fmt.Errorf("failed to get room: %w", err))
+	}
+	if room == nil {
+		return errs.NotFound("Chat not found")
+	}
+
+	lastReadKey := s.loadLastReadSortKey(r.Context(), id.RoomID(chatID))
+	var lastReadInt int64
+	if lastReadKey != "" {
+		lastReadInt, _ = strconv.ParseInt(lastReadKey, 10, 64)
+	}
+
+	// A UI page has one SDK history budget. Do not keep fetching batches merely
+	// to hide filtered state/reaction events from the caller.
+	const scanLimit = messagePageSize + 1
+	var events []*database.Event
+	var hasMore bool
+	events, hasMore, err = s.loadTimelineEvents(r.Context(), room.ID, cursorValue, direction, scanLimit)
+	if err != nil {
+		return err
+	}
+	if direction == "before" && r.URL.Query().Has("cursor") && len(events) == 0 && hasMore {
+		response, loadErr := s.rt.Client().PaginateServer(r.Context(), room.ID, scanLimit, false)
+		if errors.Is(loadErr, hicli.ErrPaginationAlreadyInProgress) {
+			// The room-open task is already supplying this page.
+		} else if loadErr != nil {
+			return errs.Internal(loadErr)
+		} else {
+			events, hasMore = response.Events, response.HasMore
+		}
+	}
+
+	s.RefreshPreview(r.Context(), room.ID, events)
+	room, _ = s.rt.Client().DB.Room.Get(r.Context(), room.ID)
+	if room == nil {
+		return errs.NotFound("Chat not found")
+	}
+	summaries, err := s.loadChatSummaries(r.Context(), []*database.Room{room}, 0, lookup, true)
+	if err != nil {
+		return err
+	}
+	summary := summaries[room.ID]
+	if err = s.populateLastEditRefs(r.Context(), events); err != nil {
+		return err
+	}
+	memberNames := s.loadNamesForEvents(r.Context(), events)[room.ID]
+	reactions, err := s.loadReactionMap(r.Context(), room.ID, events)
+	if err != nil {
+		return err
+	}
+	messages := make([]compat.Message, 0, messagePageSize)
+	nextCursor := cursorValue
+	for index, evt := range events {
+		nextCursor = int64(evt.TimelineRowID)
+		mapped, mapErr := s.mapEventToMessage(r.Context(), evt, room, lookup, reactionBundle{Names: memberNames, Reactions: reactions})
+		if mapErr != nil {
+			continue
+		}
+		if lastReadInt != 0 && !mapped.IsSender {
+			sortKey, _ := strconv.ParseInt(mapped.SortKey, 10, 64)
+			mapped.IsUnread = sortKey > lastReadInt
+		}
+		messages = append(messages, mapped)
+		if len(messages) == messagePageSize {
+			hasMore = hasMore || index < len(events)-1
+			break
+		}
+	}
+	var preview *compat.Message
+	if summary.preview != nil {
+		if mapped, mapErr := s.mapEventToMessage(r.Context(), summary.preview, room, lookup, reactionBundle{Names: summary.names}); mapErr == nil {
+			preview = &mapped
+		}
+	}
+
+	// Load other participants' read receipts to determine the "read by other" position.
+	var lastReadByOtherSortKey string
+	otherReceipts, _ := s.loadOtherReadReceipts(r.Context(), id.RoomID(chatID))
+	if len(otherReceipts) > 0 {
+		maxOtherRead := computeMaxOtherRead(otherReceipts)
+		if maxOtherRead != 0 {
+			lastReadByOtherSortKey = strconv.FormatInt(maxOtherRead, 10)
+		}
+	}
+
+	return writeJSON(w, compat.ListMessagesOutput{
+		Items:                  messages,
+		HasMore:                hasMore,
+		OldestCursor:           strconv.FormatInt(nextCursor, 10),
+		Preview:                preview,
+		LastReadByOtherSortKey: lastReadByOtherSortKey,
+	})
+}
+
+func (s *Dispatcher) sendMessage(w http.ResponseWriter, r *http.Request) error {
+	var req struct {
+		ChatID string `json:"chatID"`
+		compat.SendMessageInput
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		return err
+	}
+	chatID := readChatID(r, req.ChatID)
+	if chatID == "" {
+		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+	}
+	text := strings.TrimSpace(req.Text.Or(""))
+	hasAttachment := strings.TrimSpace(req.Attachment.UploadID) != ""
+	if text == "" && !hasAttachment {
+		return errs.Validation(map[string]any{"text": "text or attachment is required"})
+	}
+
+	cli := s.rt.Client()
+	roomID := id.RoomID(chatID)
+	if room, err := cli.DB.Room.Get(r.Context(), roomID); err != nil {
+		return errs.Internal(fmt.Errorf("failed to get room: %w", err))
+	} else if room == nil {
+		return errs.NotFound("Chat not found")
+	}
+
+	var base *event.MessageEventContent
+	var err error
+	if hasAttachment {
+		base, err = s.buildAttachmentMessageContent(r.Context(), &req.Attachment, roomID)
+		if err != nil {
+			return err
+		}
+	}
+
+	var relatesTo *event.RelatesTo
+	replyToMessageID := strings.TrimSpace(req.ReplyToMessageID.Or(""))
+	if replyToMessageID != "" {
+		relatesTo = &event.RelatesTo{InReplyTo: &event.InReplyTo{EventID: id.EventID(replyToMessageID)}}
+	}
+
+	dbEvent, err := cli.SendMessage(r.Context(), roomID, base, nil, text, relatesTo, nil, nil)
+	if err != nil {
+		return errs.Internal(fmt.Errorf("failed to send message: %w", err))
+	}
+	pendingMessageID := dbEvent.TransactionID
+	if pendingMessageID == "" {
+		pendingMessageID = string(dbEvent.ID)
+	}
+
+	return writeJSON(w, compat.SendMessageOutput{ChatID: chatID, PendingMessageID: pendingMessageID})
+}
+
+func (s *Dispatcher) editMessage(w http.ResponseWriter, r *http.Request) error {
+	var req struct {
+		ChatID    string `json:"chatID"`
+		MessageID string `json:"messageID"`
+		compat.EditMessageInput
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		return err
+	}
+	chatID := readChatID(r, req.ChatID)
+	if chatID == "" {
+		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+	}
+	messageID := readMessageID(r, req.MessageID)
+	if messageID == "" {
+		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		return errs.Validation(map[string]any{"text": "text is required"})
+	}
+
+	cli := s.rt.Client()
+	targetEvent, err := cli.DB.Event.GetByID(r.Context(), id.EventID(messageID))
+	if err != nil {
+		return errs.Internal(fmt.Errorf("failed to get target message: %w", err))
+	}
+	if targetEvent == nil {
+		return errs.NotFound("Message not found")
+	}
+	if eventHasAttachment(targetEvent) {
+		return errs.Validation(map[string]any{"messageID": "cannot edit messages with attachments"})
+	}
+
+	relatesTo := &event.RelatesTo{Type: event.RelReplace, EventID: id.EventID(messageID)}
+	if _, err = cli.SendMessage(r.Context(), id.RoomID(chatID), nil, nil, req.Text, relatesTo, nil, nil); err != nil {
+		return errs.Internal(fmt.Errorf("failed to edit message: %w", err))
+	}
+
+	return writeJSON(w, compat.EditMessageOutput{ChatID: chatID, MessageID: messageID, Success: true})
+}
+
+func (s *Dispatcher) addReaction(w http.ResponseWriter, r *http.Request) error {
+	var req struct {
+		ChatID    string `json:"chatID"`
+		MessageID string `json:"messageID"`
+		compat.AddReactionInput
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		return err
+	}
+	chatID := readChatID(r, req.ChatID)
+	if chatID == "" {
+		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+	}
+	messageID := readMessageID(r, req.MessageID)
+	if messageID == "" {
+		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+	}
+	if strings.TrimSpace(req.ReactionKey) == "" {
+		return errs.Validation(map[string]any{"reactionKey": "reactionKey is required"})
+	}
+
+	content := &event.ReactionEventContent{
+		RelatesTo: event.RelatesTo{
+			Type:    event.RelAnnotation,
+			EventID: id.EventID(messageID),
+			Key:     req.ReactionKey,
+		},
+	}
+	dbEvt, err := s.rt.Client().Send(r.Context(), id.RoomID(chatID), event.EventReaction, content, false, false)
+	if err != nil {
+		return errs.Internal(fmt.Errorf("failed to add reaction: %w", err))
+	}
+	transactionID := req.TransactionID
+	if transactionID == "" && dbEvt != nil {
+		transactionID = dbEvt.TransactionID
+	}
+	if transactionID == "" {
+		transactionID = randomID()
+	}
+
+	return writeJSON(w, compat.AddReactionOutput{
+		Success:       true,
+		ChatID:        chatID,
+		MessageID:     messageID,
+		ReactionKey:   req.ReactionKey,
+		TransactionID: transactionID,
+	})
+}
+
+func (s *Dispatcher) removeReaction(w http.ResponseWriter, r *http.Request) error {
+	var req struct {
+		ChatID    string `json:"chatID"`
+		MessageID string `json:"messageID"`
+		compat.RemoveReactionInput
+	}
+	if err := decodeOptionalJSON(r, &req); err != nil {
+		return err
+	}
+	chatID := readChatID(r, req.ChatID)
+	if chatID == "" {
+		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+	}
+	messageID := readMessageID(r, req.MessageID)
+	if messageID == "" {
+		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+	}
+	reactionKey := strings.TrimSpace(req.ReactionKey)
+	if reactionKey == "" {
+		reactionKey = strings.TrimSpace(r.URL.Query().Get("reactionKey"))
+	}
+	if reactionKey == "" {
+		return errs.Validation(map[string]any{"reactionKey": "reactionKey is required"})
+	}
+
+	cli := s.rt.Client()
+	roomID := id.RoomID(chatID)
+	related, err := cli.DB.Event.GetRelatedEvents(r.Context(), roomID, id.EventID(messageID), event.RelAnnotation)
+	if err != nil {
+		return errs.Internal(fmt.Errorf("failed to query related events: %w", err))
+	}
+	toRedact := make([]id.EventID, 0)
+	for _, evt := range related {
+		if evt.Sender != cli.Account.UserID || evt.RedactedBy != "" {
+			continue
+		}
+		var reaction event.ReactionEventContent
+		if err = json.Unmarshal(evt.GetContent(), &reaction); err != nil {
+			continue
+		}
+		if reaction.RelatesTo.Key == reactionKey {
+			toRedact = append(toRedact, evt.ID)
+		}
+	}
+
+	for _, reactionEventID := range toRedact {
+		if _, err = cli.Client.RedactEvent(r.Context(), roomID, reactionEventID, mautrix.ReqRedact{}); err != nil {
+			return errs.Internal(fmt.Errorf("failed to remove reaction: %w", err))
+		}
+	}
+
+	return writeJSON(w, compat.RemoveReactionOutput{
+		Success:     true,
+		ChatID:      chatID,
+		MessageID:   messageID,
+		ReactionKey: reactionKey,
+	})
+}
+
+func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, cursorValue int64, direction string, limit int) ([]*database.Event, bool, error) {
+	cli := s.rt.Client()
+	// SQLite skips state/reaction/edit rows without repeatedly materializing
+	// raw batches in Go. Network pagination remains limited to one page.
+	query := timelineSelectBase + ` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker')) AND (relation_type IS NULL OR relation_type<>'m.replace')`
+	if direction == "before" {
+		query += ` AND (?=0 OR timeline.rowid<?) ORDER BY timeline.rowid DESC LIMIT ?`
+	} else {
+		query += ` AND (?=0 OR timeline.rowid>?) ORDER BY timeline.rowid ASC LIMIT ?`
+	}
+
+	rows, err := cli.DB.Query(ctx, query, roomID, cursorValue, cursorValue, limit)
+	if err != nil {
+		return nil, false, errs.Internal(fmt.Errorf("failed to query timeline: %w", err))
+	}
+	defer rows.Close()
+
+	events := make([]*database.Event, 0, limit)
+	for rows.Next() {
+		evt := &database.Event{}
+		if _, scanErr := evt.Scan(rows); scanErr != nil {
+			return nil, false, errs.Internal(fmt.Errorf("failed to scan timeline event: %w", scanErr))
+		}
+		events = append(events, evt)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, false, errs.Internal(fmt.Errorf("timeline query failed: %w", err))
+	}
+
+	hasMore := len(events) == limit
+	if direction == "before" {
+		room, _ := cli.DB.Room.Get(ctx, roomID)
+		hasMore = hasMore || (room != nil && room.PrevBatch != database.PrevBatchPaginationComplete)
+	}
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].TimelineRowID > events[j].TimelineRowID
+	})
+	return events, hasMore, nil
+}
+
+func (s *Dispatcher) populateLastEditRefs(ctx context.Context, events []*database.Event) error {
+	cli := s.rt.Client()
+	if cli == nil || len(events) == 0 {
+		return nil
+	}
+
+	byEditRowID := make(map[database.EventRowID][]*database.Event)
+	editRowIDs := make([]database.EventRowID, 0)
+	for _, evt := range events {
+		if evt == nil || evt.LastEditRowID == nil {
+			continue
+		}
+		editRowID := *evt.LastEditRowID
+		if editRowID <= 0 || editRowID == evt.RowID {
+			continue
+		}
+		if _, ok := byEditRowID[editRowID]; !ok {
+			editRowIDs = append(editRowIDs, editRowID)
+		}
+		byEditRowID[editRowID] = append(byEditRowID[editRowID], evt)
+	}
+	if len(editRowIDs) == 0 {
+		return nil
+	}
+
+	editEvents, err := cli.DB.Event.GetByRowIDs(ctx, editRowIDs...)
+	if err != nil {
+		return errs.Internal(fmt.Errorf("failed to load edited message references: %w", err))
+	}
+	editByRowID := make(map[database.EventRowID]*database.Event, len(editEvents))
+	for _, evt := range editEvents {
+		if evt != nil {
+			editByRowID[evt.RowID] = evt
+		}
+	}
+	for editRowID, targets := range byEditRowID {
+		editEvt := editByRowID[editRowID]
+		if editEvt == nil || editEvt.RedactedBy != "" {
+			continue
+		}
+		for _, target := range targets {
+			target.LastEditRef = editEvt
+		}
+	}
+	return nil
+}
+
+type reactionBundle struct {
+	Names     map[string]string
+	Reactions map[id.EventID][]compat.Reaction
+}
+
+func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, events []*database.Event) (map[id.EventID][]compat.Reaction, error) {
+	if len(events) == 0 {
+		return map[id.EventID][]compat.Reaction{}, nil
+	}
+	eventIDs := make([]id.EventID, 0, len(events))
+	for _, evt := range events {
+		eventIDs = append(eventIDs, evt.ID)
+	}
+	result, err := s.rt.Client().DB.Event.GetReactions(ctx, roomID, eventIDs...)
+	if err != nil {
+		return nil, errs.Internal(fmt.Errorf("failed to read reactions: %w", err))
+	}
+	output := make(map[id.EventID][]compat.Reaction, len(result))
+	for evtID, reactionResult := range result {
+		if reactionResult == nil || len(reactionResult.Events) == 0 {
+			continue
+		}
+		seen := make(map[string]struct{})
+		reactions := make([]compat.Reaction, 0, len(reactionResult.Events))
+		for _, reactionEvt := range reactionResult.Events {
+			if reactionEvt.RedactedBy != "" {
+				continue
+			}
+			var reaction event.ReactionEventContent
+			if err = json.Unmarshal(reactionEvt.GetContent(), &reaction); err != nil {
+				continue
+			}
+			key := strings.TrimSpace(reaction.RelatesTo.Key)
+			if key == "" {
+				continue
+			}
+			dedupeKey := string(reactionEvt.Sender) + "\x1f" + key
+			if _, ok := seen[dedupeKey]; ok {
+				continue
+			}
+			seen[dedupeKey] = struct{}{}
+			reactionID := string(reactionEvt.Sender) + key
+			reactions = append(reactions, compat.Reaction{
+				ID:            reactionID,
+				ReactionKey:   key,
+				ParticipantID: string(reactionEvt.Sender),
+				Emoji:         utf8.RuneCountInString(key) <= 100 && emojirunes.IsOnlyEmojis(key),
+			})
+		}
+		if len(reactions) > 0 {
+			output[evtID] = reactions
+		}
+	}
+	return output, nil
+}
+
+func (s *Dispatcher) mapEventToMessage(ctx context.Context, evt *database.Event, room *database.Room, lookup *accountLookup, reactions reactionBundle) (compat.Message, error) {
+	if evt == nil {
+		return compat.Message{}, errSkipEvent
+	}
+	evtType := evt.GetType().Type
+	if evt.RelationType == event.RelReplace {
+		return compat.Message{}, errSkipEvent
+	}
+	if evtType != event.EventMessage.Type && evtType != event.EventSticker.Type &&
+		evtType != event.EventReaction.Type && evtType != event.StateMember.Type {
+		return compat.Message{}, errSkipEvent
+	}
+
+	accountID, _ := inferAccountForRoom(room.ID, lookup)
+	if lookup.roomAccounts != nil {
+		if resolved, ok := lookup.roomAccounts[room.ID]; ok {
+			accountID = resolved.accountID
+		}
+	}
+
+	message := compat.Message{
+		ID:        string(evt.ID),
+		ChatID:    string(evt.RoomID),
+		AccountID: accountID,
+		SenderID:  string(evt.Sender),
+		Timestamp: evt.Timestamp.Time.UTC(),
+		SortKey:   messageSortKey(evt),
+		IsSender:  evt.Sender == s.rt.Client().Account.UserID,
+		IsDeleted: evt.RedactedBy != "",
+		Reactions: reactions.Reactions[evt.ID],
+	}
+	if name, ok := reactions.Names[string(evt.Sender)]; ok {
+		message.SenderName = name
+	} else {
+		message.SenderName = string(evt.Sender)
+	}
+	if replyTo := evt.GetReplyTo(); replyTo != "" {
+		message.LinkedMessageID = string(replyTo)
+	}
+
+	switch evtType {
+	case event.StateMember.Type:
+		var member event.MemberEventContent
+		if err := json.Unmarshal(evt.GetContent(), &member); err != nil {
+			return compat.Message{}, errSkipEvent
+		}
+		switch member.Membership {
+		case event.MembershipJoin:
+			message.Type = compat.MessageType("MEMBER_JOIN")
+		case event.MembershipInvite:
+			message.Type = compat.MessageType("MEMBER_INVITE")
+		default:
+			return compat.Message{}, errSkipEvent
+		}
+		if evt.StateKey != nil && strings.TrimSpace(*evt.StateKey) != "" {
+			message.SenderID = *evt.StateKey
+			message.IsSender = message.SenderID == string(s.rt.Client().Account.UserID)
+		}
+		if name, ok := reactions.Names[message.SenderID]; ok {
+			message.SenderName = name
+		} else if strings.TrimSpace(member.Displayname) != "" {
+			message.SenderName = member.Displayname
+		} else {
+			message.SenderName = message.SenderID
+		}
+		if message.Type == compat.MessageType("MEMBER_JOIN") {
+			message.Text = message.SenderName + " joined the chat"
+		} else {
+			message.Text = message.SenderName + " was invited to the chat"
+		}
+		return message, nil
+	case event.EventReaction.Type:
+		var reaction event.ReactionEventContent
+		if err := json.Unmarshal(evt.GetContent(), &reaction); err == nil {
+			message.Type = compat.MessageType("REACTION")
+			message.Text = reaction.RelatesTo.Key
+			if message.LinkedMessageID == "" {
+				message.LinkedMessageID = string(reaction.RelatesTo.EventID)
+			}
+		}
+		return message, nil
+	case event.EventSticker.Type, event.EventMessage.Type:
+		if err := applyStoredMessageContent(&message, evt, evtType); err != nil {
+			return compat.Message{}, errSkipEvent
+		}
+		return message, nil
+	default:
+		return compat.Message{}, errSkipEvent
+	}
+}
+
+func applyStoredMessageContent(message *compat.Message, evt *database.Event, evtType string) error {
+	var content event.MessageEventContent
+	if err := json.Unmarshal(evt.GetContent(), &content); err != nil {
+		return err
+	}
+	// Matrix replies and bridged per-message profiles may include compatibility
+	// fallback text in Body. Relay renders those structures separately, so
+	// forwarding the fallback duplicates quoted text and any URLs it contains.
+	content.RemoveReplyFallback()
+	content.RemovePerMessageProfileFallback()
+
+	message.Type = mapMessageType(evtType, content.MsgType)
+	if content.Mentions != nil {
+		message.Mentions = make([]string, 0, len(content.Mentions.UserIDs)+1)
+		for _, userID := range content.Mentions.UserIDs {
+			if userID != "" {
+				message.Mentions = append(message.Mentions, string(userID))
+			}
+		}
+		if content.Mentions.Room {
+			message.Mentions = append(message.Mentions, "@room")
+		}
+	}
+	if attachment, ok := messageAttachment(content, evtType); ok {
+		message.Attachments = []compat.Attachment{attachment}
+		// Matrix requires a Body for media and commonly fills it with the
+		// filename. GetCaption returns only actual authored caption text.
+		message.Text = content.GetCaption()
+	} else {
+		message.Text = content.Body
+		if message.Text == "" && evt.LocalContent != nil {
+			message.Text = evt.LocalContent.SanitizedHTML
+		}
+	}
+	return nil
+}
+
+func mapMessageType(evtType string, msgType event.MessageType) compat.MessageType {
+	if evtType == event.EventSticker.Type {
+		return compat.MessageType("STICKER")
+	}
+	switch msgType {
+	case event.MsgNotice:
+		return compat.MessageType("NOTICE")
+	case event.MsgImage:
+		return compat.MessageType("IMAGE")
+	case event.MsgVideo:
+		return compat.MessageType("VIDEO")
+	case event.MsgAudio:
+		return compat.MessageType("AUDIO")
+	case event.MsgFile:
+		return compat.MessageType("FILE")
+	case event.MsgLocation:
+		return compat.MessageType("LOCATION")
+	default:
+		return compat.MessageType("TEXT")
+	}
+}
+
+func messageAttachment(content event.MessageEventContent, evtType string) (compat.Attachment, bool) {
+	msgType := content.MsgType
+	if evtType == event.EventSticker.Type {
+		msgType = "m.sticker"
+	}
+	isMedia := msgType == event.MsgImage || msgType == event.MsgVideo || msgType == event.MsgAudio || msgType == event.MsgFile || msgType == "m.sticker"
+	if !isMedia {
+		return compat.Attachment{}, false
+	}
+	uri := string(content.URL)
+	if content.File != nil {
+		if uri == "" {
+			uri = string(content.File.URL)
+		}
+		// Register the encryption info so the asset serve endpoint can decrypt.
+		// Note: some events have both content.URL and content.File set to the
+		// same mxc:// URL (e.g. own outbound messages in encrypted rooms).
+		registerEncryptedFile(uri, content.File)
+	}
+	att := compat.Attachment{
+		ID:       uri,
+		SrcURL:   uri,
+		FileName: content.GetFileName(),
+		MimeType: "",
+		Type:     compat.AttachmentType("unknown"),
+	}
+	if content.Info != nil {
+		att.MimeType = content.Info.MimeType
+		att.FileSize = float64(content.Info.Size)
+		if content.Info.Width > 0 || content.Info.Height > 0 {
+			att.Size = compat.AttachmentSize{Width: float64(content.Info.Width), Height: float64(content.Info.Height)}
+		}
+		if content.Info.Duration > 0 {
+			att.Duration = float64(content.Info.Duration) / 1000.0
+		}
+		if content.Info.ThumbnailURL != "" {
+			att.PosterImg = string(content.Info.ThumbnailURL)
+		}
+	}
+	switch msgType {
+	case event.MsgImage:
+		att.Type = compat.AttachmentType("img")
+		att.IsGif = strings.EqualFold(att.MimeType, "image/gif")
+	case event.MsgVideo:
+		att.Type = compat.AttachmentType("video")
+	case event.MsgAudio:
+		att.Type = compat.AttachmentType("audio")
+		att.IsVoiceNote = content.MSC3245Voice != nil
+	case "m.sticker":
+		att.Type = compat.AttachmentType("img")
+		att.IsSticker = true
+	}
+	return att, true
+}
+
+func messageSortKey(evt *database.Event) string {
+	if evt.TimelineRowID != 0 {
+		return strconv.FormatInt(int64(evt.TimelineRowID), 10)
+	}
+	if evt.RowID != 0 {
+		return strconv.FormatInt(int64(evt.RowID), 10)
+	}
+	return strconv.FormatInt(evt.Timestamp.UnixMilli(), 10)
+}
+
+func eventHasAttachment(evt *database.Event) bool {
+	var content event.MessageEventContent
+	if err := json.Unmarshal(evt.GetContent(), &content); err != nil {
+		return false
+	}
+	if content.URL != "" {
+		return true
+	}
+	return content.File != nil && content.File.URL != ""
+}
+
+func (s *Dispatcher) buildAttachmentMessageContent(ctx context.Context, attachment *compat.MessageAttachmentInput, roomID id.RoomID) (*event.MessageEventContent, error) {
+	if attachment == nil {
+		return nil, nil
+	}
+	meta, err := s.loadUploadMetadataByID(attachment.UploadID)
+	if err != nil {
+		return nil, err
+	}
+	fileName := strings.TrimSpace(attachment.FileName.Or(""))
+	if fileName == "" {
+		fileName = meta.FileName
+	}
+	mimeType := strings.TrimSpace(attachment.MimeType.Or(""))
+	if mimeType == "" {
+		mimeType = meta.MimeType
+	}
+	file, err := os.Open(meta.FilePath)
+	if err != nil {
+		return nil, errs.Internal(fmt.Errorf("failed to open uploaded asset: %w", err))
+	}
+	defer file.Close()
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, errs.Internal(fmt.Errorf("failed to stat uploaded asset: %w", err))
+	}
+
+	room, err := s.rt.Client().DB.Room.Get(ctx, roomID)
+	if err != nil || room == nil {
+		return nil, fmt.Errorf("attachment room lookup failed")
+	}
+	var uploadReader io.Reader = file
+	var encryptedReader io.ReadSeekCloser
+	var encryptedFile *event.EncryptedFileInfo
+	uploadMime, uploadName := mimeType, fileName
+	if room.EncryptionEvent != nil {
+		encryptedFile = &event.EncryptedFileInfo{EncryptedFile: *matrixattachment.NewEncryptedFile()}
+		encryptedReader = encryptedFile.EncryptStream(file)
+		uploadReader = encryptedReader
+		uploadMime, uploadName = "application/octet-stream", "encrypted"
+	}
+	uploadResp, err := s.rt.Client().Client.UploadMedia(ctx, mautrix.ReqUploadMedia{
+		Content: uploadReader, ContentLength: stat.Size(), ContentType: uploadMime, FileName: uploadName,
+	})
+	if encryptedReader != nil {
+		_ = encryptedReader.Close()
+	}
+	if err != nil {
+		return nil, errs.Internal(fmt.Errorf("failed to upload media to Matrix: %w", err))
+	}
+
+	msgType := messageTypeFromAttachment(mimeType, strings.TrimSpace(attachment.Type))
+	content := &event.MessageEventContent{
+		MsgType:  msgType,
+		Body:     fileName,
+		URL:      uploadResp.ContentURI.CUString(),
+		FileName: fileName,
+		Info: &event.FileInfo{
+			MimeType: mimeType,
+			Size:     int(stat.Size()),
+		},
+	}
+	if encryptedFile != nil {
+		encryptedFile.URL = uploadResp.ContentURI.CUString()
+		content.URL = ""
+		content.File = encryptedFile
+		registerEncryptedFile(string(encryptedFile.URL), encryptedFile)
+	}
+	if attachment.Size.Width > 0 || attachment.Size.Height > 0 {
+		content.Info.Width = int(attachment.Size.Width)
+		content.Info.Height = int(attachment.Size.Height)
+	}
+	duration := attachment.Duration.Or(0)
+	if duration <= 0 {
+		duration = meta.Duration
+	}
+	if duration > 0 {
+		content.Info.Duration = int(duration * 1000)
+	}
+	return content, nil
+}
+
+func messageTypeFromAttachment(mimeType, hint string) event.MessageType {
+	switch hint {
+	case "sticker":
+		return "m.sticker"
+	case "voiceNote":
+		return event.MsgAudio
+	}
+	if strings.HasPrefix(mimeType, "image/") {
+		return event.MsgImage
+	}
+	if strings.HasPrefix(mimeType, "video/") {
+		return event.MsgVideo
+	}
+	if strings.HasPrefix(mimeType, "audio/") {
+		return event.MsgAudio
+	}
+	return event.MsgFile
+}
+
+func (s *Dispatcher) deleteMessage(w http.ResponseWriter, r *http.Request) error {
+	chatID := readChatID(r, "")
+	if chatID == "" {
+		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+	}
+	messageID := readMessageID(r, "")
+	if messageID == "" {
+		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+	}
+
+	cli := s.rt.Client()
+	roomID := id.RoomID(chatID)
+	eventID := id.EventID(messageID)
+
+	_, err := cli.Client.RedactEvent(r.Context(), roomID, eventID, mautrix.ReqRedact{})
+	if err != nil {
+		return errs.Internal(fmt.Errorf("failed to redact event: %w", err))
+	}
+
+	return writeJSON(w, map[string]any{"success": true})
+}
