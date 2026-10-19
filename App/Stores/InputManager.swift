@@ -1,12 +1,8 @@
-import SwiftUI
-import PhotosUI
+import Observation
 import UniformTypeIdentifiers
 
-/// Drives everything composer-related: the per-chat draft text, the editing /
-/// reply lifecycle, attachment intake, and submitting. It sits on top of
-/// `ChatStore` (which owns the actual send/edit/outbox state) so that both
-/// the macOS/iPad inline composer (`MessageInputView`) and the iPhone
-/// `.searchable` input can drive the exact same state through one object.
+/// Per-chat drafts and attachment intake shared by the native composers.
+/// ChatStore owns sending, edits, and the transient outbox.
 @MainActor
 @Observable
 final class InputManager {
@@ -15,21 +11,14 @@ final class InputManager {
     /// Per-chat draft text, keyed by chat ID, so switching chats keeps drafts.
     private var draftsByChatID: [String: String] = [:]
     /// Attachments belong to the chat where intake began. In particular, a
-    /// PhotosPicker transfer may finish after the user has navigated elsewhere.
+    /// photo-library transfer may finish after the user has navigated elsewhere.
     private var pendingAttachmentsByChatID: [String: [PendingAttachment]] = [:]
     /// Remembers which chat owns the draft being edited so an edit finishing
     /// during navigation cannot clear the newly selected chat's draft.
     private var editingDraftChatID: String?
 
-    /// Set true to request the inline composer grab focus on its next appear
-    /// (e.g. right after tapping "Edit"). Only the inline composer observes
-    /// this — the iPhone `.searchable` field manages its own presentation.
+    /// Native composers consume this request when opening a chat, replying, or editing.
     var pendingFocus = false
-
-    /// Mirrors the inline composer's `FocusState` (set by `MessageInputView`)
-    /// so the iPad chat detail — which owns the scroll proxy — can scroll to
-    /// the bottom when the keyboard comes up.
-    var isComposerFocused = false
 
     init(chatStore: ChatStore) {
         self.chatStore = chatStore
@@ -48,11 +37,6 @@ final class InputManager {
             guard let selectedChatID else { return }
             draftsByChatID[selectedChatID] = newValue
         }
-    }
-
-    /// Binding for text fields (`TextField`, `.searchable`).
-    var draftBinding: Binding<String> {
-        Binding(get: { self.draft }, set: { self.draft = $0 })
     }
 
     var trimmedDraft: String { draft.trimmed }
@@ -98,8 +82,7 @@ final class InputManager {
     // MARK: - Editing / reply lifecycle
 
     /// Pull the message text into the draft when editing begins, and clear the
-    /// draft when the composer action ends. Call from an `.onChange` on
-    /// `chatStore.editingMessage?.id` so both platforms stay in sync.
+    /// draft when the composer action ends.
     func editingMessageDidChange() {
         if let editingMessage = chatStore.editingMessage {
             editingDraftChatID = editingMessage.chatID
@@ -111,9 +94,8 @@ final class InputManager {
     }
 
     func startEditing(_ message: Message, in chat: Chat) {
-        withAnimation {
-            chatStore.startEditing(message, in: chat)
-        }
+        chatStore.startEditing(message, in: chat)
+        editingMessageDidChange()
         pendingFocus = true
     }
 
@@ -124,7 +106,7 @@ final class InputManager {
     }
 
     func cancelComposerAction() {
-        withAnimation {
+        do {
             let editingChatID = chatStore.editingMessage?.chatID
             chatStore.cancelComposerAction()
             if let editingChatID {
@@ -209,34 +191,31 @@ final class InputManager {
 
     func handleFileImport(_ result: Result<URL, Error>, for chatID: String) {
         guard case .success(let url) = result else { return }
-        guard url.startAccessingSecurityScopedResource() else { return }
-        defer { url.stopAccessingSecurityScopedResource() }
-
-        guard let data = try? Data(contentsOf: url) else { return }
-        addAttachment(data: data, fileName: url.lastPathComponent, mimeType: url.mimeType, to: chatID)
+        let token = APIClient.accessToken
+        Task { [weak self] in
+            do {
+                let attachment = try await Task.detached(priority: .userInitiated) {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    return PendingAttachment(fileData: try Data(contentsOf: url), fileName: url.lastPathComponent, mimeType: url.mimeType)
+                }.value
+                guard let self, APIClient.accessToken == token else { return }
+                pendingAttachmentsByChatID[chatID, default: []].append(attachment)
+            } catch { self?.chatStore.messagesError = error.localizedDescription }
+        }
     }
 
-    func handlePhotoPick(_ item: PhotosPickerItem, for chatID: String) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-
-        let mimeType: String
-        let fileName: String
-
-        if let contentType = item.supportedContentTypes.first {
-            mimeType = contentType.preferredMIMEType ?? "application/octet-stream"
-            let ext = contentType.preferredFilenameExtension ?? "bin"
-            fileName = "photo.\(ext)"
-        } else {
-            mimeType = "image/jpeg"
-            fileName = "photo.jpg"
-        }
-
-        addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: chatID)
+    func reset() {
+        draftsByChatID = [:]
+        pendingAttachmentsByChatID = [:]
+        editingDraftChatID = nil
+        pendingFocus = false
     }
 
     func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard !providers.isEmpty, let targetChatID = selectedChatID else { return false }
 
+        let token = APIClient.accessToken
         for provider in providers {
             provider.loadFileRepresentation(forTypeIdentifier: UTType.item.identifier) { url, _ in
                 guard let url else { return }
@@ -245,6 +224,7 @@ final class InputManager {
                 let mimeType = url.mimeType
 
                 Task { @MainActor in
+                    guard APIClient.accessToken == token else { return }
                     self.addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: targetChatID)
                 }
             }

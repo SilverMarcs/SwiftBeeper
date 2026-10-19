@@ -1,6 +1,10 @@
 import Observation
-import SwiftUI
 import UserNotifications
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 @MainActor
 @Observable

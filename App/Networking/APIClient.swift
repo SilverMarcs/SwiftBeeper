@@ -91,9 +91,7 @@ enum APIClient {
     static func sendRaw(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await MatrixRuntime.shared.send(request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
+        let httpResponse = response
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             throw APIError.http(statusCode: httpResponse.statusCode, details: parseErrorMessage(from: data))

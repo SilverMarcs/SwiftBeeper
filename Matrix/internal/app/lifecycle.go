@@ -191,18 +191,8 @@ func (r *Runtime) startOpenRoomWork() {
 		if err != nil {
 			return
 		}
-		hasMessage := len(cached) > 0
-		// At most one recent/history page for an explicitly opened empty room.
-		if !hasMessage {
-			if response, err := cli.PaginateServer(ctx, room, 40, false); err == nil {
-				cached = append(cached, response.Events...)
-				r.dispatcher.RefreshPreview(ctx, room, response.Events)
-				meta, _ := cli.DB.Room.Get(ctx, room)
-				cli.EventHandler(&jsoncmd.SyncComplete{Rooms: map[id.RoomID]*jsoncmd.SyncRoom{room: {Meta: meta, Events: response.Events}}})
-			}
-		} else {
-			r.dispatcher.RefreshPreview(ctx, room, cached)
-		}
+		r.dispatcher.RefreshPreview(ctx, room, cached)
+
 		// Requeue at most four sessions which the SDK already checked. The SDK
 		// owns the requests and decryption; no parallel backup download loop.
 		if cli.KeyBackupKey == nil || cli.KeyBackupVersion == "" {

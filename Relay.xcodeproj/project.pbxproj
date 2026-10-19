@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4900F6EF78F8F5B2F3228ECA /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = FA828B92661D73409A155297 /* SwiftMediaViewer */; };
 		65E043351D7771289EF3323C /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 7A21AB7F64A017C4E07D2E60 /* SwiftOGG */; };
 		83EED2CC0BBF097DADEFEA72 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A83D128B2CDFDD7CC54624BF /* Foundation.framework */; };
 		AEE3943A528DF64BF01F17E1 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8B64CF2963A5AF17C253A2E0 /* Security.framework */; };
@@ -88,7 +87,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4900F6EF78F8F5B2F3228ECA /* SwiftMediaViewer in Frameworks */,
 				65E043351D7771289EF3323C /* SwiftOGG in Frameworks */,
 				AEE3943A528DF64BF01F17E1 /* Security.framework in Frameworks */,
 				E53ABCC329726B7AC4D841B1 /* SystemConfiguration.framework in Frameworks */,
@@ -160,7 +158,6 @@
 			);
 			name = Relay;
 			packageProductDependencies = (
-				FA828B92661D73409A155297 /* SwiftMediaViewer */,
 				7A21AB7F64A017C4E07D2E60 /* SwiftOGG */,
 			);
 			productName = Relay;
@@ -218,7 +215,6 @@
 			mainGroup = DC658091D1A7F7FB428FB8C2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				289DEDE04374286A5643DFAA /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */,
 				8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -444,7 +440,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -564,7 +560,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -580,8 +576,8 @@
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
 				INFOPLIST_FILE = "Configuration/Relay-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = NO;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = NO;
 				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphoneos*]" = audio;
 				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphonesimulator*]" = audio;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
@@ -627,8 +623,8 @@
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
 				INFOPLIST_FILE = "Configuration/Relay-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = NO;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = NO;
 				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphoneos*]" = audio;
 				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphonesimulator*]" = audio;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
@@ -695,14 +691,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		289DEDE04374286A5643DFAA /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/SilverMarcs/SwiftMediaViewer";
-			requirement = {
-				kind = revision;
-				revision = 6b18c8fb0d04e8ddb6cf773ccaec281ea5c7dc90;
-			};
-		};
 		8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/element-hq/swift-ogg";
@@ -718,11 +706,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */;
 			productName = SwiftOGG;
-		};
-		FA828B92661D73409A155297 /* SwiftMediaViewer */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 289DEDE04374286A5643DFAA /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */;
-			productName = SwiftMediaViewer;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

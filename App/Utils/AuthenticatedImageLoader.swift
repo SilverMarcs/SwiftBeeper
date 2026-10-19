@@ -1,26 +1,6 @@
 import Foundation
 
 enum AuthenticatedImageLoader {
-    /// Builds a plain URL that SwiftMediaViewer's `CachedAsyncImage`/`SMVImage`
-    /// can load without custom headers: mxc/localmxc/file URLs are routed
-    /// through the assets proxy with an asset-specific signature. The API
-    /// bearer token itself never appears in the image or video URL.
-    static func displayURL(for urlString: String?) -> URL? {
-        guard let urlString, let sourceURL = URL(string: urlString) else { return nil }
-
-        guard sourceURL.scheme == "mxc" || sourceURL.scheme == "localmxc" || sourceURL.scheme == "file" else {
-            return sourceURL
-        }
-
-        guard var components = URLComponents(url: APIConfiguration.assetsProxyURL, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-        components.queryItems = [
-            URLQueryItem(name: "url", value: urlString)
-        ]
-        return components.url
-    }
-
     static func buildRequest(for urlString: String) -> URLRequest? {
         guard let sourceURL = URL(string: urlString) else { return nil }
 

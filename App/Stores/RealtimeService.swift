@@ -4,7 +4,7 @@ import Observation
 @MainActor protocol RealtimeEventHandler: AnyObject {
     /// The event channel (re)connected — a good time to resync, since events may have
     /// been missed while disconnected.
-    func realtimeDidConnect(requiresResync: Bool)
+    func realtimeDidConnect()
     /// A sequence discontinuity or unhydrated event means at least one mutation
     /// could not be applied, so the UI reloads from the local database.
     func realtimeNeedsResync()
@@ -31,7 +31,6 @@ final class RealtimeService {
     private var realtimeConnectionID = UUID()
     private var reconnectAttempt = 0
     private var lastSequence = 0
-    private var hasConnectedBefore = false
     private var shouldRun = false
     private var messageChatIDs: Set<String> = []
     private(set) var realtimeError: String?
@@ -55,7 +54,6 @@ final class RealtimeService {
 
     func reset() {
         stop()
-        hasConnectedBefore = false
         messageChatIDs = []
     }
 
@@ -114,10 +112,8 @@ final class RealtimeService {
             reconnectAttempt = 0
             realtimeError = nil
             lastSequence = 0
-            let requiresResync = hasConnectedBefore
-            hasConnectedBefore = true
             await sendSubscriptionsAllChats()
-            eventHandler?.realtimeDidConnect(requiresResync: requiresResync)
+            eventHandler?.realtimeDidConnect()
         case "subscriptions.updated":
             break
         case "resync.required":
