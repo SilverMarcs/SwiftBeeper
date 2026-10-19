@@ -198,6 +198,9 @@
 					00CC2921912F47FC3C6615F8 = {
 						DevelopmentTeam = J52QUTREBS;
 						SystemCapabilities = {
+							com.apple.CommunicationNotifications = {
+								enabled = 1;
+							};
 							com.apple.Push = {
 								enabled = 1;
 							};

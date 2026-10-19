@@ -16,6 +16,8 @@ final class MobileComposerView: UIView, UITextViewDelegate, UIDropInteractionDel
     private let attach = UIButton(type: .system)
     private var attachmentIDs: [UUID] = []
     private var height: NSLayoutConstraint?
+    private var bottomPadding: NSLayoutConstraint?
+    private var placeholderTop: NSLayoutConstraint?
     var onSubmit: (() -> Void)?
     var onChooseFiles: (() -> Void)?
     var onChoosePhotos: (() -> Void)?
@@ -36,7 +38,9 @@ final class MobileComposerView: UIView, UITextViewDelegate, UIDropInteractionDel
         placeholder.font = .preferredFont(forTextStyle: .body); placeholder.textColor = .placeholderText
         placeholder.isUserInteractionEnabled = false
         text.addSubview(placeholder); placeholder.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([placeholder.leadingAnchor.constraint(equalTo: text.leadingAnchor, constant: 12), placeholder.topAnchor.constraint(equalTo: text.topAnchor, constant: 9)])
+        let placeholderTop = placeholder.topAnchor.constraint(equalTo: text.topAnchor, constant: 9)
+        self.placeholderTop = placeholderTop
+        NSLayoutConstraint.activate([placeholder.leadingAnchor.constraint(equalTo: text.leadingAnchor, constant: text.textContainerInset.left + text.textContainer.lineFragmentPadding), placeholderTop])
         var sendConfiguration = UIButton.Configuration.prominentGlass(); sendConfiguration.image = UIImage(systemName: "arrow.up"); sendConfiguration.cornerStyle = .capsule
         sendConfiguration.preferredSymbolConfigurationForImage = .init(pointSize: 16, weight: .semibold)
         send.configuration = sendConfiguration
@@ -58,11 +62,15 @@ final class MobileComposerView: UIView, UITextViewDelegate, UIDropInteractionDel
         let isPhone = UIDevice.current.userInterfaceIdiom == .phone
         row.isHidden = isPhone
         addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10), stack.topAnchor.constraint(equalTo: topAnchor, constant: isPhone ? 0 : 8), stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: isPhone ? 0 : -8)])
+        let bottomPadding = stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: isPhone ? 0 : -2)
+        self.bottomPadding = bottomPadding
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10), stack.topAnchor.constraint(equalTo: topAnchor, constant: isPhone ? 0 : 8), bottomPadding])
         text.translatesAutoresizingMaskIntoConstraints = false
-        height = textGlass.heightAnchor.constraint(equalToConstant: 40); height?.priority = .defaultHigh; height?.isActive = true
+        height = textGlass.heightAnchor.constraint(equalToConstant: 44); height?.priority = .defaultHigh; height?.isActive = true
+        // Keep the controls compact so the text field receives the row's width.
+        textGlass.setContentHuggingPriority(.defaultLow, for: .horizontal)
         for button in [attach, send, cancel] {
-            for constraint in [button.widthAnchor.constraint(greaterThanOrEqualToConstant: 44), button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)] { constraint.priority = .defaultHigh; constraint.isActive = true }
+            for constraint in [button.widthAnchor.constraint(equalToConstant: 44), button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)] { constraint.priority = .defaultHigh; constraint.isActive = true }
         }
         text.onSubmit = { [weak self] in self?.submit() }
         text.onCancel = { [weak context] in context?.composer.cancelComposerAction() }
@@ -104,14 +112,27 @@ final class MobileComposerView: UIView, UITextViewDelegate, UIDropInteractionDel
         }
     }
     private func resize() {
+        let font = text.font ?? .preferredFont(forTextStyle: .body)
+        // Balance the first line within the field's minimum height. Sharing this
+        // inset with the placeholder keeps the hint, caret, and text aligned.
+        let verticalInset = max(9, (44 - font.lineHeight) / 2)
+        let insets = UIEdgeInsets(top: verticalInset, left: 8, bottom: verticalInset, right: 8)
+        if text.textContainerInset != insets { text.textContainerInset = insets }
+        if placeholder.font != font { placeholder.font = font }
+        placeholderTop?.constant = verticalInset
         guard text.bounds.width > 0 else { return }
         let measured = text.sizeThatFits(CGSize(width: text.bounds.width, height: .greatestFiniteMagnitude)).height
-        let value = min(160, max(40, measured))
+        let value = min(160, max(44, measured))
         if height?.constant != value { height?.constant = value }
         text.isScrollEnabled = measured > 160
     }
     func textViewDidChange(_ textView: UITextView) { context.composer.draft = textView.text; placeholder.isHidden = !textView.text.isEmpty; resize() }
-    func textViewDidBeginEditing(_ textView: UITextView) { onFocus?() }
+    func textViewDidBeginEditing(_ textView: UITextView) { updateBottomPadding(); onFocus?() }
+    func textViewDidEndEditing(_ textView: UITextView) { updateBottomPadding() }
+    private func updateBottomPadding() {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+        bottomPadding?.constant = text.isFirstResponder ? -8 : -2
+    }
     func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText value: String) -> Bool {
         if value == "\n" && !text.insertingNewline { submit(); return false }; return true
     }

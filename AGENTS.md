@@ -69,6 +69,7 @@ If SwiftData is configured to use CloudKit:
 
 - Maintain `Relay.xcodeproj` directly in Xcode. Do not add project generators or a second project specification.
 - Keep one multiplatform `Relay` app target and shared scheme for macOS, iPhone, and iPad.
+- Install on the networked iPhone with `./run.sh ios --device`. Do not upload to Sqim unless explicitly requested.
 - The `App` folder uses Xcode folder synchronization; app source files do not need individual project entries.
 - Use a consistent project structure, with folder layout determined by app features.
 - Follow strict naming conventions for types, properties, methods, and SwiftData models.

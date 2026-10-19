@@ -1,5 +1,6 @@
 #if os(iOS)
 import UIKit
+import UserNotifications
 
 @MainActor
 final class SceneDelegate: NSObject, UIWindowSceneDelegate {
@@ -9,6 +10,12 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else { return }
         connect(scene)
+        // A cold launch can deliver the tap with the scene connection.
+        if let response = options.notificationResponse,
+           response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let chatID = response.notification.request.content.userInfo["chatID"] as? String {
+            context?.openNotificationChat(chatID)
+        }
     }
 
     func connect(_ scene: UIWindowScene) {
@@ -20,6 +27,7 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) { context?.foreground() }
+    func sceneWillResignActive(_ scene: UIScene) { context?.resignActive() }
     func sceneDidEnterBackground(_ scene: UIScene) { context?.background() }
 }
 #endif

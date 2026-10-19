@@ -15,7 +15,8 @@ final class AppContext {
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
     @ObservationIgnored private var startupTask: Task<Void, Never>?
     @ObservationIgnored private var appliedToken: String?
-    @ObservationIgnored private var isForeground = true
+    private(set) var isForeground = false
+    @ObservationIgnored private var pendingNotificationChatID: String?
 
     init() {
         URLProtocol.registerClass(MatrixURLProtocol.self)
@@ -57,12 +58,28 @@ final class AppContext {
             guard !Task.isCancelled else { return }
             await chats.updateAccessToken(token)
             guard !Task.isCancelled else { return }
+            openPendingNotificationChat()
             await notifications.configure(signedIn: !token.isEmpty)
         }
     }
 
+    func openNotificationChat(_ chatID: String) {
+        guard !chatID.isEmpty else { return }
+        pendingNotificationChatID = chatID
+        openPendingNotificationChat()
+    }
+
+    private func openPendingNotificationChat() {
+        guard isForeground, state == .ready, let chatID = pendingNotificationChatID else { return }
+        pendingNotificationChatID = nil
+        chats.openNotificationChat(chatID)
+    }
+
+    func resignActive() { isForeground = false }
+
     func foreground() {
         isForeground = true
+        openPendingNotificationChat()
         chats.handleAppForeground()
         Task {
             await MatrixRuntime.shared.setActive(!session.accessToken.isEmpty)

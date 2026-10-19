@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import QuartzCore
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -32,6 +33,8 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
     private var attachmentChatID: String?
     private var infoWindow: NSWindow?
     private var pendingScrollToBottom = false
+    private var sendScrollTask: Task<Void, Never>?
+    private var sendScrollRevision = UUID()
     private var isApplyingSnapshot = false
     private var snapshotRevision = UUID()
     private var isUpdatingLayout = false
@@ -54,7 +57,7 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
         stateLabel.alignment = .center; stateLabel.textColor = .secondaryLabelColor
         progress.style = .spinning; progress.controlSize = .small
         composer.onChoosePhotos = { [weak self] in self?.choosePhotos() }
-        composer.onSubmit = { [weak self] in self?.pendingScrollToBottom = true; self?.scrollToBottom() }
+        composer.onSubmit = { [weak self] in self?.requestSendScroll() }
         view.addSubview(scroll); scroll.pinEdges(to: view)
         statusStack.alignment = .centerX
         view.addSubview(statusStack); statusStack.translatesAutoresizingMaskIntoConstraints = false
@@ -79,7 +82,7 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
         table.postsFrameChangedNotifications = true
         tableFrameObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: table, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.hasPositioned, self.keepsBottomVisible, !self.isApplyingSnapshot, !self.isUpdatingLayout else { return }
+                guard let self, self.hasPositioned, self.keepsBottomVisible, !self.isApplyingSnapshot, !self.isUpdatingLayout, self.sendScrollTask == nil, !self.pendingScrollToBottom else { return }
                 self.alignBottom()
             }
         }
@@ -103,7 +106,7 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
             scroll.contentInsets = insets
             scroll.scrollerInsets = insets
         }
-        if hasPositioned, keepsBottomVisible, !isApplyingSnapshot { alignBottom() }
+        if hasPositioned, keepsBottomVisible, !isApplyingSnapshot, sendScrollTask == nil, !pendingScrollToBottom { alignBottom() }
     }
 
     private var bottomOffset: CGFloat {
@@ -118,7 +121,7 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
         defer { isUpdatingLayout = false }
         let store = context.chats
         guard let chat = store.selectedChat else {
-            snapshotRevision = UUID(); isApplyingSnapshot = false
+            cancelSendScroll(); snapshotRevision = UUID(); isApplyingSnapshot = false
             stateLabel.stringValue = "Select a conversation"; stateLabel.isHidden = false
             composerAccessory.isHidden = true; progress.isHidden = true
             if !rows.isEmpty { rows = []; rowsByID = [:]; var empty = NSDiffableDataSourceSnapshot<Int, String>(); empty.appendSections([0]); dataSource?.apply(empty, animatingDifferences: false) }
@@ -126,6 +129,7 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
         }
         let switched = chatID != chat.id
         if switched {
+            cancelSendScroll()
             paginationTask?.cancel(); paginationTask = nil; chatID = chat.id
             hasPositioned = false; firstUnreadID = nil; keepsBottomVisible = true
             if view.window != nil { context.composer.pendingFocus = true }
@@ -156,11 +160,16 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
             guard let self, self.snapshotRevision == revision, self.chatID == chat.id else { return }
             defer { self.isApplyingSnapshot = false }
             self.table.layoutSubtreeIfNeeded(); self.view.layoutSubtreeIfNeeded()
-            if loaded && !self.hasPositioned {
+            if self.pendingScrollToBottom {
+                self.hasPositioned = loaded || self.hasPositioned
+                self.scheduleSendScroll()
+            } else if self.sendScrollTask != nil {
+                // Snapshot/layout updates must not interrupt the send animation.
+            } else if loaded && !self.hasPositioned {
                 self.hasPositioned = true
                 self.scrollToBottom()
-            } else if self.pendingScrollToBottom || atBottom {
-                self.pendingScrollToBottom = false; self.scrollToBottom()
+            } else if atBottom {
+                self.scrollToBottom()
             } else if let anchor, let index = self.rows.firstIndex(where: { $0.id == anchor }) {
                 self.scroll.contentView.scroll(to: NSPoint(x: 0, y: self.table.rect(ofRow: index).minY + offset)); self.scroll.reflectScrolledClipView(self.scroll.contentView)
             }
@@ -169,6 +178,7 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
     }
 
     private func scrollChanged() {
+        cancelSendScroll()
         let origin = scroll.contentView.bounds.minY
         let movedUp = origin < previousOriginY
         previousOriginY = origin
@@ -180,7 +190,49 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
             paginationTask = nil
         }
     }
+    private func requestSendScroll() {
+        pendingScrollToBottom = true
+        keepsBottomVisible = true
+        scheduleSendScroll()
+    }
+
+    private func cancelSendScroll() {
+        sendScrollTask?.cancel()
+        sendScrollTask = nil
+        sendScrollRevision = UUID()
+        pendingScrollToBottom = false
+    }
+
+    private func scheduleSendScroll() {
+        sendScrollTask?.cancel()
+        let revision = UUID()
+        sendScrollRevision = revision
+        let targetChatID = chatID
+        sendScrollTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
+            guard let self, sendScrollRevision == revision, chatID == targetChatID else { return }
+            // A snapshot completion will reschedule once self-sizing rows exist.
+            guard !isApplyingSnapshot else { sendScrollTask = nil; return }
+            view.layoutSubtreeIfNeeded()
+            table.layoutSubtreeIfNeeded()
+            pendingScrollToBottom = false
+            let target = NSPoint(x: scroll.contentView.bounds.minX, y: bottomOffset)
+            NSAnimationContext.runAnimationGroup { animation in
+                animation.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.25
+                animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                self.scroll.contentView.animator().setBoundsOrigin(target)
+            } completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.sendScrollRevision == revision else { return }
+                    self.sendScrollTask = nil
+                    self.alignBottom()
+                }
+            }
+        }
+    }
+
     private func scrollToBottom() {
+        guard sendScrollTask == nil, !pendingScrollToBottom else { return }
         guard !rows.isEmpty else { return }
         keepsBottomVisible = true
         view.layoutSubtreeIfNeeded()
@@ -280,6 +332,7 @@ final class MacConversationController: NSViewController, NSTableViewDelegate, NS
         if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
         if let tableFrameObserver { NotificationCenter.default.removeObserver(tableFrameObserver) }
         paginationTask?.cancel()
+        sendScrollTask?.cancel()
     }
 }
 #endif

@@ -36,12 +36,14 @@ final class NotificationService: UNNotificationServiceExtension {
                 defer { RelayNotificationFree(result) }
                 return try? JSONDecoder().decode(NotificationPreview.self, from: Data(String(cString: result).utf8))
             }
-            if preview != nil {
-                logger.info("Notification preview prepared")
-            } else {
-                logger.error("Notification preview unavailable; delivering fallback")
+            guard let preview, let content = delivery.prepare(preview) else {
+                logger.error("Notification preview unavailable or request already completed")
+                delivery.finish()
+                return
             }
-            delivery.finish(preview: preview)
+            let updated = await CommunicationNotification.content(from: content, preview: preview)
+            logger.info("Communication notification prepared")
+            delivery.finish(content: updated)
         }
     }
 

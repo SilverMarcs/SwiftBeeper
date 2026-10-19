@@ -9,9 +9,7 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     private let context: AppContext
     private let observation = ObservationLifetime()
     private let searchComposer = UISearchController(searchResultsController: nil)
-    private let titleAvatar = MobileAvatarView(size: 28)
-    private let chatTitle = UILabel()
-    private let titleControl = UIControl()
+    private let titleControl = MobileConversationHeaderView()
     private let table = UITableView(frame: .zero, style: .plain)
     private let status = UILabel()
     private let loading = UIActivityIndicatorView(style: .medium)
@@ -25,6 +23,8 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     private var hasPositioned = false
     private var paginationTask: Task<Void, Never>?
     private var pendingScrollToBottom = false
+    private var sendScrollTask: Task<Void, Never>?
+    private var sendScrollRevision = UUID()
     private var attachmentChatID: String?
     private var previewURL: URL?
     private var isApplyingSnapshot = false
@@ -36,18 +36,17 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     required init?(coder: NSCoder) { nil }
     override func viewDidLoad() {
         super.viewDidLoad(); view.backgroundColor = .systemBackground
+        view.clipsToBounds = true
         navigationItem.largeTitleDisplayMode = .never
         navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "info"), primaryAction: UIAction(title: "Chat Info") { [weak self] _ in self?.showInfo() })
-        chatTitle.font = .preferredFont(forTextStyle: .headline); chatTitle.lineBreakMode = .byTruncatingTail
-        let heading = UIStackView(arrangedSubviews: [titleAvatar, chatTitle]); heading.spacing = 8; heading.alignment = .center; heading.isUserInteractionEnabled = false
-        titleControl.addSubview(heading); heading.pinEdges(to: titleControl)
+        navigationItem.title = ""
+        if let chat = context.chats.selectedChat { titleControl.configure(chat) }
         titleControl.addAction(UIAction { [weak self] _ in
             guard let self, let chat = context.chats.selectedChat else { return }
             if chat.isSingleChat, let participant = chat.otherParticipant { showProfile(participant) } else { showInfo() }
         }, for: .touchUpInside)
         if UIDevice.current.userInterfaceIdiom == .phone {
             navigationItem.titleView = titleControl
-            chatTitle.widthAnchor.constraint(lessThanOrEqualToConstant: 180).isActive = true
             searchComposer.obscuresBackgroundDuringPresentation = false
             searchComposer.hidesNavigationBarDuringPresentation = false
             searchComposer.searchResultsUpdater = self; searchComposer.searchBar.delegate = self
@@ -66,6 +65,9 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
         table.keyboardDismissMode = UIDevice.current.userInterfaceIdiom == .phone ? .none : .interactive
         table.contentInsetAdjustmentBehavior = .always
         table.alwaysBounceVertical = true
+        table.bouncesHorizontally = false
+        table.isDirectionalLockEnabled = true
+        table.showsHorizontalScrollIndicator = false
         setContentScrollView(table, for: .all)
         table.estimatedRowHeight = 90; table.rowHeight = UITableView.automaticDimension
         table.register(MobileMessageCell.self, forCellReuseIdentifier: "message")
@@ -75,13 +77,18 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
         for child in [table, statusStack, composer] { view.addSubview(child); child.translatesAutoresizingMaskIntoConstraints = false }
         NSLayoutConstraint.activate([
             statusStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor), statusStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor), statusStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            table.topAnchor.constraint(equalTo: view.topAnchor), table.leadingAnchor.constraint(equalTo: view.leadingAnchor), table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            table.topAnchor.constraint(equalTo: view.topAnchor), table.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor), table.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             composer.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor), composer.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor), composer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         ])
         let bottomEdge = UIScrollEdgeElementContainerInteraction()
         bottomEdge.scrollView = table; bottomEdge.edge = .bottom
         composer.addInteraction(bottomEdge)
-        composer.onSubmit = { [weak self] in self?.pendingScrollToBottom = true; self?.scrollToBottom() }
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            table.bottomEdgeEffect.isHidden = true
+            // To restore the native bottom blur, remove the line above and enable:
+            // table.bottomEdgeEffect.style = .soft
+        }
+        composer.onSubmit = { [weak self] in self?.requestSendScroll() }
         composer.onFocus = { [weak self] in self?.scrollToBottom() }
         composer.onRequestFocus = { [weak self] in
             guard let self else { return }; searchComposer.isActive = true; searchComposer.searchBar.becomeFirstResponder()
@@ -101,6 +108,12 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     }
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        // Selection observation is deferred; prepare the header before the
+        // navigation transition measures its title view.
+        if let chat = context.chats.selectedChat {
+            titleControl.configure(chat)
+            titleControl.isHidden = false
+        }
         navigationController?.setToolbarHidden(UIDevice.current.userInterfaceIdiom != .phone, animated: animated)
     }
     func updateSearchResults(for searchController: UISearchController) {
@@ -109,7 +122,7 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     }
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
         guard !context.composer.sendButtonDisabled, !context.composer.cannotMessage else { return }
-        context.composer.handleSubmit(); pendingScrollToBottom = true; scrollToBottom()
+        context.composer.handleSubmit(); requestSendScroll()
     }
     func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
         keepsComposerOpen = true
@@ -134,10 +147,7 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     }
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        if hasPositioned, keepsBottomVisible { scrollToBottom() }
-        if UIDevice.current.userInterfaceIdiom == .pad, context.chats.selectedChatID != nil {
-            context.composer.pendingFocus = true
-        }
+        if hasPositioned, keepsBottomVisible, sendScrollTask == nil { scrollToBottom() }
     }
 
     override func viewDidLayoutSubviews() {
@@ -156,7 +166,7 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
         // composer overlap, never an unlaid-out toolbar or an empty keyboard rect.
         let insets = UIEdgeInsets(top: statusStack.bounds.height + 8, left: 0, bottom: max(0, coveredBottom - systemBottomInset) + 16, right: 0)
         if table.contentInset != insets { table.contentInset = insets }
-        if hasPositioned, keepsBottomVisible, !isApplyingSnapshot, !table.isDragging, !table.isDecelerating { alignBottom() }
+        if hasPositioned, keepsBottomVisible, !isApplyingSnapshot, sendScrollTask == nil, !pendingScrollToBottom, !table.isDragging, !table.isDecelerating { alignBottom() }
     }
 
     private var bottomOffset: CGFloat {
@@ -165,17 +175,18 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     private func render() {
         let store = context.chats
         guard let chat = store.selectedChat else {
-            snapshotRevision = UUID(); isApplyingSnapshot = false
+            cancelSendScroll(); snapshotRevision = UUID(); isApplyingSnapshot = false
             navigationItem.searchController = nil; titleControl.isHidden = true
-            title = "Relay"; status.text = "Select a conversation"; status.isHidden = false; loading.stopAnimating()
+            status.text = "Select a conversation"; status.isHidden = false; loading.stopAnimating()
             rows = []; rowsByID = [:]; var empty = NSDiffableDataSourceSnapshot<Int, String>(); empty.appendSections([0]); dataSource?.apply(empty, animatingDifferences: false); chatID = nil; return
         }
         let switched = chatID != chat.id
         if switched {
+            cancelSendScroll()
             paginationTask?.cancel(); paginationTask = nil; chatID = chat.id; hasPositioned = false; firstUnreadID = nil; keepsBottomVisible = true
-            if UIDevice.current.userInterfaceIdiom == .pad, view.window != nil { context.composer.pendingFocus = true }
+            closeComposer()
         }
-        title = chat.displayTitle; chatTitle.text = chat.displayTitle; titleAvatar.configure(chat: chat); titleControl.isHidden = false
+        titleControl.configure(chat); titleControl.isHidden = false
         if UIDevice.current.userInterfaceIdiom == .phone {
             if navigationItem.searchController !== searchComposer { navigationItem.searchController = searchComposer }
             let input = context.composer
@@ -206,11 +217,16 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
             guard let self, self.snapshotRevision == revision, self.chatID == chat.id else { return }
             defer { self.isApplyingSnapshot = false }
             self.table.layoutIfNeeded(); self.view.layoutIfNeeded()
-            if loaded && !self.hasPositioned {
+            if self.pendingScrollToBottom {
+                self.hasPositioned = loaded || self.hasPositioned
+                self.scheduleSendScroll()
+            } else if self.sendScrollTask != nil {
+                // Snapshot/layout updates must not interrupt the send animation.
+            } else if loaded && !self.hasPositioned {
                 self.hasPositioned = true
                 self.scrollToBottom()
-            } else if self.pendingScrollToBottom || atBottom {
-                self.pendingScrollToBottom = false; self.scrollToBottom()
+            } else if atBottom {
+                self.scrollToBottom()
             } else if let anchor, let index = self.dataSource?.indexPath(for: anchor) {
                 let y = self.table.rectForRow(at: index).minY + offset
                 self.table.setContentOffset(CGPoint(x: 0, y: max(-self.table.adjustedContentInset.top, y)), animated: false)
@@ -218,6 +234,7 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
         }
 
     }
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { cancelSendScroll() }
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if scrollView.isDragging || scrollView.isDecelerating { keepsBottomVisible = bottomOffset - scrollView.contentOffset.y < 2 }
         guard !isApplyingSnapshot, hasPositioned, scrollView.isDragging || scrollView.isDecelerating,
@@ -227,7 +244,45 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
             guard let self else { return }; _ = await context.chats.loadOlderMessages(for: chatID); paginationTask = nil
         }
     }
+    private func requestSendScroll() {
+        pendingScrollToBottom = true
+        keepsBottomVisible = true
+        scheduleSendScroll()
+    }
+
+    private func cancelSendScroll() {
+        sendScrollTask?.cancel()
+        sendScrollTask = nil
+        sendScrollRevision = UUID()
+        pendingScrollToBottom = false
+    }
+
+    private func scheduleSendScroll() {
+        sendScrollTask?.cancel()
+        let revision = UUID()
+        sendScrollRevision = revision
+        let targetChatID = chatID
+        sendScrollTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
+            guard let self, sendScrollRevision == revision, chatID == targetChatID else { return }
+            // A snapshot completion will reschedule once self-sizing rows exist.
+            guard !isApplyingSnapshot else { sendScrollTask = nil; return }
+            view.layoutIfNeeded()
+            table.layoutIfNeeded()
+            pendingScrollToBottom = false
+            UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.25,
+                           delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+                self.table.contentOffset = CGPoint(x: self.table.contentOffset.x, y: self.bottomOffset)
+            } completion: { [weak self] _ in
+                guard let self, self.sendScrollRevision == revision else { return }
+                self.sendScrollTask = nil
+                self.alignBottom()
+            }
+        }
+    }
+
     private func scrollToBottom() {
+        guard sendScrollTask == nil, !pendingScrollToBottom else { return }
         guard !rows.isEmpty, table.numberOfSections > 0, table.numberOfRows(inSection: 0) >= rows.count else { return }
         keepsBottomVisible = true
         view.layoutIfNeeded()
@@ -319,6 +374,6 @@ final class MobileConversationController: UIViewController, UITableViewDelegate,
     }
     func numberOfPreviewItems(in controller: QLPreviewController) -> Int { previewURL == nil ? 0 : 1 }
     func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> any QLPreviewItem { (previewURL ?? URL.temporaryDirectory) as NSURL }
-    isolated deinit { paginationTask?.cancel() }
+    isolated deinit { paginationTask?.cancel(); sendScrollTask?.cancel() }
 }
 #endif

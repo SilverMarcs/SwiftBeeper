@@ -17,17 +17,24 @@ final class NotificationDelivery: Sendable {
         state.withLock { $0 = State(content: ownedContent, handler: handler) }
     }
 
-    func finish(preview: NotificationPreview? = nil) {
+    /// Save decrypted text before the optional Siri donation can time out.
+    func prepare(_ preview: NotificationPreview) -> UNNotificationContent? {
+        state.withLock { value in
+            guard let content = value.content else { return nil }
+            content.title = preview.title
+            content.subtitle = preview.isGroup ? preview.senderName : ""
+            content.body = preview.body
+            return content.copy() as? UNNotificationContent
+        }
+    }
+
+    func finish(content updatedContent: UNNotificationContent? = nil) {
         let pending = state.withLock { value -> State in
             let pending = value
             value = State()
             return pending
         }
         guard let content = pending.content, let handler = pending.handler else { return }
-        if let preview {
-            content.title = preview.title
-            content.body = preview.body
-        }
-        handler(content)
+        handler(updatedContent ?? content)
     }
 }

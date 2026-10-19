@@ -64,6 +64,18 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
         context.notifications.registrationFailed(error)
     }
 
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                           withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let chatID = response.notification.request.content.userInfo["chatID"] as? String,
+           !chatID.isEmpty {
+            // Finish the system callback without waiting for activation, sync,
+            // or UIKit navigation. AppContext keeps the destination until ready.
+            Task { @MainActor [weak self] in self?.context.openNotificationChat(chatID) }
+        }
+        completionHandler()
+    }
+
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         await MainActor.run { context.notifications.badges.reconcileAfterNotification() }
         return []

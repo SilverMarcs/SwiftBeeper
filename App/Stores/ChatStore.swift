@@ -78,6 +78,57 @@ final class ChatStore: RealtimeEventHandler {
     private var lastLoadedFilterID: String?
     private var chatsByID: [String: Chat] = [:]
 
+    private var pendingNotificationChatID: String?
+    private(set) var notificationSelectionID: UUID?
+    @ObservationIgnored private var notificationChatTask: Task<Void, Never>?
+    @ObservationIgnored private var notificationChatRequestID = UUID()
+
+    /// Keep a tap until startup or sync has made the room available locally.
+    func openNotificationChat(_ chatID: String) {
+        guard !chatID.isEmpty else { return }
+        notificationChatTask?.cancel()
+        notificationChatTask = nil
+        notificationChatRequestID = UUID()
+        pendingNotificationChatID = chatID
+        searchQuery = ""
+        if selectedFilter != .inbox(.primary) {
+            selectedFilter = .inbox(.primary)
+            if !APIClient.accessToken.isEmpty { scheduleChatsRefresh() }
+        }
+        resolveNotificationChat()
+        loadPendingNotificationChat()
+    }
+
+    private func resolveNotificationChat() {
+        guard let id = pendingNotificationChatID, chat(byID: id) != nil else { return }
+        pendingNotificationChatID = nil
+        selectedChatID = id
+        // A fresh tap must navigate even when this chat is already selected.
+        notificationSelectionID = UUID()
+    }
+
+    private func loadPendingNotificationChat() {
+        guard let id = pendingNotificationChatID, !APIClient.accessToken.isEmpty,
+              !isLoadingChats, notificationChatTask == nil else { return }
+        let token = APIClient.accessToken
+        let requestID = UUID()
+        notificationChatRequestID = requestID
+        notificationChatTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if notificationChatRequestID == requestID { notificationChatTask = nil } }
+            do {
+                // One local room lookup covers notifications outside the first
+                // sidebar page. A missing room stays pending for the sync event.
+                let chat = try await APIClient.getChat(chatID: id)
+                guard !Task.isCancelled, pendingNotificationChatID == id,
+                      APIClient.accessToken == token else { return }
+                applyChatUpsert(chat)
+            } catch {
+                // No retry loop: setChats resolves this when sync surfaces it.
+            }
+        }
+    }
+
     var selectedChatID: String? {
         didSet {
             guard oldValue != selectedChatID else { return }
@@ -266,6 +317,13 @@ final class ChatStore: RealtimeEventHandler {
     }
 
     func clearState() {
+        notificationChatTask?.cancel()
+        notificationChatTask = nil
+        notificationChatRequestID = UUID()
+        if APIClient.accessToken.isEmpty {
+            pendingNotificationChatID = nil
+            notificationSelectionID = nil
+        }
         scheduledChatsRefreshTask?.cancel()
         scheduledChatsRefreshTask = nil
         scheduledMessagesRefreshTask?.cancel()
@@ -311,7 +369,12 @@ final class ChatStore: RealtimeEventHandler {
         let requestID = UUID()
         latestChatsRequestID = requestID
         isLoadingChats = true
-        defer { if latestChatsRequestID == requestID { isLoadingChats = false } }
+        defer {
+            if latestChatsRequestID == requestID {
+                isLoadingChats = false
+                loadPendingNotificationChat()
+            }
+        }
 
         do {
             let response = try await APIClient.listChats(
@@ -962,6 +1025,15 @@ final class ChatStore: RealtimeEventHandler {
     /// Applies a hydrated `chat.upserted` summary to the sidebar without a full
     /// list reload. The summary includes filter membership and ordering.
     private func applyChatUpsert(_ incoming: Chat) {
+        if pendingNotificationChatID == incoming.id {
+            let filter = ChatFilter.inbox(incoming.isArchived == true ? .archive : .primary)
+            if selectedFilter != filter {
+                selectedFilter = filter
+                scheduleChatsRefresh()
+            }
+            // An older notification may point beyond the loaded sidebar page.
+            chatWindowSize = max(chatWindowSize, chats.count + 1)
+        }
         // Keep an in-flight search view consistent if it holds this chat.
         if var results = searchResults,
            let index = results.firstIndex(where: { $0.id == incoming.id }) {
@@ -1011,6 +1083,7 @@ final class ChatStore: RealtimeEventHandler {
         guard newChats != chats else { return }
         chats = newChats
         chatsByID = Dictionary(newChats.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        resolveNotificationChat()
     }
 
     private func updateChat(_ chatID: String, _ mutate: (inout Chat) -> Void) {

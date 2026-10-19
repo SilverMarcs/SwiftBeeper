@@ -10,6 +10,7 @@ final class MobileConversationsController: UISplitViewController, UISplitViewCon
     private let primary: UINavigationController
     private let secondary: UINavigationController
     private var displayedChatID: String?
+    private var notificationSelectionID: UUID?
 
     init(context: AppContext) {
         self.context = context
@@ -21,6 +22,11 @@ final class MobileConversationsController: UISplitViewController, UISplitViewCon
         delegate = self
         preferredDisplayMode = .oneBesideSecondary
         preferredSplitBehavior = .tile
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            presentsWithGesture = false
+            displayModeButtonVisibility = .never
+            showsSecondaryOnlyButton = false
+        }
         minimumPrimaryColumnWidth = 280; maximumPrimaryColumnWidth = 420
         preferredPrimaryColumnWidth = 340
         setViewController(primary, for: .primary)
@@ -36,6 +42,7 @@ final class MobileConversationsController: UISplitViewController, UISplitViewCon
         super.viewDidLoad()
         observation.track { [weak self] in
             guard let self else { return }
+            showNotificationSelection()
             let id = context.chats.selectedChatID
             if id != displayedChatID {
                 displayedChatID = id
@@ -43,6 +50,24 @@ final class MobileConversationsController: UISplitViewController, UISplitViewCon
             }
         }
     }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        showNotificationSelection()
+    }
+
+    private func showNotificationSelection() {
+        // A cold-launch destination can resolve before this controller is in a
+        // window. Keep it unconsumed until UIKit can safely show the detail.
+        guard context.isForeground,
+              let requestID = context.chats.notificationSelectionID,
+              requestID != notificationSelectionID,
+              context.chats.selectedChatID != nil,
+              viewIfLoaded?.window?.windowScene?.activationState == .foregroundActive else { return }
+        notificationSelectionID = requestID
+        list.closeSearch()
+        show(.secondary)
+    }
+
     func splitViewController(_ svc: UISplitViewController, topColumnForCollapsingToProposedTopColumn proposed: UISplitViewController.Column) -> UISplitViewController.Column {
         context.chats.selectedChatID == nil ? .primary : .secondary
     }
