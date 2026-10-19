@@ -9,12 +9,14 @@ struct TimelineRow: Identifiable, Equatable {
     let showsSender: Bool
     let showsAvatar: Bool
     let isUnreadBoundary: Bool
+    let showsReadIndicator: Bool
 
     var timestamp: Date { message?.timestamp ?? outgoing?.createdAt ?? .distantPast }
     var text: String { message?.visibleText ?? outgoing?.text ?? "" }
 
     static func make(store: ChatStore, chat: Chat, firstUnreadID: String?) -> [Self] {
         let messages = store.messages(for: chat.id)
+        let readIndicatorID = lastReadOutgoingMessageID(messages: messages, chat: chat, readKey: store.lastReadByOtherSortKey)
         let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         var rows: [Self] = []
         for (index, message) in messages.enumerated() {
@@ -25,17 +27,33 @@ struct TimelineRow: Identifiable, Equatable {
             rows.append(Self(id: message.timelineKey, message: message, outgoing: nil,
                 linkedMessage: message.linkedMessageID.flatMap { byID[$0] }, showsTimestamp: divider,
                 showsSender: divider || previous?.senderID != message.senderID || message.id == firstUnreadID,
-                showsAvatar: !sameNext || next?.id == firstUnreadID, isUnreadBoundary: message.id == firstUnreadID))
+                showsAvatar: !sameNext || next?.id == firstUnreadID, isUnreadBoundary: message.id == firstUnreadID,
+                showsReadIndicator: message.id == readIndicatorID))
         }
         var previousDate = messages.last?.timestamp
         for outgoing in store.outgoingMessages(for: chat.id) {
             rows.append(Self(id: outgoing.timelineKey, message: nil, outgoing: outgoing,
                 linkedMessage: outgoing.replyToMessageID.flatMap { byID[$0] },
                 showsTimestamp: showsTimestamp(outgoing.createdAt, after: previousDate),
-                showsSender: false, showsAvatar: false, isUnreadBoundary: false))
+                showsSender: false, showsAvatar: false, isUnreadBoundary: false, showsReadIndicator: false))
             previousDate = outgoing.createdAt
         }
         return rows
+    }
+
+    /// Match the previous UI: one receipt at the furthest-read outgoing
+    /// message, hidden when a later incoming reply already proves it was read.
+    private static func lastReadOutgoingMessageID(messages: [Message], chat: Chat, readKey: String?) -> String? {
+        guard let readKey, !readKey.isEmpty else { return nil }
+        let readSort = Int64(readKey)
+        let target = messages.last { message in
+            guard message.isOutgoing(in: chat) else { return false }
+            if let readSort, let messageSort = Int64(message.sortKey) { return messageSort <= readSort }
+            return message.sortKey <= readKey
+        }
+        guard let target,
+              !messages.contains(where: { !$0.isOutgoing(in: chat) && $0.numericSortKey > target.numericSortKey }) else { return nil }
+        return target.id
     }
 
     static func firstUnreadID(store: ChatStore, chat: Chat) -> String? {

@@ -80,6 +80,14 @@ final class MobileMessageCell: UITableViewCell {
             }
         }
 
+        if row.showsReadIndicator {
+            let read = label("Read"); read.font = .preferredFont(forTextStyle: .caption2)
+            let receipt = UIStackView(arrangedSubviews: [read])
+            receipt.isLayoutMarginsRelativeArrangement = true
+            receipt.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 3)
+            column.addArrangedSubview(receipt)
+        }
+
         let lane = UIStackView(); lane.spacing = 6; lane.alignment = .bottom
         let spacer = UIView(); spacer.translatesAutoresizingMaskIntoConstraints = false
         spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true

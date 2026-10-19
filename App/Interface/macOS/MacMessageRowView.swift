@@ -87,6 +87,13 @@ final class MacMessageRowView: NSTableCellView {
             }
         }
 
+        if row.showsReadIndicator {
+            let read = label("Read"); read.font = .preferredFont(forTextStyle: .caption2)
+            let receipt = NSStackView(views: [read])
+            receipt.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 3)
+            column.addArrangedSubview(receipt)
+        }
+
         let lane = NSStackView(); lane.spacing = 6; lane.alignment = .bottom
         let spacer = NSView(); spacer.translatesAutoresizingMaskIntoConstraints = false
         spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
