@@ -66,9 +66,6 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let isSender: Bool?
     let attachments: [Attachment]?
     let isUnread: Bool?
-    /// Mentioned participant IDs. A nil value represents legacy messages whose
-    /// mentions must be inferred from their displayed text.
-    let mentions: [String]?
     let reactions: [Reaction]?
     let linkedMessageID: String?
     /// True when the server has redacted this message. Its original content may
@@ -223,7 +220,6 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
             isSender: detail.isSender ?? isSender,
             attachments: mergedAttachments,
             isUnread: detail.isUnread ?? isUnread,
-            mentions: detail.mentions ?? mentions,
             reactions: mergedReactions,
             linkedMessageID: detail.linkedMessageID ?? linkedMessageID,
             isDeleted: detail.isDeleted ?? isDeleted,

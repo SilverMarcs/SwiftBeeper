@@ -20,6 +20,7 @@ struct RootView: View {
                 notificationService.badges.setActive(NSApplication.shared.isActive)
                 #else
                 notificationService.badges.setActive(scenePhase == .active)
+                if scenePhase == .active { chatStore.handleAppForeground() }
                 #endif
             }
             .task(id: sessionStore.accessToken) {

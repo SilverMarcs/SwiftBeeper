@@ -142,3 +142,11 @@
 -	zerolog.Ctx(ctx).Debug().Msg("Fetching key backup version")
 +	if !online { return nil }
 +zerolog.Ctx(ctx).Debug().Msg("Fetching key backup version")
+--- a/pkg/hicli/send.go
++++ b/pkg/hicli/send.go
+@@ -369 +369,4 @@
+-	ctx = context.WithoutCancel(ctx)
++	// Notification replies await this send inside a background execution budget.
++	if !synchronous {
++		ctx = context.WithoutCancel(ctx)
++	}

@@ -302,8 +302,6 @@ struct MessageRowView: View {
 
     private func styledMessageText(_ text: String, isOutgoing: Bool) -> AttributedString {
         text.messageAttributed(
-            mentionIDs: message.mentions,
-            participants: chat.participants?.items ?? [],
             isOutgoing: isOutgoing
         )
     }

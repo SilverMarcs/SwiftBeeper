@@ -11,17 +11,19 @@ import (
 )
 
 type MobileCommand struct {
-	Action            string    `json:"action"`
-	Active            bool      `json:"active"`
-	RoomID            id.RoomID `json:"roomID"`
-	URL               string    `json:"url"`
-	Path              string    `json:"path"`
-	FileName          string    `json:"fileName"`
-	MimeType          string    `json:"mimeType"`
-	Pushkey           string    `json:"pushkey"`
-	AppID             string    `json:"appID"`
-	GatewayURL        string    `json:"gatewayURL"`
-	DeviceDisplayName string    `json:"deviceDisplayName"`
+	Action            string     `json:"action"`
+	Active            bool       `json:"active"`
+	RoomID            id.RoomID  `json:"roomID"`
+	EventID           id.EventID `json:"eventID"`
+	Text              string     `json:"text"`
+	URL               string     `json:"url"`
+	Path              string     `json:"path"`
+	FileName          string     `json:"fileName"`
+	MimeType          string     `json:"mimeType"`
+	Pushkey           string     `json:"pushkey"`
+	AppID             string     `json:"appID"`
+	GatewayURL        string     `json:"gatewayURL"`
+	DeviceDisplayName string     `json:"deviceDisplayName"`
 }
 
 type mobileState struct {
@@ -62,6 +64,8 @@ func (r *Runtime) MobileExecute(ctx context.Context, command MobileCommand) (any
 		return r.notificationCredentials(ctx)
 	case "push-preferences":
 		return r.dispatcher.PushPreferences(ctx)
+	case "notification-reply":
+		return r.dispatcher.MobileReply(ctx, command.RoomID, command.EventID, command.Text)
 	case "logout":
 		r.setMobileActive(false)
 		err := r.rt.SubmitJSONCommand(ctx, jsoncmd.ReqLogout, nil, nil)
@@ -191,18 +195,8 @@ func (r *Runtime) startOpenRoomWork() {
 		if err != nil {
 			return
 		}
-		hasMessage := len(cached) > 0
-		// At most one recent/history page for an explicitly opened empty room.
-		if !hasMessage {
-			if response, err := cli.PaginateServer(ctx, room, 40, false); err == nil {
-				cached = append(cached, response.Events...)
-				r.dispatcher.RefreshPreview(ctx, room, response.Events)
-				meta, _ := cli.DB.Room.Get(ctx, room)
-				cli.EventHandler(&jsoncmd.SyncComplete{Rooms: map[id.RoomID]*jsoncmd.SyncRoom{room: {Meta: meta, Events: response.Events}}})
-			}
-		} else {
-			r.dispatcher.RefreshPreview(ctx, room, cached)
-		}
+		r.dispatcher.RefreshPreview(ctx, room, cached)
+
 		// Requeue at most four sessions which the SDK already checked. The SDK
 		// owns the requests and decryption; no parallel backup download loop.
 		if cli.KeyBackupKey == nil || cli.KeyBackupVersion == "" {

@@ -15,7 +15,7 @@ struct ChatDetailiOS: View {
     // content ahead of the mask. iOS recreates this view per chat (ContentView
     // applies .id(selectedChatID)), so a fresh chat always re-masks.
     @State private var isPreparingInitialScroll = true
-    @State private var isUserScrolling = false
+    @State private var isNearTop = false
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
     // Timeline grouping does per-message `Calendar` work; cache it so unrelated
@@ -67,13 +67,10 @@ struct ChatDetailiOS: View {
 
             ScrollViewReader { proxy in
                 List {
-                    if chatStore.hasMoreMessages(for: selectedChat.id) {
-                        MessageHistoryControl(isLoading: chatStore.isLoadingOlderMessages) {
-                            loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
-                        }
+                    if chatStore.isLoadingOlderMessages {
+                        ProgressView("Loading earlier messages…")
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
                     }
 
                     ForEach(timelineEntries) { entry in
@@ -140,15 +137,18 @@ struct ChatDetailiOS: View {
                         .id(bottomAnchorID)
                 }
                 .defaultScrollAnchor(.bottom)
-                .onScrollPhaseChange { _, phase in
-                    isUserScrolling = phase == .interacting || phase == .decelerating
-                }
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top < 80
-                } action: { _, isNearTop in
-                    guard isNearTop, isUserScrolling, !isPreparingInitialScroll,
+                } action: { _, nearTop in
+                    isNearTop = nearTop
+                    guard nearTop, !isPreparingInitialScroll,
                           !messages.isEmpty else { return }
                     loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
+                }
+                .onChange(of: isPreparingInitialScroll) { _, preparing in
+                    if !preparing && isNearTop {
+                        loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
+                    }
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .environment(\.defaultMinListRowHeight, 1)
@@ -156,7 +156,6 @@ struct ChatDetailiOS: View {
                 .task(id: selectedChat.id) {
                     let chatID = selectedChat.id
                     isPreparingInitialScroll = true
-                    isUserScrolling = false
                     firstUnreadID = nil
                     chatStore.setReplyTo(nil)
                     chatStore.cancelEditing()
@@ -454,12 +453,15 @@ struct ChatDetailiOS: View {
     }
 
     private func loadOlderMessages(chatID: String, proxy: ScrollViewProxy) {
+        guard chatStore.selectedChatID == chatID, chatStore.hasMoreMessages(for: chatID),
+              !chatStore.isLoadingOlderMessages else { return }
         let anchorMessageID = chatStore.messages(for: chatID).first?.timelineKey
         Task { @MainActor in
             _ = await chatStore.loadOlderMessages(for: chatID)
             if let anchorMessageID {
                 // Re-anchor so the prepended page doesn't shift what's on screen.
                 try? await Task.sleep(for: .milliseconds(1))
+                guard !Task.isCancelled, chatStore.selectedChatID == chatID else { return }
                 proxy.scrollTo(anchorMessageID, anchor: .top)
             }
         }

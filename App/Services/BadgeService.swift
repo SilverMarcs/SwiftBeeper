@@ -1,7 +1,7 @@
 import Observation
 import UserNotifications
 
-/// Opening Relay clears this device's notifications and badge.
+/// Opening Relay clears the badge; conversation selection clears its alerts.
 @MainActor
 @Observable
 final class BadgeService {
@@ -21,7 +21,6 @@ final class BadgeService {
     }
 
     private func clear() {
-        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
         Task { try? await UNUserNotificationCenter.current().setBadgeCount(0) }
     }
 }

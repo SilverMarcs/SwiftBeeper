@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"maunium.net/go/mautrix"
@@ -33,8 +35,19 @@ type Request struct {
 }
 
 type Preview struct {
-	Title string `json:"title"`
-	Body  string `json:"body"`
+	Title         string        `json:"title"`
+	Body          string        `json:"body"`
+	SenderID      string        `json:"senderID"`
+	SenderName    string        `json:"senderName"`
+	IsGroup       bool          `json:"isGroup"`
+	Avatar        []byte        `json:"avatar,omitempty"`
+	Recipients    []Participant `json:"recipients,omitempty"`
+	TargetEventID id.EventID    `json:"targetEventID,omitempty"`
+}
+
+type Participant struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func Fetch(ctx context.Context, req Request) (*Preview, error) {
@@ -115,43 +128,143 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 		}
 		typ, content = decrypted.Type, decrypted.Content
 	}
-	if typ != event.EventMessage.Type && typ != event.EventSticker.Type {
+	var body string
+	var targetEventID id.EventID
+	if typ == event.EventReaction.Type {
+		var reaction event.ReactionEventContent
+		if err = json.Unmarshal(content, &reaction); err != nil {
+			return nil, err
+		}
+		if evt.Sender == req.UserID || reaction.RelatesTo.Type != event.RelAnnotation ||
+			reaction.RelatesTo.EventID == "" || strings.TrimSpace(reaction.RelatesTo.Key) == "" {
+			return nil, errors.New("invalid reaction notification")
+		}
+		target, err := cli.GetEvent(ctx, req.RoomID, reaction.RelatesTo.EventID)
+		if err != nil {
+			return nil, err
+		}
+		if target.ID != reaction.RelatesTo.EventID || target.Sender != req.UserID ||
+			(target.RoomID != "" && target.RoomID != req.RoomID) ||
+			(target.Type != event.EventMessage && target.Type != event.EventEncrypted && target.Type != event.EventSticker) {
+			return nil, errors.New("reaction is not to your message")
+		}
+		body = "Reacted " + reaction.RelatesTo.Key + " to your message"
+		targetEventID = target.ID
+	} else if typ != event.EventMessage.Type && typ != event.EventSticker.Type {
 		return nil, errors.New("not a message")
+	} else {
+		var message event.MessageEventContent
+		if err = json.Unmarshal(content, &message); err != nil {
+			return nil, err
+		}
+		if message.NewContent != nil {
+			message = *message.NewContent
+		}
+		message.RemoveReplyFallback()
+		body = message.Body
+		switch message.MsgType {
+		case event.MsgImage:
+			body = "Photo"
+		case event.MsgVideo:
+			body = "Video"
+		case event.MsgAudio:
+			body = "Audio message"
+		case event.MsgFile:
+			body = "File: " + body
+		}
+		if typ == event.EventSticker.Type {
+			body = "Sticker"
+		}
+		if strings.TrimSpace(body) == "" {
+			body = "New message"
+		}
 	}
-	var message event.MessageEventContent
-	if err = json.Unmarshal(content, &message); err != nil {
-		return nil, err
-	}
-	if message.NewContent != nil {
-		message = *message.NewContent
-	}
-	message.RemoveReplyFallback()
-	body := message.Body
-	switch message.MsgType {
-	case event.MsgImage:
-		body = "Photo"
-	case event.MsgVideo:
-		body = "Video"
-	case event.MsgAudio:
-		body = "Audio message"
-	case event.MsgFile:
-		body = "File: " + body
-	}
-	if typ == event.EventSticker.Type {
-		body = "Sticker"
-	}
-	if strings.TrimSpace(body) == "" {
-		body = "New message"
-	}
-	// Sender lookup is optional and bounded; a slow profile must not hide a
-	// successfully decrypted message near the extension's time limit.
-	title := evt.Sender.String()
-	profileCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// Three fixed metadata reads share one short budget; never download the
+	// room's member list or fetch anything for unrelated conversations.
+	metadataCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	if profile, err := cli.GetProfile(profileCtx, evt.Sender); err == nil && profile.DisplayName != "" {
-		title = profile.DisplayName
+	sender := evt.Sender.String()
+	var senderAvatar id.ContentURIString
+	var roomName event.RoomNameEventContent
+	var roomAvatar event.RoomAvatarEventContent
+	var names sync.WaitGroup
+	names.Add(3)
+	go func() {
+		defer names.Done()
+		if profile, err := cli.GetProfile(metadataCtx, evt.Sender); err == nil {
+			if name := strings.TrimSpace(profile.DisplayName); name != "" {
+				sender = name
+			}
+			senderAvatar = id.ContentURIString(profile.AvatarURL.String())
+		}
+	}()
+	go func() {
+		defer names.Done()
+		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomName, "", &roomName)
+	}()
+	go func() {
+		defer names.Done()
+		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomAvatar, "", &roomAvatar)
+	}()
+	names.Wait()
+	title := sender
+	name := strings.TrimSpace(roomName.Name)
+	isGroup := name != "" && name != sender
+	if name != "" {
+		title = name
 	}
-	return &Preview{Title: truncate(title, 120), Body: truncate(body, 500)}, nil
+	avatarURL := senderAvatar
+	if isGroup {
+		// Never label a sender's portrait as the group's picture.
+		avatarURL = roomAvatar.URL
+	} else if roomAvatar.URL != "" {
+		// A direct room can have a contact-specific photo.
+		avatarURL = roomAvatar.URL
+	}
+	preview := &Preview{Title: truncate(title, 120), Body: truncate(body, 500),
+		SenderID: evt.Sender.String(), SenderName: truncate(sender, 120), IsGroup: isGroup,
+		TargetEventID: targetEventID}
+	var extras sync.WaitGroup
+	extras.Add(1)
+	go func() {
+		defer extras.Done()
+		preview.Avatar = fetchAvatar(ctx, cli, avatarURL)
+	}()
+	if isGroup {
+		extras.Add(1)
+		go func() {
+			defer extras.Done()
+			preview.Recipients = fetchRecipients(ctx, cli, req.RoomID, req.UserID, evt.Sender)
+		}()
+	}
+	extras.Wait()
+	return preview, nil
+}
+
+func fetchAvatar(ctx context.Context, cli *mautrix.Client, uri id.ContentURIString) []byte {
+	parsed, err := uri.Parse()
+	if err != nil || parsed.IsEmpty() {
+		return nil
+	}
+	avatarCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	// Authenticated Matrix media stays on the homeserver. A small thumbnail
+	// bounds both the extension's memory use and its image-decoding work.
+	resp, err := cli.DownloadThumbnail(avatarCtx, parsed, 128, 128,
+		mautrix.DownloadThumbnailExtra{Method: "scale"})
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	const maximumBytes = 256 * 1024
+	if resp.StatusCode != http.StatusOK || resp.ContentLength > maximumBytes {
+		return nil
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maximumBytes+1))
+	if err != nil || len(data) > maximumBytes || !strings.HasPrefix(http.DetectContentType(data), "image/") {
+		return nil
+	}
+	return data
 }
 
 func truncate(s string, limit int) string {

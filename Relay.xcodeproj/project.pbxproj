@@ -201,6 +201,9 @@
 					00CC2921912F47FC3C6615F8 = {
 						DevelopmentTeam = J52QUTREBS;
 						SystemCapabilities = {
+							com.apple.CommunicationNotifications = {
+								enabled = 1;
+							};
 							com.apple.Push = {
 								enabled = 1;
 							};
@@ -337,6 +340,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/NotificationHeaders";
 				INFOPLIST_FILE = "Configuration/NotificationService-Info.plist";
+				"INFOPLIST_FILE[sdk=macosx*]" = "Configuration/NotificationService-macOS-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Relay Notifications";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -462,6 +466,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/NotificationHeaders";
 				INFOPLIST_FILE = "Configuration/NotificationService-Info.plist";
+				"INFOPLIST_FILE[sdk=macosx*]" = "Configuration/NotificationService-macOS-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Relay Notifications";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -50,14 +50,10 @@ type Message struct {
 	IsUnread        bool         `json:"isUnread"`
 	IsDeleted       bool         `json:"isDeleted,omitempty"`
 	LinkedMessageID string       `json:"linkedMessageID"`
-	// Mentions contains Matrix user IDs and the special @room value. A nil
-	// slice is encoded as null for legacy events that predate m.mentions;
-	// modern events with no mentions use a non-nil empty slice.
-	Mentions   []string    `json:"mentions"`
-	Reactions  []Reaction  `json:"reactions"`
-	SenderName string      `json:"senderName"`
-	Text       string      `json:"text"`
-	Type       MessageType `json:"type"`
+	Reactions       []Reaction   `json:"reactions"`
+	SenderName      string       `json:"senderName"`
+	Text            string       `json:"text"`
+	Type            MessageType  `json:"type"`
 }
 
 type Chat struct {

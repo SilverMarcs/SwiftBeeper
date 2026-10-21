@@ -8,7 +8,7 @@ struct ChatDetailMac: View {
     @Environment(InputManager.self) private var inputManager
     @State private var showingChatInfo = false
     @State private var isPreparingInitialScroll = true
-    @State private var isUserScrolling = false
+    @State private var isNearTop = false
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
     // Timeline grouping does per-message `Calendar` work; cache it so unrelated
@@ -59,13 +59,10 @@ struct ChatDetailMac: View {
 
             ScrollViewReader { proxy in
                 List {
-                    if chatStore.hasMoreMessages(for: selectedChat.id) {
-                        MessageHistoryControl(isLoading: chatStore.isLoadingOlderMessages) {
-                            loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
-                        }
+                    if chatStore.isLoadingOlderMessages {
+                        ProgressView("Loading earlier messages…")
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
                     }
 
                     ForEach(timelineEntries) { entry in
@@ -159,22 +156,24 @@ struct ChatDetailMac: View {
                         .id(bottomAnchorID)
                 }
                 .defaultScrollAnchor(.bottom)
-                .onScrollPhaseChange { _, phase in
-                    isUserScrolling = phase == .interacting || phase == .decelerating
-                }
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top < 80
-                } action: { _, isNearTop in
-                    guard isNearTop, isUserScrolling, !isPreparingInitialScroll,
+                } action: { _, nearTop in
+                    isNearTop = nearTop
+                    guard nearTop, !isPreparingInitialScroll,
                           !messages.isEmpty else { return }
                     loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
+                }
+                .onChange(of: isPreparingInitialScroll) { _, preparing in
+                    if !preparing && isNearTop {
+                        loadOlderMessages(chatID: selectedChat.id, proxy: proxy)
+                    }
                 }
                 .task(id: selectedChat.id) {
                     // Re-fires on every selection change (no .id() on the detail
                     // view needed — that would rebuild the whole pane per chat).
                     let chatID = selectedChat.id
                     isPreparingInitialScroll = true
-                    isUserScrolling = false
                     firstUnreadID = nil
                     chatStore.setReplyTo(nil)
                     chatStore.cancelEditing()
@@ -356,11 +355,14 @@ struct ChatDetailMac: View {
     }
 
     private func loadOlderMessages(chatID: String, proxy: ScrollViewProxy) {
+        guard chatStore.selectedChatID == chatID, chatStore.hasMoreMessages(for: chatID),
+              !chatStore.isLoadingOlderMessages else { return }
         let anchorMessageID = chatStore.messages(for: chatID).first?.timelineKey
         Task { @MainActor in
             _ = await chatStore.loadOlderMessages(for: chatID)
             if let anchorMessageID {
                 try? await Task.sleep(for: .milliseconds(1))
+                guard !Task.isCancelled, chatStore.selectedChatID == chatID else { return }
                 proxy.scrollTo(anchorMessageID, anchor: .top)
             }
         }

@@ -36,6 +36,7 @@ final class NotificationService {
     func configure(signedIn: Bool, force: Bool = false) async {
         isSignedIn = signedIn
         guard signedIn else {
+            UNUserNotificationCenter.current().removeAllDeliveredNotifications()
             try? NotificationCredentials.remove()
             identity = nil
             notificationsAllowed = false
@@ -93,6 +94,45 @@ final class NotificationService {
             #endif
         } catch {
             if !Task.isCancelled { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// Registration must precede delivery, including launches for a reply action.
+    static func registerCategories() {
+        let reply = UNTextInputNotificationAction(
+            identifier: NotificationCategory.reply,
+            title: "Reply",
+            options: [.authenticationRequired],
+            textInputButtonTitle: "Send",
+            textInputPlaceholder: "Message…"
+        )
+        let category = UNNotificationCategory(
+            identifier: NotificationCategory.message,
+            actions: [reply],
+            intentIdentifiers: ["INSendMessageIntent"],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+
+    /// Await server acknowledgement; the normal composer queues sends instead.
+    func reply(_ text: String, to chatID: String, messageID: String?) async {
+        guard !text.trimmed.isEmpty else { return }
+        do {
+            let command = NotificationReplyCommand(roomID: chatID, eventID: messageID, text: text)
+            _ = try await MatrixRuntime.shared.command(JSONEncoder().encode(command))
+            clearDeliveredNotifications(for: chatID)
+        } catch {
+            errorMessage = "Could not send your notification reply: \(error.localizedDescription)"
+            let content = UNMutableNotificationContent()
+            content.title = "Reply wasn’t sent"
+            content.body = text
+            content.categoryIdentifier = NotificationCategory.message
+            content.threadIdentifier = chatID
+            content.userInfo = ["chatID": chatID, "replyDraft": text]
+            if let messageID { content.userInfo["messageID"] = messageID }
+            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+            try? await UNUserNotificationCenter.current().add(request)
         }
     }
 
@@ -195,7 +235,17 @@ final class NotificationService {
     }
 
     func clearDeliveredNotifications(for chatID: String) {
-        if badges.isActive { UNUserNotificationCenter.current().removeAllDeliveredNotifications() }
+        guard !chatID.isEmpty else { return }
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let notifications = await center.deliveredNotifications()
+            let identifiers = notifications.compactMap { notification in
+                let content = notification.request.content
+                let room = content.userInfo["chatID"] as? String ?? content.threadIdentifier
+                return room == chatID ? notification.request.identifier : nil
+            }
+            center.removeDeliveredNotifications(withIdentifiers: identifiers)
+        }
     }
 
     private func register(token: String) async throws {

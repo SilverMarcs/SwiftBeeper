@@ -12,7 +12,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"go.mau.fi/gomuks/pkg/hicli"
 	"go.mau.fi/gomuks/pkg/hicli/database"
 	"go.mau.fi/util/emojirunes"
 	"io"
@@ -73,24 +72,13 @@ func (s *Dispatcher) listMessages(w http.ResponseWriter, r *http.Request) error 
 		lastReadInt, _ = strconv.ParseInt(lastReadKey, 10, 64)
 	}
 
-	// A UI page has one SDK history budget. Do not keep fetching batches merely
-	// to hide filtered state/reaction events from the caller.
+	// UI pagination only reads the local timeline. Matrix sync owns ingestion.
 	const scanLimit = messagePageSize + 1
 	var events []*database.Event
 	var hasMore bool
 	events, hasMore, err = s.loadTimelineEvents(r.Context(), room.ID, cursorValue, direction, scanLimit)
 	if err != nil {
 		return err
-	}
-	if direction == "before" && r.URL.Query().Has("cursor") && len(events) == 0 && hasMore {
-		response, loadErr := s.rt.Client().PaginateServer(r.Context(), room.ID, scanLimit, false)
-		if errors.Is(loadErr, hicli.ErrPaginationAlreadyInProgress) {
-			// The room-open task is already supplying this page.
-		} else if loadErr != nil {
-			return errs.Internal(loadErr)
-		} else {
-			events, hasMore = response.Events, response.HasMore
-		}
 	}
 
 	s.RefreshPreview(r.Context(), room.ID, events)
@@ -359,8 +347,7 @@ func (s *Dispatcher) removeReaction(w http.ResponseWriter, r *http.Request) erro
 
 func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, cursorValue int64, direction string, limit int) ([]*database.Event, bool, error) {
 	cli := s.rt.Client()
-	// SQLite skips state/reaction/edit rows without repeatedly materializing
-	// raw batches in Go. Network pagination remains limited to one page.
+	// SQLite skips state/reaction/edit rows before materializing the local page.
 	query := timelineSelectBase + ` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker')) AND (relation_type IS NULL OR relation_type<>'m.replace')`
 	if direction == "before" {
 		query += ` AND (?=0 OR timeline.rowid<?) ORDER BY timeline.rowid DESC LIMIT ?`
@@ -387,10 +374,7 @@ func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, c
 	}
 
 	hasMore := len(events) == limit
-	if direction == "before" {
-		room, _ := cli.DB.Room.Get(ctx, roomID)
-		hasMore = hasMore || (room != nil && room.PrevBatch != database.PrevBatchPaginationComplete)
-	}
+
 	sort.Slice(events, func(i, j int) bool {
 		return events[i].TimelineRowID > events[j].TimelineRowID
 	})
@@ -603,17 +587,6 @@ func applyStoredMessageContent(message *compat.Message, evt *database.Event, evt
 	content.RemovePerMessageProfileFallback()
 
 	message.Type = mapMessageType(evtType, content.MsgType)
-	if content.Mentions != nil {
-		message.Mentions = make([]string, 0, len(content.Mentions.UserIDs)+1)
-		for _, userID := range content.Mentions.UserIDs {
-			if userID != "" {
-				message.Mentions = append(message.Mentions, string(userID))
-			}
-		}
-		if content.Mentions.Room {
-			message.Mentions = append(message.Mentions, "@room")
-		}
-	}
 	if attachment, ok := messageAttachment(content, evtType); ok {
 		message.Attachments = []compat.Attachment{attachment}
 		// Matrix requires a Body for media and commonly fills it with the

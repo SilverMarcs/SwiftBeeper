@@ -144,18 +144,69 @@ final class ChatStore: RealtimeEventHandler {
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var latestSearchRequestID: UUID?
     private var chatsCursor: String?
+    private var latestChatsRequestID: UUID?
     private var lastLoadedFilterID: String?
     private var chatsByID: [String: Chat] = [:]
+    private var selectedChatSnapshot: Chat?
+    @ObservationIgnored var visibleChatID: String?
+    private var pendingNotificationChatID: String?
+    private(set) var notificationSelectionID: UUID?
+    @ObservationIgnored private var notificationChatTask: Task<Void, Never>?
+    @ObservationIgnored private var notificationChatRequestID = UUID()
+
+    /// Retain a tap through startup, sync, and a room outside the loaded sidebar.
+    func openNotificationChat(_ chatID: String) {
+        guard !chatID.isEmpty else { return }
+        notificationChatTask?.cancel()
+        notificationChatTask = nil
+        notificationChatRequestID = UUID()
+        pendingNotificationChatID = chatID
+        searchQuery = ""
+        resolveNotificationChat()
+        loadPendingNotificationChat()
+    }
+
+    private func resolveNotificationChat() {
+        guard notificationService.badges.isActive,
+              let id = pendingNotificationChatID, chat(byID: id) != nil else { return }
+        pendingNotificationChatID = nil
+        selectedChatID = id
+        notificationSelectionID = UUID()
+    }
+
+    private func loadPendingNotificationChat() {
+        guard notificationService.badges.isActive,
+              let id = pendingNotificationChatID, !APIClient.accessToken.isEmpty,
+              !isLoadingChats, notificationChatTask == nil else { return }
+        let token = APIClient.accessToken
+        let requestID = UUID()
+        notificationChatRequestID = requestID
+        notificationChatTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if notificationChatRequestID == requestID { notificationChatTask = nil } }
+            do {
+                let chat = try await APIClient.getChat(chatID: id)
+                guard !Task.isCancelled, pendingNotificationChatID == id,
+                      APIClient.accessToken == token else { return }
+                applyChatUpsert(chat)
+            } catch {
+                // A room not yet present stays pending for its local sync event.
+            }
+        }
+    }
 
     var selectedChatID: String? {
         didSet {
             guard oldValue != selectedChatID else { return }
+            selectedChatSnapshot = selectedChatID.flatMap { chat(byID: $0) }
+            timelineGeneration = UUID()
 
             // Only the open chat keeps a timeline in memory — reset it on switch.
             messages = []
             messagesChatID = nil
             olderMessagesCursor = nil
             hasMoreOlderMessages = false
+            isLoadingOlderMessages = false
             lastReadByOtherSortKey = nil
             replyingToMessage = nil
             editingMessage = nil
@@ -205,6 +256,7 @@ final class ChatStore: RealtimeEventHandler {
     /// Furthest sortKey another participant has read in the open chat.
     var lastReadByOtherSortKey: String?
     private var latestLoadRequestID: UUID?
+    private var timelineGeneration = UUID()
     private(set) var isLoadingOlderMessages = false
     private(set) var isLoadingMessages = false
     /// New messages use independent optimistic outbox items; edits still use a
@@ -254,8 +306,7 @@ final class ChatStore: RealtimeEventHandler {
     }
 
     var selectedChat: Chat? {
-        guard let selectedChatID else { return nil }
-        return chat(byID: selectedChatID)
+        selectedChatSnapshot
     }
 
     /// Which chat to fall back to when the current selection becomes invalid.
@@ -265,7 +316,8 @@ final class ChatStore: RealtimeEventHandler {
     }
 
     func chat(byID chatID: String) -> Chat? {
-        chatsByID[chatID] ?? searchResults?.first(where: { $0.id == chatID })
+        if selectedChatSnapshot?.id == chatID { return selectedChatSnapshot }
+        return chatsByID[chatID] ?? searchResults?.first(where: { $0.id == chatID })
     }
 
     // MARK: - Open-chat accessors
@@ -334,6 +386,8 @@ final class ChatStore: RealtimeEventHandler {
         #if !os(macOS)
         notificationService.badges.setActive(true)
         #endif
+        resolveNotificationChat()
+        loadPendingNotificationChat()
         guard !APIClient.accessToken.isEmpty else { return }
         realtimeService.start()
         if let chatID = selectedChatID {
@@ -351,11 +405,22 @@ final class ChatStore: RealtimeEventHandler {
     /// macOS window focus clears alerts without restarting the local event stream.
     func handleAppActivation(_ isActive: Bool) {
         notificationService.badges.setActive(isActive)
+        if isActive {
+            resolveNotificationChat()
+            loadPendingNotificationChat()
+        }
         guard isActive, let chatID = selectedChatID else { return }
         notificationService.clearDeliveredNotifications(for: chatID)
     }
 
     func clearState() {
+        notificationChatTask?.cancel()
+        notificationChatTask = nil
+        notificationChatRequestID = UUID()
+        if APIClient.accessToken.isEmpty {
+            pendingNotificationChatID = nil
+            notificationSelectionID = nil
+        }
         scheduledChatsRefreshTask?.cancel()
         scheduledChatsRefreshTask = nil
         scheduledMessagesRefreshTask?.cancel()
@@ -398,15 +463,23 @@ final class ChatStore: RealtimeEventHandler {
         let shouldPreserveExistingChats = lastLoadedFilterID == requestedFilter.id
         let tokenAtStart = APIClient.accessToken
 
+        let requestID = UUID()
+        latestChatsRequestID = requestID
         isLoadingChats = true
-        defer { isLoadingChats = false }
+        defer {
+            if latestChatsRequestID == requestID {
+                isLoadingChats = false
+                loadPendingNotificationChat()
+            }
+        }
 
         do {
             let response = try await APIClient.listChats(
                 inbox: selectedInboxFilter.rawValue,
                 accountIDs: requestedFilter.accountIDs
             )
-            guard selectedFilter.id == requestedFilter.id, APIClient.accessToken == tokenAtStart else { return }
+            guard latestChatsRequestID == requestID, selectedFilter.id == requestedFilter.id,
+                  APIClient.accessToken == tokenAtStart, !Task.isCancelled else { return }
             let refreshedChats = response.items
             let refreshedCursor = response.oldestCursor
             let refreshedHasMoreChats = response.hasMore ?? false
@@ -427,11 +500,12 @@ final class ChatStore: RealtimeEventHandler {
 
             // Preserve the selection while refreshing; choose the first chat
             // on macOS/iPad when the current selection is no longer present.
-            if chatsByID[selectedChatID ?? ""] == nil {
+            if selectedChat == nil {
                 selectedChatID = autoSelectedChatID
             }
         } catch {
-            guard selectedFilter.id == requestedFilter.id, APIClient.accessToken == tokenAtStart else { return }
+            guard latestChatsRequestID == requestID, selectedFilter.id == requestedFilter.id,
+                  APIClient.accessToken == tokenAtStart, !Task.isCancelled else { return }
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
                 return
             }
@@ -662,27 +736,38 @@ final class ChatStore: RealtimeEventHandler {
     func loadOlderMessages(for chatID: String) async -> Bool {
         guard !APIClient.accessToken.isEmpty else { return false }
         guard chatID == messagesChatID, hasMoreOlderMessages, !isLoadingOlderMessages else { return false }
-        guard let cursor = olderMessagesCursor else { return false }
+        guard var cursor = olderMessagesCursor else { return false }
 
+        let token = APIClient.accessToken
+        let generation = timelineGeneration
         isLoadingOlderMessages = true
-        defer { isLoadingOlderMessages = false }
+        defer { if timelineGeneration == generation { isLoadingOlderMessages = false } }
 
         do {
-            let response = try await APIClient.listMessages(
-                chatID: chatID,
-                cursor: cursor,
-                direction: "before"
-            )
-            guard chatID == messagesChatID else { return false }
+            repeat {
+                let response = try await APIClient.listMessages(
+                    chatID: chatID,
+                    cursor: cursor,
+                    direction: "before"
+                )
+                guard !Task.isCancelled, chatID == messagesChatID,
+                      timelineGeneration == generation, APIClient.accessToken == token else { return false }
 
-            let merged = mergedMessages(existing: messages, incoming: normalizedMessages(response.items))
-            let changed = merged != messages
-            if changed { messages = merged }
-            hasMoreOlderMessages = response.hasMore
-            olderMessagesCursor = response.oldestCursor
-            applyPreview(response.preview, chatID: chatID)
-            return changed
+                let merged = mergedMessages(existing: messages, incoming: normalizedMessages(response.items))
+                let changed = merged != messages
+                if changed { messages = merged }
+                hasMoreOlderMessages = response.hasMore && response.oldestCursor != cursor
+                olderMessagesCursor = response.oldestCursor
+                applyPreview(response.preview, chatID: chatID)
+                if changed { return true }
+                // A local page can contain only hidden events. Continue until a
+                // visible row or the database boundary, without a retry button.
+                guard hasMoreOlderMessages, let next = response.oldestCursor else { return false }
+                cursor = next
+            } while true
         } catch {
+            guard !Task.isCancelled, timelineGeneration == generation,
+                  APIClient.accessToken == token else { return false }
             handleMessageError(error)
             return false
         }
@@ -786,8 +871,6 @@ final class ChatStore: RealtimeEventHandler {
                 attachment: firstAttachmentInput
             )
             recordPendingMessageID(firstResponse.pendingMessageID, for: outgoing.id)
-            if let chat = chat(byID: outgoing.chatID) {
-            }
 
             for attachment in outgoing.attachments.dropFirst() {
                 let attachmentInput = try await uploadAttachment(attachment, for: outgoing.id)
@@ -1058,6 +1141,12 @@ final class ChatStore: RealtimeEventHandler {
     /// Applies a hydrated `chat.upserted` summary to the sidebar without a full
     /// list reload. The summary includes filter membership and ordering.
     private func applyChatUpsert(_ incoming: Chat) {
+        if pendingNotificationChatID == incoming.id {
+            let filter = ChatFilter.inbox(incoming.isArchived == true ? .archive : .primary)
+            if selectedFilter != filter { selectedFilter = filter }
+            chatWindowSize = max(chatWindowSize, chats.count + 1)
+        }
+        updateSelectedChat(incoming)
         // Keep an in-flight search view consistent if it holds this chat.
         if var results = searchResults,
            let index = results.firstIndex(where: { $0.id == incoming.id }) {
@@ -1102,14 +1191,28 @@ final class ChatStore: RealtimeEventHandler {
     // MARK: - Private storage helpers
 
     private func setChats(_ newChats: [Chat]) {
+        if let selected = newChats.first(where: { $0.id == selectedChatID }) {
+            updateSelectedChat(selected)
+        }
         // Skip identical commits: Observation invalidates on any write, even when
         // a database reload is equal to the event-applied sidebar state.
         guard newChats != chats else { return }
         chats = newChats
         chatsByID = Dictionary(newChats.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        resolveNotificationChat()
+    }
+
+    private func updateSelectedChat(_ incoming: Chat) {
+        guard incoming.id == selectedChatID else { return }
+        let merged = selectedChatSnapshot?.merging(detail: incoming) ?? incoming
+        if merged != selectedChatSnapshot { selectedChatSnapshot = merged }
     }
 
     private func updateChat(_ chatID: String, _ mutate: (inout Chat) -> Void) {
+        if var selected = selectedChatSnapshot, selected.id == chatID {
+            mutate(&selected)
+            if selected != selectedChatSnapshot { selectedChatSnapshot = selected }
+        }
         if let index = chats.firstIndex(where: { $0.id == chatID }) {
             mutate(&chats[index])
             chatsByID[chatID] = chats[index]

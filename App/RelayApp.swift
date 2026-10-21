@@ -23,15 +23,17 @@ struct RelayApp: App {
             realtimeService: RealtimeService(),
             notificationService: notificationService
         )
-        #if os(macOS)
         AppDelegate.chatStore = chatStore
+        let inputManager = InputManager(chatStore: chatStore)
+        AppDelegate.inputManager = inputManager
+        #if os(macOS)
         chatStore.handleAppActivation(NSApplication.shared.isActive)
         #endif
         _sessionStore = State(initialValue: sessionStore)
         _notificationService = State(initialValue: notificationService)
         _audioPlayerService = State(initialValue: audioPlayerService)
         _chatStore = State(initialValue: chatStore)
-        _inputManager = State(initialValue: InputManager(chatStore: chatStore))
+        _inputManager = State(initialValue: inputManager)
 
     }
 

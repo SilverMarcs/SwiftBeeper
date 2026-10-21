@@ -57,6 +57,12 @@ final class InputManager {
 
     var trimmedDraft: String { draft.trimmed }
 
+    func restoreNotificationDraft(_ text: String, for chatID: String) {
+        let existing = draftsByChatID[chatID] ?? ""
+        draftsByChatID[chatID] = existing.isEmpty ? text : existing + "\n" + text
+        pendingFocus = true
+    }
+
     private func clearDraft(for chatID: String) {
         draftsByChatID[chatID] = nil
     }

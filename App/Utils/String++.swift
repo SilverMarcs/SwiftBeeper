@@ -20,24 +20,19 @@ private let markdownCache: NSCache<NSString, AttributedStringBox> = {
     return cache
 }()
 
-/// Mention styling does a small amount of Unicode-aware scanning. Cache the
-/// finished value independently from the base Markdown cache so scrolling and
-/// unrelated observation updates don't repeat that work.
+/// Cache the finished Markdown and link presentation for each bubble style.
 private let messageTextCache: NSCache<NSString, AttributedStringBox> = {
     let cache = NSCache<NSString, AttributedStringBox>()
     cache.countLimit = 2000
     return cache
 }()
 
-/// Creating an `NSDataDetector` is relatively expensive; share one instance.
 private let sharedLinkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
 extension String {
     var markdownAttributed: AttributedString {
         let key = self as NSString
-        if let cached = markdownCache.object(forKey: key) {
-            return cached.value
-        }
+        if let cached = markdownCache.object(forKey: key) { return cached.value }
         let parsed = (try? AttributedString(
             markdown: self,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -46,77 +41,13 @@ extension String {
         return parsed
     }
 
-    /// Renders message Markdown, compact inline links, and non-interactive
-    /// highlighted @mentions.
-    ///
-    /// Beeper supplies participant IDs for current messages, but legacy
-    /// messages have a nil `mentions` field and require text scanning. Known
-    /// IDs are resolved to participant usernames and display names so mentions
-    /// containing spaces are styled as one range.
-    func messageAttributed(
-        mentionIDs: [String]?,
-        participants: [ChatParticipant],
-        isOutgoing: Bool
-    ) -> AttributedString {
-        let aliasesByID = (mentionIDs ?? []).map { mentionID in
-            let participant = participants.first(where: { $0.id == mentionID })
-            let aliases = [
-                mentionID,
-                participant?.username,
-                participant?.fullName
-            ]
-                .compactMap { $0 }
-                .filter { !$0.isEmpty }
-                .map(Self.mentionLabel)
-                .uniqued()
-            return (mentionID, aliases)
-        }
-        let metadataKey = mentionIDs.map { $0.sorted().joined(separator: "\u{1F}") } ?? "<legacy>"
-        let aliasesKey = aliasesByID
-            .flatMap(\.1)
-            .sorted()
-            .joined(separator: "\u{1F}")
-        let cacheKey = "\(isOutgoing)\u{1E}\(metadataKey)\u{1E}\(aliasesKey)\u{1E}\(self)" as NSString
-
-        if let cached = messageTextCache.object(forKey: cacheKey) {
-            return cached.value
-        }
-
+    func messageAttributed(isOutgoing: Bool) -> AttributedString {
+        let key = "\(isOutgoing)\u{1E}\(self)" as NSString
+        if let cached = messageTextCache.object(forKey: key) { return cached.value }
         var attributed = markdownAttributed
         attributed.condenseAndStyleLinks(isOutgoing: isOutgoing)
-        var requiresTextScanning = mentionIDs == nil
-
-        for (_, aliases) in aliasesByID {
-            var foundAlias = false
-            for alias in aliases {
-                let ranges = attributed.mentionRanges(of: alias)
-                foundAlias = foundAlias || !ranges.isEmpty
-                for range in ranges {
-                    attributed.styleMention(in: range, isOutgoing: isOutgoing)
-                }
-            }
-            requiresTextScanning = requiresTextScanning || !foundAlias
-        }
-
-        if requiresTextScanning {
-            for range in attributed.scannedMentionRanges() {
-                attributed.styleMention(in: range, isOutgoing: isOutgoing)
-            }
-        }
-
-        messageTextCache.setObject(AttributedStringBox(attributed), forKey: cacheKey)
+        messageTextCache.setObject(AttributedStringBox(attributed), forKey: key)
         return attributed
-    }
-
-    nonisolated private static func mentionLabel(_ value: String) -> String {
-        value.hasPrefix("@") ? value : "@\(value)"
-    }
-}
-
-private extension Array where Element: Hashable {
-    func uniqued() -> [Element] {
-        var seen: Set<Element> = []
-        return filter { seen.insert($0).inserted }
     }
 }
 
@@ -161,80 +92,6 @@ private extension AttributedString {
         }
     }
 
-    func mentionRanges(of label: String) -> [Range<AttributedString.Index>] {
-        var result: [Range<AttributedString.Index>] = []
-        var searchStart = startIndex
-
-        while searchStart < endIndex,
-              let range = self[searchStart...].range(of: label, options: [.caseInsensitive]) {
-            let hasValidLeadingBoundary: Bool
-            if range.lowerBound == startIndex {
-                hasValidLeadingBoundary = true
-            } else {
-                let previousIndex = characters.index(before: range.lowerBound)
-                hasValidLeadingBoundary = !characters[previousIndex].isMentionCore
-            }
-
-            let hasValidTrailingBoundary = range.upperBound == endIndex
-                || !characters[range.upperBound].isMentionCore
-
-            if hasValidLeadingBoundary && hasValidTrailingBoundary {
-                result.append(range)
-            }
-            searchStart = range.upperBound
-        }
-
-        return result
-    }
-
-    func scannedMentionRanges() -> [Range<AttributedString.Index>] {
-        var result: [Range<AttributedString.Index>] = []
-        var index = startIndex
-
-        while index < endIndex {
-            guard characters[index] == "@" else {
-                index = characters.index(after: index)
-                continue
-            }
-
-            if index != startIndex {
-                let previousIndex = characters.index(before: index)
-                if characters[previousIndex].isMentionCore {
-                    index = characters.index(after: index)
-                    continue
-                }
-            }
-
-            let contentStart = characters.index(after: index)
-            guard contentStart < endIndex, characters[contentStart].isMentionCore else {
-                index = contentStart
-                continue
-            }
-
-            var mentionEnd = characters.index(after: contentStart)
-            while mentionEnd < endIndex, characters[mentionEnd].isMentionContinuation {
-                mentionEnd = characters.index(after: mentionEnd)
-            }
-
-            while mentionEnd > contentStart {
-                let lastIndex = characters.index(before: mentionEnd)
-                guard characters[lastIndex] == "." || characters[lastIndex] == "-" else { break }
-                mentionEnd = lastIndex
-            }
-
-            result.append(index..<mentionEnd)
-            index = mentionEnd
-        }
-
-        return result
-    }
-
-    mutating func styleMention(in range: Range<AttributedString.Index>, isOutgoing: Bool) {
-        self[range].foregroundColor = isOutgoing ? .white : .accentColor
-        var intent = self[range].inlinePresentationIntent ?? []
-        intent.insert(.stronglyEmphasized)
-        self[range].inlinePresentationIntent = intent
-    }
 }
 
 private extension URL {
@@ -252,15 +109,5 @@ private extension URL {
         let maximumLength = 48
         guard label.count > maximumLength else { return label }
         return "\(label.prefix(maximumLength - 1))…"
-    }
-}
-
-private extension Character {
-    var isMentionCore: Bool {
-        isLetter || isNumber || self == "_"
-    }
-
-    var isMentionContinuation: Bool {
-        isMentionCore || self == "." || self == "-"
     }
 }
