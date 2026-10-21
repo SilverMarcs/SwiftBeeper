@@ -1,82 +1,70 @@
 package dispatch
 
 import (
-	"crypto/subtle"
-	"net/http"
-	"strings"
-
-	"relay/core/internal/config"
-	errs "relay/core/internal/errors"
+	"context"
+	"encoding/json"
+	"fmt"
 	"relay/core/internal/gomuksruntime"
 )
 
-// Dispatcher routes the Swift message models to the Matrix client.
+// Dispatcher maps in-process Swift commands to Matrix operations.
 type Dispatcher struct {
-	cfg config.Config
-	rt  *gomuksruntime.Runtime
-	ws  *wsHub
+	rt     *gomuksruntime.Runtime
+	events *eventHub
 }
 
-func New(cfg config.Config, rt *gomuksruntime.Runtime) *Dispatcher {
-	s := &Dispatcher{cfg: cfg, rt: rt}
-	s.ws = newWSHub(s)
+func New(rt *gomuksruntime.Runtime) *Dispatcher {
+	s := &Dispatcher{rt: rt}
+	s.events = newEventHub(s)
 	return s
 }
 
-func (s *Dispatcher) Handler() http.Handler {
-	mux := http.NewServeMux()
-	for pattern, handler := range map[string]apiHandler{
-		"GET /manage/state":                s.manageState,
-		"POST /manage/beeper/start-login":  s.manageBeeperStartLogin,
-		"POST /manage/beeper/request-code": s.manageBeeperRequestCode,
-		"POST /manage/beeper/submit-code":  s.manageBeeperSubmitCode,
-		"POST /manage/login-custom":        s.manageLoginCustom,
-		"POST /manage/verify":              s.manageVerify,
-	} {
-		mux.Handle(pattern, s.localHandler(handler, true))
+func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawMessage) (any, error) {
+	switch action {
+	case "state":
+		return s.getManageState()
+	case "beeper-start-login":
+		return s.manageBeeperStartLogin(ctx, input)
+	case "beeper-request-code":
+		return s.manageBeeperRequestCode(ctx, input)
+	case "beeper-submit-code":
+		return s.manageBeeperSubmitCode(ctx, input)
+	case "login-custom":
+		return s.manageLoginCustom(ctx, input)
+	case "verify":
+		return s.manageVerify(ctx, input)
 	}
-	for pattern, handler := range map[string]apiHandler{
-		"GET /v1/accounts":                                         s.getAccounts,
-		"GET /v1/session":                                          s.getSession,
-		"GET /v1/chats":                                            s.listChats,
-		"GET /v1/chats/search":                                     s.searchChats,
-		"GET /v1/chats/{chatID}":                                   s.getChat,
-		"POST /v1/chats/{chatID}/archive":                          s.archiveChat,
-		"POST /v1/chats/{chatID}/mute":                             s.muteChat,
-		"POST /v1/chats/{chatID}/read":                             s.markChatRead,
-		"GET /v1/chats/{chatID}/messages":                          s.listMessages,
-		"POST /v1/chats/{chatID}/messages":                         s.sendMessage,
-		"PUT /v1/chats/{chatID}/messages/{messageID}":              s.editMessage,
-		"POST /v1/chats/{chatID}/messages/{messageID}/reactions":   s.addReaction,
-		"DELETE /v1/chats/{chatID}/messages/{messageID}/reactions": s.removeReaction,
-		"DELETE /v1/chats/{chatID}/messages/{messageID}":           s.deleteMessage,
-		"GET /v1/assets/serve":                                     s.serveAsset,
-	} {
-		mux.Handle(pattern, s.localHandler(handler, false))
+	if err := s.requireLoggedInSession(); err != nil {
+		return nil, err
 	}
-	return mux
-}
-
-func (s *Dispatcher) localHandler(handler apiHandler, manage bool) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		expected := s.cfg.AccessToken
-		provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if manage {
-			expected = s.cfg.ManageSecret
-			provided = r.Header.Get("X-RelayCore-Manage-Secret")
-		}
-		if expected == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
-			errs.Write(w, errs.Unauthorized("Invalid local dispatcher credential"))
-			return
-		}
-		if !manage {
-			if err := s.requireLoggedInSession(); err != nil {
-				errs.Write(w, err)
-				return
-			}
-		}
-		if err := handler(w, r); err != nil {
-			errs.Write(w, err)
-		}
-	})
+	switch action {
+	case "session":
+		return s.getSession(ctx, input)
+	case "list-chats":
+		return s.listChats(ctx, input)
+	case "search-chats":
+		return s.searchChats(ctx, input)
+	case "get-chat":
+		return s.getChat(ctx, input)
+	case "archive-chat":
+		return s.archiveChat(ctx, input)
+	case "mute-chat":
+		return s.muteChat(ctx, input)
+	case "mark-chat-read":
+		return s.markChatRead(ctx, input)
+	case "list-messages":
+		return s.listMessages(ctx, input)
+	case "send-message":
+		return s.sendMessage(ctx, input)
+	case "edit-message":
+		return s.editMessage(ctx, input)
+	case "add-reaction":
+		return s.addReaction(ctx, input)
+	case "remove-reaction":
+		return s.removeReaction(ctx, input)
+	case "delete-message":
+		return s.deleteMessage(ctx, input)
+	default:
+		return nil, fmt.Errorf("unknown Matrix command: %s", action)
+	}
 }

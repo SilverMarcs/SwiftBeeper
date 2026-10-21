@@ -87,7 +87,7 @@ final class BeeperSignInModel {
     }
 
     private func finish(sessionStore: SessionStore) async throws {
-        sessionStore.accessToken = try MatrixFiles.configuration().accessToken
+        sessionStore.accessToken = UUID().uuidString
         await MatrixRuntime.shared.setActive(true)
     }
 

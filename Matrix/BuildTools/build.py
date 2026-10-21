@@ -34,7 +34,7 @@ with (build / "core.lock").open("w") as lock:
     # matrix compilation serialized so every compiler sees a complete source.
     fcntl.flock(lock, fcntl.LOCK_EX)
     patch = tools / "gomuks.patch"
-    signature = hashlib.sha256(b"gomuks-v0.2601.0\n" + patch.read_bytes()).hexdigest()
+    signature = hashlib.sha256(b"gomuks-v0.2601.0-apple-client-only-v2\n" + patch.read_bytes()).hexdigest()
     vendor = matrix / "SDKSource/gomuks"
     stamp = build / "sdk-source.sha256"
     if not vendor.exists() or not stamp.exists() or stamp.read_text() != signature:
@@ -45,11 +45,19 @@ with (build / "core.lock").open("w") as lock:
         vendor.parent.mkdir(exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix="sdk-", dir=build))
         try:
-            shutil.copytree(source, temporary / "gomuks", ignore=shutil.ignore_patterns("*_test.go", "*.test.*", "testdata", "hitest", ".github", "docs", "*.md", "README*", "tui", "web"))
             prepared = temporary / "gomuks"
+            prepared.mkdir()
+            for name in ("go.mod", "go.sum", "LICENSE"):
+                shutil.copyfile(source / name, prepared / name)
+            for package in ("hicli", "rainbow"):
+                shutil.copytree(source / "pkg" / package, prepared / "pkg" / package,
+                    ignore=shutil.ignore_patterns("*_test.go", "testdata", "*_wasm.go", "print", "hitest", "json-commands.go"))
             for path in prepared.rglob("*"):
                 path.chmod(0o755 if path.is_dir() else 0o644)
             prepared.chmod(0o755)
+            # The app calls SDK methods directly and consumes only its event models.
+            for name in ("commands.go", "params.go", "spec.go"):
+                (prepared / "pkg/hicli/jsoncmd" / name).unlink()
             subprocess.run(["/usr/bin/patch", "-s", "-p1", "-i", str(patch)], cwd=prepared, check=True)
             if vendor.exists():
                 shutil.rmtree(vendor)

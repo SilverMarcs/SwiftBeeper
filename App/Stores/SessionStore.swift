@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// The UI's local dispatcher token. Matrix authentication is owned by Go.
+/// The UI's session generation. Matrix authentication is owned by Go.
 @MainActor
 @Observable
 final class SessionStore {

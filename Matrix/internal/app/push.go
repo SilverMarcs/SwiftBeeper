@@ -9,7 +9,7 @@ import (
 
 // The SDK owns the authenticated Matrix session. Swift supplies only the
 // notification gateway registration, never a Matrix access token.
-func (r *Runtime) updatePusher(ctx context.Context, command MobileCommand) (any, error) {
+func (r *Runtime) updatePusher(ctx context.Context, command Command) (any, error) {
 	cli := r.rt.Client()
 	if cli == nil || cli.Account == nil || cli.Client == nil || cli.Client.AccessToken == "" {
 		return nil, fmt.Errorf("a logged-in Matrix session is required")

@@ -1,8 +1,5 @@
 import Foundation
 
-nonisolated struct MatrixConfiguration: Codable, Sendable {
+nonisolated struct MatrixConfiguration: Encodable, Sendable {
     let stateDir: String
-    let accessToken: String
-    let manageSecret: String
-    let beeperHomeserverUrl: String
 }

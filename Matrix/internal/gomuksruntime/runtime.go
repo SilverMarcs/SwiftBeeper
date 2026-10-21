@@ -2,247 +2,133 @@ package gomuksruntime
 
 import (
 	"context"
-	"encoding/json"
-	"github.com/rs/zerolog"
-
+	"errors"
 	"fmt"
-
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
+	"sync"
 	"time"
 
-	"go.mau.fi/gomuks/pkg/gomuks"
+	"github.com/rs/zerolog"
 	"go.mau.fi/gomuks/pkg/hicli"
-	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 	"go.mau.fi/util/dbutil"
 	"golang.org/x/net/http2"
-
-	"relay/core/internal/config"
+	"maunium.net/go/mautrix"
 )
 
+// Runtime owns the on-device Matrix client and its SQLite store.
+// The upstream gomuks web application and server are not part of Relay.
 type Runtime struct {
-	cfg     config.Config
-	dataDir string
-	gmx     *gomuks.Gomuks
+	dataDir        string
+	client         *hicli.HiClient
+	eventMu        sync.RWMutex
+	listeners      map[uint64]func(any)
+	nextListenerID uint64
 }
 
-func New(cfg config.Config) (*Runtime, error) {
-	if cfg.StateDir != "" {
-		stateDir, err := filepath.Abs(cfg.StateDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve state dir: %w", err)
-		}
-		cfg.StateDir = stateDir
+func New(stateDir string) (*Runtime, error) {
+	if stateDir == "" {
+		return nil, fmt.Errorf("Matrix profile directory is required")
 	}
-	dataDir, err := resolveDataDir(cfg.StateDir)
+	root, err := filepath.Abs(stateDir)
 	if err != nil {
 		return nil, err
 	}
-	return &Runtime{cfg: cfg, dataDir: dataDir}, nil
-}
-
-func withConfiguredGomuksRoot(root string, fn func() error) error {
-	if root == "" {
-		return fn()
-	}
-
-	oldRoot, hadRoot := os.LookupEnv("GOMUKS_ROOT")
-	if err := os.Setenv("GOMUKS_ROOT", root); err != nil {
-		return fmt.Errorf("failed to set GOMUKS_ROOT: %w", err)
-	}
-	defer func() {
-		if hadRoot {
-			_ = os.Setenv("GOMUKS_ROOT", oldRoot)
-		} else {
-			_ = os.Unsetenv("GOMUKS_ROOT")
-		}
-	}()
-
-	return fn()
-}
-
-func resolveDataDir(root string) (string, error) {
-	gmx := gomuks.NewGomuks()
-	if err := withConfiguredGomuksRoot(root, func() error {
-		return initDirectories(gmx)
-	}); err != nil {
-		return "", err
-	}
-
-	dataDir, err := filepath.Abs(gmx.DataDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve gomuks data dir: %w", err)
-	}
-	return dataDir, nil
-}
-
-// Upstream directory setup panics on filesystem errors. Return that failure to
-// Swift so an inaccessible profile presents an error instead of killing the app.
-func initDirectories(gmx *gomuks.Gomuks) (err error) {
-	defer func() {
-		if failure := recover(); failure != nil {
-			err = fmt.Errorf("failed to initialize Matrix directories: %v", failure)
-		}
-	}()
-	gmx.InitDirectories()
-	return nil
-}
-
-func startClientWithoutExit(gmx *gomuks.Gomuks) error {
-	hicli.InitialDeviceDisplayName = "Relay"
-	hicli.HTMLSanitizerImgSrcTemplate = "_gomuks/media/%s/%s?encrypted=false"
-	rawDB, err := dbutil.NewFromConfig("gomuks", dbutil.Config{
-		PoolConfig: gmx.GetDBConfig(),
-	}, dbutil.ZeroLogger(gmx.Log.With().Str("component", "hicli").Str("db_section", "main").Logger()))
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-
-	clientCtx := gmx.Log.WithContext(context.Background())
-	gmx.Client = hicli.New(
-		rawDB,
-		nil,
-		gmx.Log.With().Str("component", "hicli").Logger(),
-		[]byte("meow"),
-		gmx.HandleEvent,
-	)
-	gmx.Client.LogoutFunc = gmx.Logout
-
-	httpClient := gmx.Client.Client.Client
-	if runtime.GOOS == "js" {
-		gmx.Client.Client.UserAgent = ""
-		httpClient.Transport = nil
-	} else if transport, ok := httpClient.Transport.(*http.Transport); ok {
-		transport.ForceAttemptHTTP2 = false
-		if !gmx.Config.Matrix.DisableHTTP2 {
-			h2, err := http2.ConfigureTransports(transport)
-			if err != nil {
-				return fmt.Errorf("failed to configure HTTP/2: %w", err)
-			}
-			h2.ReadIdleTimeout = 30 * time.Second
-		}
-	}
-
-	userID, err := gmx.Client.DB.Account.GetFirstUserID(clientCtx)
-	if err != nil {
-		return fmt.Errorf("failed to get first user ID: %w", err)
-	}
-	if err := gmx.Client.StartLocal(clientCtx, userID); err != nil {
-		return fmt.Errorf("failed to start client: %w", err)
-	}
-	return nil
+	// Preserve the existing profile layout and encryption pickle key.
+	return &Runtime{dataDir: filepath.Join(root, "data"), listeners: make(map[uint64]func(any))}, nil
 }
 
 func (r *Runtime) Start(ctx context.Context) error {
-	if r.gmx != nil {
+	if r.client != nil {
 		return nil
 	}
-	gmx := gomuks.NewGomuks()
-	gmx.DisableAuth = true
-
-	if err := withConfiguredGomuksRoot(r.cfg.StateDir, func() error {
-		if err := initDirectories(gmx); err != nil {
-			return err
-		}
-		dataDir, err := filepath.Abs(gmx.DataDir)
-		if err != nil {
-			return fmt.Errorf("failed to resolve gomuks data dir: %w", err)
-		}
-		r.dataDir = dataDir
-
-		if err := gmx.LoadConfig(); err != nil {
-			return fmt.Errorf("failed to load gomuks config: %w", err)
-		}
-		for i := range gmx.Config.Logging.Writers {
-			writer := &gmx.Config.Logging.Writers[i]
-			if string(writer.Type) == "file" {
-				writer.Filename = filepath.Join(r.cfg.StateDir, "logs", "gomuks.log")
-			}
-		}
-		disabled := zerolog.Disabled
-		gmx.Config.Logging.MinLevel = &disabled
-		gmx.SetupLog()
-		if err := startClientWithoutExit(gmx); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
+	if err := os.MkdirAll(r.dataDir, 0700); err != nil {
 		return err
 	}
-	r.gmx = gmx
-	gmx.Log.Info().Str("state_dir", r.cfg.StateDir).Msg("gomuks runtime started")
-
+	log := zerolog.Nop()
+	rawDB, err := dbutil.NewFromConfig("gomuks", dbutil.Config{PoolConfig: dbutil.PoolConfig{
+		Type:         "sqlite3-fk-wal",
+		URI:          fmt.Sprintf("file:%s/gomuks.db?_txlock=immediate", r.dataDir),
+		MaxOpenConns: 5, MaxIdleConns: 1,
+	}}, dbutil.ZeroLogger(log))
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	hicli.InitialDeviceDisplayName = "Relay"
+	hicli.HTMLSanitizerImgSrcTemplate = "_gomuks/media/%s/%s?encrypted=false"
+	cli := hicli.New(rawDB, nil, log, []byte("meow"), r.emit)
+	if transport, ok := cli.Client.Client.Transport.(*http.Transport); ok {
+		transport.ForceAttemptHTTP2 = false
+		h2, err := http2.ConfigureTransports(transport)
+		if err != nil {
+			cli.Stop()
+			return err
+		}
+		h2.ReadIdleTimeout = 30 * time.Second
+	}
+	userID, err := cli.DB.Account.GetFirstUserID(ctx)
+	if err == nil {
+		err = cli.StartLocal(ctx, userID)
+	}
+	if err != nil {
+		cli.Stop()
+		return fmt.Errorf("failed to start Matrix client: %w", err)
+	}
+	r.client = cli
 	return nil
 }
 
 func (r *Runtime) Stop() {
-	if r.gmx != nil {
-		r.gmx.DirectStop()
-		r.gmx = nil
+	if r.client != nil {
+		r.client.Stop()
+		r.client = nil
 	}
 }
 
-func (r *Runtime) Client() *hicli.HiClient {
-	if r.gmx == nil {
-		return nil
+func (r *Runtime) Client() *hicli.HiClient { return r.client }
+
+// Sync events go straight to the in-process subscriber. There is no socket,
+// replay buffer, acknowledgement tracking, or web-push producer.
+func (r *Runtime) Subscribe(listener func(any)) func() {
+	r.eventMu.Lock()
+	r.nextListenerID++
+	listenerID := r.nextListenerID
+	r.listeners[listenerID] = listener
+	r.eventMu.Unlock()
+	return func() {
+		r.eventMu.Lock()
+		delete(r.listeners, listenerID)
+		r.eventMu.Unlock()
 	}
-	return r.gmx.Client
 }
 
-func (r *Runtime) EventBuffer() *gomuks.EventBuffer {
-	if r.gmx == nil {
-		return nil
+func (r *Runtime) emit(evt any) {
+	r.eventMu.RLock()
+	defer r.eventMu.RUnlock()
+	for _, listener := range r.listeners {
+		listener(evt)
 	}
-	return r.gmx.EventBuffer
 }
 
-func (r *Runtime) SubmitJSONCommand(ctx context.Context, cmd jsoncmd.Name, params any, out any) error {
-	cli := r.Client()
-	if cli == nil || cli.Client == nil {
-		return fmt.Errorf("gomuks runtime is not initialized")
+func (r *Runtime) Logout(ctx context.Context) error {
+	_, err := r.client.Client.Logout(ctx)
+	if err != nil && !errors.Is(err, mautrix.MUnknownToken) {
+		return err
 	}
-
-	var payload json.RawMessage
-	if params == nil {
-		payload = []byte(`{}`)
-	} else {
-		raw, err := json.Marshal(params)
-		if err != nil {
-			return fmt.Errorf("failed to encode %s params: %w", cmd, err)
-		}
-		payload = raw
+	r.Stop()
+	if err = os.RemoveAll(r.dataDir); err != nil {
+		return err
 	}
-
-	resp := cli.SubmitJSONCommand(ctx, &hicli.JSONCommand{
-		Command: cmd,
-		Data:    payload,
-	})
-	if resp == nil {
-		return fmt.Errorf("gomuks returned empty response for %s", cmd)
+	// Older builds created an upstream cache directory beside the database.
+	if err = os.RemoveAll(filepath.Join(filepath.Dir(r.dataDir), "cache")); err != nil {
+		return err
 	}
-	if resp.Command == jsoncmd.RespError {
-		var message string
-		if err := json.Unmarshal(resp.Data, &message); err != nil || strings.TrimSpace(message) == "" {
-			message = string(resp.Data)
-		}
-		message = strings.TrimSpace(message)
-		if message == "" {
-			message = "unknown error"
-		}
-		return fmt.Errorf("gomuks %s failed: %s", cmd, message)
+	if err = r.Start(context.Background()); err != nil {
+		return err
 	}
-	if resp.Command != jsoncmd.RespSuccess {
-		return fmt.Errorf("gomuks returned unexpected response type %s for %s", resp.Command, cmd)
-	}
-	if out == nil {
-		return nil
-	}
-	if err := json.Unmarshal(resp.Data, out); err != nil {
-		return fmt.Errorf("failed to decode %s response: %w", cmd, err)
-	}
+	r.emit(r.client.State())
+	r.emit(r.client.SyncStatus.Load())
 	return nil
 }
 

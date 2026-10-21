@@ -33,35 +33,6 @@ actor MatrixRuntime {
         }
     }
 
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        try start()
-        guard let url = request.url, url.host == MatrixFiles.host else { throw MatrixError.invalidRequest }
-        let config = try MatrixFiles.configuration()
-        let envelope = MatrixRequest(method: request.httpMethod ?? "GET", url: url.absoluteString,
-                                       headers: ["Authorization": ["Bearer " + config.accessToken],
-                                                 "X-RelayCore-Manage-Secret": [config.manageSecret],
-                                                 "Content-Type": [request.value(forHTTPHeaderField: "Content-Type") ?? "application/json"]],
-                                       bodyBase64: request.httpBody?.base64EncodedString())
-        let input = try JSONEncoder().encode(envelope)
-        let nativeHandle = handle
-        // The Go core and SQLite pool support concurrent requests. Blocking FFI
-        // calls use the cooperative pool off both the UI and lifecycle actor.
-        let raw = try await Task.detached(priority: .userInitiated) {
-            guard let result = String(decoding: input, as: UTF8.self).withCString({
-                RelayCoreHandleRequest(nativeHandle, UnsafeMutablePointer(mutating: $0))
-            }) else { throw MatrixError.invalidResponse }
-            defer { RelayCoreFreeCString(result) }
-            return Data(String(cString: result).utf8)
-        }.value
-        let result = try JSONDecoder().decode(MatrixResponse.self, from: raw)
-        guard let body = result.response,
-              let response = HTTPURLResponse(url: url, statusCode: body.status, httpVersion: "HTTP/1.1",
-                                             headerFields: body.headers?.mapValues { $0.joined(separator: ", ") }) else {
-            throw MatrixError.invalidResponse
-        }
-        return (Data(base64Encoded: body.bodyBase64 ?? "") ?? Data(), response)
-    }
-
     func command(_ data: Data) async throws -> Data {
         try start()
         let nativeHandle = handle
@@ -71,8 +42,8 @@ actor MatrixRuntime {
             }) else { throw MatrixError.invalidResponse }
             defer { RelayCoreFreeCString(result) }
             let output = Data(String(cString: result).utf8)
-            if (try? JSONDecoder().decode(MatrixCommandFailure.self, from: output))?.error != nil {
-                throw MatrixError.operationFailed
+            if let message = (try? JSONDecoder().decode(MatrixCommandFailure.self, from: output))?.error {
+                throw APIError.operation(message)
             }
             return output
         }.value
@@ -119,10 +90,11 @@ actor MatrixRuntime {
         return (connection, channel.stream)
     }
 
-    func sendRealtime(_ data: Data, connection: UInt) throws {
+    func setRealtimeSubscriptions(messageChatIDs: [String], connection: UInt) throws {
         guard handle != 0 else { throw MatrixError.cannotStart }
+        let data = try JSONEncoder().encode(messageChatIDs)
         let result = String(decoding: data, as: UTF8.self).withCString {
-            RelayCoreRealtimeSend(handle, connection, UnsafeMutablePointer(mutating: $0))
+            RelayCoreRealtimeSubscribe(handle, connection, UnsafeMutablePointer(mutating: $0))
         }
         if let result { RelayCoreFreeCString(result); throw MatrixError.operationFailed }
     }

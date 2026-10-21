@@ -2,15 +2,14 @@ package app
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"sync"
 	"time"
 
-	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 	"maunium.net/go/mautrix/id"
 )
 
-type MobileCommand struct {
+type Command struct {
 	Action            string     `json:"action"`
 	Active            bool       `json:"active"`
 	RoomID            id.RoomID  `json:"roomID"`
@@ -38,14 +37,9 @@ type mobileState struct {
 	attempted       map[id.SessionID]time.Time
 }
 
-var mobileStates sync.Map
+func (r *Runtime) mobile() *mobileState { return r.mobileState }
 
-func (r *Runtime) mobile() *mobileState {
-	value, _ := mobileStates.LoadOrStore(r, &mobileState{attempted: make(map[id.SessionID]time.Time)})
-	return value.(*mobileState)
-}
-
-func (r *Runtime) MobileExecute(ctx context.Context, command MobileCommand) (any, error) {
+func (r *Runtime) Execute(ctx context.Context, command Command, input json.RawMessage) (any, error) {
 	switch command.Action {
 	case "active":
 		r.setMobileActive(command.Active)
@@ -68,10 +62,10 @@ func (r *Runtime) MobileExecute(ctx context.Context, command MobileCommand) (any
 		return r.dispatcher.MobileReply(ctx, command.RoomID, command.EventID, command.Text)
 	case "logout":
 		r.setMobileActive(false)
-		err := r.rt.SubmitJSONCommand(ctx, jsoncmd.ReqLogout, nil, nil)
+		err := r.rt.Logout(ctx)
 		return map[string]any{"success": err == nil}, err
 	default:
-		return nil, fmt.Errorf("unknown local command")
+		return r.dispatcher.Execute(ctx, command.Action, input)
 	}
 }
 

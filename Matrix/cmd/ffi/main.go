@@ -17,13 +17,8 @@ import "C"
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
 	"runtime/cgo"
 	"sync"
-	"time"
 	"unsafe"
 
 	"relay/core/internal/app"
@@ -73,12 +68,6 @@ func RelayCoreCreate(cfgJSON *C.char) C.RelayCoreHandle {
 			return 0
 		}
 	}
-	if cfg.StateDir != "" {
-		_ = os.Setenv("GOMUKS_ROOT", cfg.StateDir)
-		_ = os.Setenv("DEBUG_DIR", filepath.Join(cfg.StateDir, "logs"))
-		_ = os.Setenv("GOMUKS_LOGS_HOME", filepath.Join(cfg.StateDir, "logs"))
-		_ = os.Chdir(cfg.StateDir)
-	}
 	rt, err := app.New(cfg)
 	if err != nil {
 		return 0
@@ -114,30 +103,6 @@ func RelayCoreDestroy(handle C.RelayCoreHandle) {
 	h.Delete()
 }
 
-//export RelayCoreHandleRequest
-func RelayCoreHandleRequest(handle C.RelayCoreHandle, reqJSON *C.char) *C.char {
-	var req app.Request
-	if err := json.Unmarshal([]byte(goString(reqJSON)), &req); err != nil {
-		return marshalResult(map[string]any{"error": fmt.Sprintf("invalid request: %v", err)})
-	}
-	timeout := 20 * time.Second
-	if target, err := url.Parse(req.URL); err == nil {
-		switch target.Path {
-		case "/manage/login-custom", "/manage/verify":
-			// Authentication restores crypto state through several server calls.
-			// It must not share the short deadline used for ordinary local reads.
-			timeout = 2 * time.Minute
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	response, err := runtimeFromHandle(handle).runtime.Handle(ctx, req)
-	if err != nil {
-		return marshalResult(map[string]any{"error": "Local request could not complete"})
-	}
-	return marshalResult(map[string]any{"response": response})
-}
-
 //export RelayCoreRealtimeConnect
 func RelayCoreRealtimeConnect(handle C.RelayCoreHandle, callback C.RelayCoreRealtimeCallback) C.RelayCoreRealtimeHandle {
 	rt := runtimeFromHandle(handle)
@@ -162,8 +127,8 @@ func RelayCoreRealtimeConnect(handle C.RelayCoreHandle, callback C.RelayCoreReal
 	return C.RelayCoreRealtimeHandle(realtimeID)
 }
 
-//export RelayCoreRealtimeSend
-func RelayCoreRealtimeSend(handle C.RelayCoreHandle, realtimeHandle C.RelayCoreRealtimeHandle, payloadJSON *C.char) *C.char {
+//export RelayCoreRealtimeSubscribe
+func RelayCoreRealtimeSubscribe(handle C.RelayCoreHandle, realtimeHandle C.RelayCoreRealtimeHandle, payloadJSON *C.char) *C.char {
 	rt := runtimeFromHandle(handle)
 	rt.mu.Lock()
 	conn := rt.realtime[uintptr(realtimeHandle)]
@@ -171,7 +136,11 @@ func RelayCoreRealtimeSend(handle C.RelayCoreHandle, realtimeHandle C.RelayCoreR
 	if conn == nil || conn.conn == nil {
 		return marshalResult(map[string]any{"error": "realtime connection not found"})
 	}
-	if err := conn.conn.Send([]byte(goString(payloadJSON))); err != nil {
+	var roomIDs []string
+	if err := json.Unmarshal([]byte(goString(payloadJSON)), &roomIDs); err != nil {
+		return marshalResult(map[string]any{"error": "invalid room subscriptions"})
+	}
+	if err := conn.conn.Subscribe(roomIDs); err != nil {
 		return marshalResult(map[string]any{"error": err.Error()})
 	}
 	return nil

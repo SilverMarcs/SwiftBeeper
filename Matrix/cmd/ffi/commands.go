@@ -16,15 +16,20 @@ import (
 
 //export RelayCoreCommand
 func RelayCoreCommand(handle C.RelayCoreHandle, input *C.char) *C.char {
-	var command app.MobileCommand
-	if json.Unmarshal([]byte(goString(input)), &command) != nil {
+	var command app.Command
+	raw := json.RawMessage(goString(input))
+	if json.Unmarshal(raw, &command) != nil {
 		return marshalResult(map[string]any{"error": "Invalid local command"})
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	timeout := 20 * time.Second
+	if command.Action == "login-custom" || command.Action == "verify" {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	result, err := runtimeFromHandle(handle).runtime.MobileExecute(ctx, command)
+	result, err := runtimeFromHandle(handle).runtime.Execute(ctx, command, raw)
 	if err != nil {
-		return marshalResult(map[string]any{"error": "Local Matrix operation could not complete"})
+		return marshalResult(map[string]any{"error": err.Error()})
 	}
 	return marshalResult(result)
 }

@@ -3,8 +3,8 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,7 +16,6 @@ import (
 
 	"relay/core/internal/compat"
 	"relay/core/internal/cursor"
-	errs "relay/core/internal/errors"
 )
 
 const (
@@ -154,18 +153,10 @@ func applyRoomAccountDataContent(state roomAccountDataState, eventType string, c
 	return state
 }
 
-func (s *Dispatcher) getAccounts(w http.ResponseWriter, r *http.Request) error {
-	accounts, err := s.loadAccounts(r.Context())
+func (s *Dispatcher) getSession(ctx context.Context, input json.RawMessage) (any, error) {
+	accounts, err := s.loadAccounts(ctx)
 	if err != nil {
-		return err
-	}
-	return writeJSON(w, accounts)
-}
-
-func (s *Dispatcher) getSession(w http.ResponseWriter, r *http.Request) error {
-	accounts, err := s.loadAccounts(r.Context())
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	cli := s.rt.Client()
@@ -176,7 +167,7 @@ func (s *Dispatcher) getSession(w http.ResponseWriter, r *http.Request) error {
 			break
 		}
 	}
-	if profile, profileErr := cli.Client.GetProfile(r.Context(), cli.Account.UserID); profileErr == nil && profile != nil &&
+	if profile, profileErr := cli.Client.GetProfile(ctx, cli.Account.UserID); profileErr == nil && profile != nil &&
 		(strings.TrimSpace(profile.DisplayName) != "" || !profile.AvatarURL.IsEmpty()) {
 		user = newCompatUser(userShape{
 			ID:       string(cli.Account.UserID),
@@ -186,7 +177,7 @@ func (s *Dispatcher) getSession(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	return writeJSON(w, compat.SessionOutput{User: user, Accounts: accounts})
+	return compat.SessionOutput{User: user, Accounts: accounts}, nil
 }
 
 func (s *Dispatcher) buildAccountLookup(ctx context.Context) (*accountLookup, error) {
@@ -217,7 +208,7 @@ func (s *Dispatcher) loadAccounts(ctx context.Context) ([]compat.Account, error)
 
 	accountDataEvents, err := cli.DB.AccountData.GetAllGlobal(ctx, cli.Account.UserID)
 	if err != nil {
-		return nil, errs.Internal(fmt.Errorf("failed to read global account data: %w", err))
+		return nil, fmt.Errorf("failed to read global account data: %w", err)
 	}
 
 	var state bridgeStateContent
@@ -229,7 +220,7 @@ func (s *Dispatcher) loadAccounts(ctx context.Context) ([]compat.Account, error)
 			continue
 		}
 		if err = json.Unmarshal(ad.Content, &state); err != nil {
-			return nil, errs.Internal(fmt.Errorf("failed to parse %s: %w", bridgeStateEventType, err))
+			return nil, fmt.Errorf("failed to parse %s: %w", bridgeStateEventType, err)
 		}
 		break
 	}
@@ -318,27 +309,31 @@ func bridgeIDFromAccountID(accountID string) string {
 	return accountID
 }
 
-func (s *Dispatcher) listChats(w http.ResponseWriter, r *http.Request) error {
-	lookup, err := s.buildAccountLookup(r.Context())
-	if err != nil {
-		return err
+func (s *Dispatcher) listChats(ctx context.Context, input json.RawMessage) (any, error) {
+	var req chatListInput
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
 	}
-	direction, err := parseDirection(r.URL.Query().Get("direction"))
+	lookup, err := s.buildAccountLookup(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cursorValue, err := parseChatCursor(r.URL.Query().Get("cursor"))
+	direction, err := parseDirection(req.Direction)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	accountIDs := parseAccountIDs(r)
-	inbox := strings.TrimSpace(r.URL.Query().Get("inbox"))
+	cursorValue, err := parseChatCursor(req.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	accountIDs := req.AccountIDs
+	inbox := strings.TrimSpace(req.Inbox)
 	items := make([]compat.Chat, 0, chatPageSize+1)
 	var scanned *cursor.ChatCursor
 	for len(items) <= chatPageSize {
-		rooms, loadErr := s.loadRoomPage(r.Context(), cursorValue, direction, scanned)
+		rooms, loadErr := s.loadRoomPage(ctx, cursorValue, direction, scanned)
 		if loadErr != nil {
-			return loadErr
+			return nil, loadErr
 		}
 		if len(rooms) == 0 {
 			break
@@ -347,16 +342,16 @@ func (s *Dispatcher) listChats(w http.ResponseWriter, r *http.Request) error {
 		for i, room := range rooms {
 			ids[i] = room.ID
 		}
-		states, loadErr := s.loadRoomAccountDataStates(r.Context(), ids...)
+		states, loadErr := s.loadRoomAccountDataStates(ctx, ids...)
 		if loadErr != nil {
-			return loadErr
+			return nil, loadErr
 		}
-		reads, _ := s.loadLastReadSortKeys(r.Context(), ids...)
-		summaries, loadErr := s.loadChatSummaries(r.Context(), rooms, chatPreviewParticipants, lookup, true)
+		reads, _ := s.loadLastReadSortKeys(ctx, ids...)
+		summaries, loadErr := s.loadChatSummaries(ctx, rooms, chatPreviewParticipants, lookup, true)
 		if loadErr != nil {
-			return loadErr
+			return nil, loadErr
 		}
-		ctx := context.WithValue(r.Context(), chatSummaryKey{}, summaries)
+		ctx := context.WithValue(ctx, chatSummaryKey{}, summaries)
 		for _, room := range rooms {
 			state := states[room.ID]
 			if !roomMatchesInbox(room, state, inbox) {
@@ -364,7 +359,7 @@ func (s *Dispatcher) listChats(w http.ResponseWriter, r *http.Request) error {
 			}
 			chat, mapErr := s.mapRoomToChat(ctx, room, lookup, chatPreviewParticipants, true, state, reads[room.ID])
 			if mapErr != nil {
-				return mapErr
+				return nil, mapErr
 			}
 			if len(accountIDs) > 0 && !equalsAny(chat.AccountID, accountIDs) {
 				continue
@@ -399,52 +394,60 @@ func (s *Dispatcher) listChats(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	return writeJSON(w, compat.ListChatsOutput{
+	return compat.ListChatsOutput{
 		Items:        items,
 		HasMore:      hasMore,
 		OldestCursor: oldestCursor,
 		NewestCursor: newestCursor,
-	})
+	}, nil
 }
 
-func (s *Dispatcher) getChat(w http.ResponseWriter, r *http.Request) error {
-	chatID := readChatID(r, "")
+func (s *Dispatcher) getChat(ctx context.Context, input json.RawMessage) (any, error) {
+	var req struct {
+		ChatID              string `json:"chatID"`
+		MaxParticipantCount int    `json:"maxParticipantCount"`
+	}
+	req.MaxParticipantCount = -1
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
+	}
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
-	maxParticipants, err := parseParticipantLimit(r.URL.Query().Get("maxParticipantCount"))
-	if err != nil {
-		return err
+	maxParticipants := req.MaxParticipantCount
+	if maxParticipants < -1 || maxParticipants > 500 {
+		return nil, errors.New("maxParticipantCount: must be between -1 and 500")
 	}
-	lookup, err := s.buildAccountLookup(r.Context())
+	lookup, err := s.buildAccountLookup(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cli := s.rt.Client()
-	room, err := cli.DB.Room.Get(r.Context(), id.RoomID(chatID))
+	room, err := cli.DB.Room.Get(ctx, id.RoomID(chatID))
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to read room metadata: %w", err))
+		return nil, fmt.Errorf("failed to read room metadata: %w", err)
 	}
 	if room == nil {
-		return errs.NotFound("Chat not found")
+		return nil, errors.New("Chat not found")
 	}
-	roomStates, err := s.loadRoomAccountDataStates(r.Context(), room.ID)
+	roomStates, err := s.loadRoomAccountDataStates(ctx, room.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	lastReadKey := s.loadLastReadSortKey(r.Context(), room.ID)
-	chat, err := s.mapRoomToChat(r.Context(), room, lookup, maxParticipants, true, roomStates[room.ID], lastReadKey)
+	lastReadKey := s.loadLastReadSortKey(ctx, room.ID)
+	chat, err := s.mapRoomToChat(ctx, room, lookup, maxParticipants, true, roomStates[room.ID], lastReadKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return writeJSON(w, chat)
+	return chat, nil
 }
 
 func (s *Dispatcher) loadRoomsSorted(ctx context.Context) ([]*database.Room, error) {
 	cli := s.rt.Client()
 	rows, err := cli.DB.Query(ctx, roomSelectSortedQuery)
 	if err != nil {
-		return nil, errs.Internal(fmt.Errorf("failed to query rooms: %w", err))
+		return nil, fmt.Errorf("failed to query rooms: %w", err)
 	}
 	defer rows.Close()
 
@@ -452,12 +455,12 @@ func (s *Dispatcher) loadRoomsSorted(ctx context.Context) ([]*database.Room, err
 	for rows.Next() {
 		room := &database.Room{}
 		if _, scanErr := room.Scan(rows); scanErr != nil {
-			return nil, errs.Internal(fmt.Errorf("failed to scan room: %w", scanErr))
+			return nil, fmt.Errorf("failed to scan room: %w", scanErr)
 		}
 		rooms = append(rooms, room)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, errs.Internal(fmt.Errorf("room query failed: %w", err))
+		return nil, fmt.Errorf("room query failed: %w", err)
 	}
 	return rooms, nil
 }
@@ -477,7 +480,7 @@ func (s *Dispatcher) loadRoomAccountDataStates(ctx context.Context, roomIDs ...i
 	}
 	rows, err := cli.DB.Query(ctx, query, args...)
 	if err != nil {
-		return nil, errs.Internal(fmt.Errorf("failed to query room account data: %w", err))
+		return nil, fmt.Errorf("failed to query room account data: %w", err)
 	}
 	defer rows.Close()
 
@@ -489,7 +492,7 @@ func (s *Dispatcher) loadRoomAccountDataStates(ctx context.Context, roomIDs ...i
 			content   []byte
 		)
 		if scanErr := rows.Scan(&roomIDRaw, &eventType, &content); scanErr != nil {
-			return nil, errs.Internal(fmt.Errorf("failed to scan room account data: %w", scanErr))
+			return nil, fmt.Errorf("failed to scan room account data: %w", scanErr)
 		}
 		if roomIDRaw == "" {
 			continue
@@ -499,7 +502,7 @@ func (s *Dispatcher) loadRoomAccountDataStates(ctx context.Context, roomIDs ...i
 		states[roomID] = applyRoomAccountDataContent(state, eventType, content)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, errs.Internal(fmt.Errorf("room account data query failed: %w", err))
+		return nil, fmt.Errorf("room account data query failed: %w", err)
 	}
 	return states, nil
 }

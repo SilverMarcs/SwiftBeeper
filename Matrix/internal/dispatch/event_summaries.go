@@ -7,14 +7,16 @@ import (
 	"go.mau.fi/gomuks/pkg/hicli/database"
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 	"maunium.net/go/mautrix/id"
+
+	"relay/core/internal/compat"
 )
 
 // Sync can touch many rooms at once. Batch sidebar hydration instead of issuing
 // membership, account-data and preview queries separately for every room.
-func (h *wsHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, duplicates map[string]bool) map[string]compatRecord {
-	result := make(map[string]compatRecord)
+func (h *eventHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, duplicates map[string]bool) map[string]*compat.Chat {
+	result := make(map[string]*compat.Chat)
 	ctx := context.Background()
-	lookup, err := h.server.buildAccountLookup(ctx)
+	lookup, err := h.dispatcher.buildAccountLookup(ctx)
 	if err != nil {
 		return result
 	}
@@ -25,7 +27,7 @@ func (h *wsHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, duplicates 
 		}
 		room := syncRoom.Meta
 		if room == nil {
-			room, _ = h.server.rt.Client().DB.Room.Get(ctx, roomID)
+			room, _ = h.dispatcher.rt.Client().DB.Room.Get(ctx, roomID)
 		}
 		if room != nil {
 			rooms = append(rooms, room)
@@ -36,20 +38,20 @@ func (h *wsHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, duplicates 
 		for i, room := range chunk {
 			ids[i] = room.ID
 		}
-		states, err := h.server.loadRoomAccountDataStates(ctx, ids...)
+		states, err := h.dispatcher.loadRoomAccountDataStates(ctx, ids...)
 		if err != nil {
 			continue
 		}
-		reads, _ := h.server.loadLastReadSortKeys(ctx, ids...)
-		summaries, err := h.server.loadChatSummaries(ctx, chunk, chatPreviewParticipants, lookup, true)
+		reads, _ := h.dispatcher.loadLastReadSortKeys(ctx, ids...)
+		summaries, err := h.dispatcher.loadChatSummaries(ctx, chunk, chatPreviewParticipants, lookup, true)
 		if err != nil {
 			continue
 		}
 		batchCtx := context.WithValue(ctx, chatSummaryKey{}, summaries)
 		for _, room := range chunk {
-			chat, err := h.server.mapRoomToChat(batchCtx, room, lookup, chatPreviewParticipants, true, states[room.ID], reads[room.ID])
+			chat, err := h.dispatcher.mapRoomToChat(batchCtx, room, lookup, chatPreviewParticipants, true, states[room.ID], reads[room.ID])
 			if err == nil {
-				result[string(room.ID)], _ = toCompatRecord(chat)
+				result[string(room.ID)] = &chat
 			}
 		}
 	}

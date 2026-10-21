@@ -3,29 +3,29 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
-	"net/http"
+	"strings"
 
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
 	"relay/core/internal/compat"
-	errs "relay/core/internal/errors"
 )
 
 // muteChat toggles the mute state of a chat via the com.beeper.mute room account data.
-func (s *Dispatcher) muteChat(w http.ResponseWriter, r *http.Request) error {
+func (s *Dispatcher) muteChat(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID string `json:"chatID,omitempty"`
 		Muted  *bool  `json:"muted,omitempty"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		return err
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
 	}
-	chatID := readChatID(r, req.ChatID)
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
 	muted := true
 	if req.Muted != nil {
@@ -38,8 +38,8 @@ func (s *Dispatcher) muteChat(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		content.MutedUntil = 0 // 0 means not muted
 	}
-	if err := s.rt.Client().Client.SetRoomAccountData(r.Context(), id.RoomID(chatID), event.AccountDataBeeperMute.Type, content); err != nil {
-		return errs.Internal(fmt.Errorf("failed to set mute state: %w", err))
+	if err := s.rt.Client().Client.SetRoomAccountData(ctx, id.RoomID(chatID), event.AccountDataBeeperMute.Type, content); err != nil {
+		return nil, fmt.Errorf("failed to set mute state: %w", err)
 	}
 	// The homeserver echoes room account data through sync, but a message can
 	// arrive before that echo. Update the local view before Swift exports the
@@ -49,7 +49,7 @@ func (s *Dispatcher) muteChat(w http.ResponseWriter, r *http.Request) error {
 		if marshalErr != nil {
 			log.Printf("failed to encode local mute state for %s: %v", chatID, marshalErr)
 		} else if _, cacheErr := cli.DB.AccountData.PutRoom(
-			r.Context(),
+			ctx,
 			cli.Account.UserID,
 			id.RoomID(chatID),
 			event.AccountDataBeeperMute,
@@ -58,48 +58,48 @@ func (s *Dispatcher) muteChat(w http.ResponseWriter, r *http.Request) error {
 			log.Printf("failed to cache local mute state for %s: %v", chatID, cacheErr)
 		}
 	}
-	return writeJSON(w, compat.ActionSuccessOutput{Success: true})
+	return compat.ActionSuccessOutput{Success: true}, nil
 }
 
 // markChatRead sends a read receipt for the latest message in the room.
-func (s *Dispatcher) markChatRead(w http.ResponseWriter, r *http.Request) error {
+func (s *Dispatcher) markChatRead(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID string `json:"chatID,omitempty"`
 	}
-	if err := decodeOptionalJSON(r, &req); err != nil {
-		return err
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
 	}
-	chatID := readChatID(r, req.ChatID)
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
 
 	cli := s.rt.Client()
 	roomID := id.RoomID(chatID)
 
 	// Find the latest event in the timeline.
-	latestEventID, err := s.findLatestEventID(r.Context(), roomID)
+	latestEventID, err := s.findLatestEventID(ctx, roomID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if latestEventID == "" {
-		return errs.NotFound("No messages in this chat")
+		return nil, errors.New("No messages in this chat")
 	}
 
 	// Send m.read receipt.
-	if err := cli.Client.MarkRead(r.Context(), roomID, id.EventID(latestEventID)); err != nil {
-		return errs.Internal(fmt.Errorf("failed to send read receipt: %w", err))
+	if err := cli.Client.MarkRead(ctx, roomID, id.EventID(latestEventID)); err != nil {
+		return nil, fmt.Errorf("failed to send read receipt: %w", err)
 	}
 
 	// Also clear the m.fully_read marker (read marker line).
-	if err := cli.Client.SetRoomAccountData(r.Context(), roomID, "m.fully_read", map[string]any{
+	if err := cli.Client.SetRoomAccountData(ctx, roomID, "m.fully_read", map[string]any{
 		"event_id": latestEventID,
 	}); err != nil {
 		// Non-fatal: the read receipt is the important part.
 		_ = err
 	}
 
-	return writeJSON(w, compat.ActionSuccessOutput{Success: true})
+	return compat.ActionSuccessOutput{Success: true}, nil
 }
 
 const latestTimelineEventQuery = `

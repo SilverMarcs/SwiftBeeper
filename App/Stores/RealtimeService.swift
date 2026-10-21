@@ -62,7 +62,7 @@ final class RealtimeService {
     func setMessageChats(_ ids: Set<String>) {
         guard ids != messageChatIDs else { return }
         messageChatIDs = ids
-        Task { await sendSubscriptionsAllChats() }
+        Task { await updateSubscriptions() }
     }
 
     // MARK: - Private
@@ -116,19 +116,13 @@ final class RealtimeService {
             lastSequence = 0
             let requiresResync = hasConnectedBefore
             hasConnectedBefore = true
-            await sendSubscriptionsAllChats()
+            await updateSubscriptions()
             eventHandler?.realtimeDidConnect(requiresResync: requiresResync)
-        case "subscriptions.updated":
-            break
         case "resync.required":
             eventHandler?.realtimeNeedsResync()
             eventHandler?.realtimeDidUpdateNotificationPreferences()
         case "push.preferences.changed":
             eventHandler?.realtimeDidUpdateNotificationPreferences()
-        case "error":
-            if let message = envelope.message {
-                eventHandler?.realtimeDidReceiveError("Realtime error: \(message)")
-            }
         case "chat.upserted":
             trackSequence(in: envelope)
             // The event payload carries the hydrated chat summary; apply it
@@ -177,12 +171,12 @@ final class RealtimeService {
         lastSequence = sequence
     }
 
-    private func sendSubscriptionsAllChats() async {
+    private func updateSubscriptions() async {
         guard let connectionHandle else { return }
         do {
-            let command = SubscriptionsSetCommand(requestID: "subscriptions-\(UUID().uuidString)", chatIDs: ["*"],
-                                                  messageChatIDs: messageChatIDs.sorted())
-            try await MatrixRuntime.shared.sendRealtime(JSONEncoder().encode(command), connection: connectionHandle)
+            try await MatrixRuntime.shared.setRealtimeSubscriptions(
+                messageChatIDs: messageChatIDs.sorted(), connection: connectionHandle
+            )
         } catch {
             eventHandler?.realtimeDidReceiveError("Could not subscribe to local updates.")
         }
@@ -220,23 +214,19 @@ final class RealtimeService {
 
 private struct EventEnvelope: Decodable {
     let type: String
-    let requestID: String?
     let chatID: String?
-    let message: String?
     let ids: [String]?
     let entries: [[String: String]]?
     let seq: Int?
 
     enum CodingKeys: String, CodingKey {
-        case type, requestID, chatID, message, ids, entries, seq
+        case type, chatID, ids, entries, seq
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         type = try container.decode(String.self, forKey: .type)
-        requestID = try? container.decodeIfPresent(String.self, forKey: .requestID)
         chatID = try? container.decodeIfPresent(String.self, forKey: .chatID)
-        message = try? container.decodeIfPresent(String.self, forKey: .message)
         ids = try? container.decodeIfPresent([String].self, forKey: .ids)
         seq = try? container.decodeIfPresent(Int.self, forKey: .seq)
         // entries may contain non-string values (bools, nulls) in message events;
@@ -251,11 +241,4 @@ private struct MessageEntriesPayload: Decodable {
 
 private struct ChatEntriesPayload: Decodable {
     let entries: [Chat]?
-}
-
-private struct SubscriptionsSetCommand: Encodable {
-    let type = "subscriptions.set"
-    let requestID: String
-    let chatIDs: [String]
-    let messageChatIDs: [String]
 }

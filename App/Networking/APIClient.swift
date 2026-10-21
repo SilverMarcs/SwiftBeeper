@@ -9,77 +9,10 @@ enum APIClient {
         set { _tokenLock.withLock { _accessToken = newValue } }
     }
 
-    static func get<Response: Decodable>(url: URL) async throws -> Response {
-        let request = request(url: url, method: .get, accessToken: Self.accessToken)
-        return try await send(request)
-    }
-
-    static func post<Body: Encodable, Response: Decodable>(
-        url: URL,
-        body: Body
+    static func execute<Arguments: Encodable, Response: Decodable>(
+        _ action: String, arguments: Arguments
     ) async throws -> Response {
-        let request = try request(url: url, method: .post, body: body, accessToken: Self.accessToken)
-        return try await send(request)
-    }
-
-    static func put<Body: Encodable, Response: Decodable>(
-        url: URL,
-        body: Body
-    ) async throws -> Response {
-        let request = try request(url: url, method: .put, body: body, accessToken: Self.accessToken)
-        return try await send(request)
-    }
-
-    static func delete<Response: Decodable>(url: URL) async throws -> Response {
-        let request = request(url: url, method: .delete, accessToken: Self.accessToken)
-        return try await send(request)
-    }
-
-    static func postNoContent<Body: Encodable>(
-        url: URL,
-        body: Body
-    ) async throws {
-        let request = try request(url: url, method: .post, body: body, accessToken: Self.accessToken)
-        _ = try await sendRaw(request)
-    }
-
-    static func parseErrorMessage(from data: Data) -> String? {
-        guard let payload = try? JSONDecoder.beeper.decode(APIErrorPayload.self, from: data) else {
-            return nil
-        }
-        return payload.message
-    }
-
-    static func request(url: URL, method: HTTPMethod, accessToken: String) -> URLRequest {
-        // This envelope is dispatched in process to the Matrix core.
-        var request = URLRequest(url: url)
-        request.httpMethod = method.rawValue
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if url.path.hasPrefix("/manage/") || url.path == "/manage" {
-            let manageSecret = APIConfiguration.manageSecret
-            if !manageSecret.isEmpty {
-                request.setValue(manageSecret, forHTTPHeaderField: "X-RelayCore-Manage-Secret")
-            }
-        }
-        return request
-    }
-
-    static func request<Body: Encodable>(
-        url: URL,
-        method: HTTPMethod,
-        body: Body,
-        accessToken: String
-    ) throws -> URLRequest {
-        var request = request(url: url, method: method, accessToken: accessToken)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder.beeper.encode(body)
-        return request
-    }
-
-    static func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {
-        let data = try await sendRaw(request)
-
+        let data = try await executeRaw(action, arguments: arguments)
         do {
             return try JSONDecoder.beeper.decode(Response.self, from: data)
         } catch {
@@ -88,44 +21,25 @@ enum APIClient {
     }
 
     @discardableResult
-    static func sendRaw(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await MatrixRuntime.shared.send(request)
-
-        let httpResponse = response
-
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            throw APIError.http(statusCode: httpResponse.statusCode, details: parseErrorMessage(from: data))
-        }
-
-        return data
+    static func executeRaw<Arguments: Encodable>(_ action: String, arguments: Arguments) async throws -> Data {
+        let input = try JSONEncoder.beeper.encode(MatrixCommand(action: action, arguments: arguments))
+        return try await MatrixRuntime.shared.command(input)
     }
-
 }
 
-private struct APIErrorPayload: Decodable {
-    let message: String
-}
+struct EmptyArguments: Encodable {}
 
 enum APIError: LocalizedError {
-    case invalidURL(String)
-    case invalidResponse
-    case http(statusCode: Int, details: String?)
+    case operation(String)
     case decoding(String)
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL(let urlString):
-            return "Invalid URL: \(urlString)"
-        case .invalidResponse:
-            return "Invalid Matrix core response."
-        case .http(let statusCode, let details):
-            if details?.contains("context deadline exceeded") == true {
+        case .operation(let message):
+            if message.contains("context deadline exceeded") {
                 return "The connection timed out. Please try again."
             }
-            if let details, !details.isEmpty {
-                return "Request failed (\(statusCode)): \(details)"
-            }
-            return "Request failed with status code \(statusCode)."
+            return message
         case .decoding(let details):
             return "Failed to decode Matrix core response: \(details)"
         }
@@ -142,11 +56,4 @@ extension JSONDecoder {
 
 extension JSONEncoder {
     static let beeper = JSONEncoder()
-}
-
-enum HTTPMethod: String {
-    case get = "GET"
-    case post = "POST"
-    case put = "PUT"
-    case delete = "DELETE"
 }

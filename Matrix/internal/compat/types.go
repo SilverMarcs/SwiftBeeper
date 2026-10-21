@@ -2,12 +2,18 @@ package compat
 
 import (
 	"time"
-
-	beeperdesktopapi "github.com/beeper/desktop-api-go"
-	"github.com/beeper/desktop-api-go/shared"
 )
 
-type User = shared.User
+type User struct {
+	ID            string `json:"id"`
+	CannotMessage bool   `json:"cannotMessage"`
+	Email         string `json:"email"`
+	FullName      string `json:"fullName"`
+	ImgURL        string `json:"imgURL"`
+	IsSelf        bool   `json:"isSelf"`
+	PhoneNumber   string `json:"phoneNumber"`
+	Username      string `json:"username"`
+}
 
 type Account struct {
 	AccountID    string              `json:"accountID"`
@@ -26,19 +32,50 @@ type SessionOutput struct {
 	Accounts []Account `json:"accounts"`
 }
 
-type Participants = beeperdesktopapi.ChatParticipants
-type Attachment = shared.Attachment
-type AttachmentType = shared.AttachmentType
-type AttachmentSize = shared.AttachmentSize
-type Reaction = shared.Reaction
-type MessageType = shared.MessageType
-type ChatType = beeperdesktopapi.ChatType
+type Participants struct {
+	HasMore bool   `json:"hasMore"`
+	Items   []User `json:"items"`
+	Total   int64  `json:"total"`
+}
+
+type Attachment struct {
+	Type        AttachmentType `json:"type"`
+	ID          string         `json:"id"`
+	Duration    float64        `json:"duration"`
+	FileName    string         `json:"fileName"`
+	FileSize    float64        `json:"fileSize"`
+	IsGif       bool           `json:"isGif"`
+	IsSticker   bool           `json:"isSticker"`
+	IsVoiceNote bool           `json:"isVoiceNote"`
+	MimeType    string         `json:"mimeType"`
+	PosterImg   string         `json:"posterImg"`
+	Size        AttachmentSize `json:"size"`
+	SrcURL      string         `json:"srcURL"`
+}
+
+type AttachmentSize struct {
+	Height float64 `json:"height"`
+	Width  float64 `json:"width"`
+}
+
+type Reaction struct {
+	ID            string `json:"id"`
+	ParticipantID string `json:"participantID"`
+	ReactionKey   string `json:"reactionKey"`
+	Emoji         bool   `json:"emoji"`
+	ImgURL        string `json:"imgURL"`
+}
+
+type AttachmentType string
+type MessageType string
+type ChatType string
 
 // Message extends the desktop API-compatible message shape with deletion
 // state. Redacted Matrix events can retain their original content in the local
 // database, so clients can render that content with deleted styling instead of
 // replacing it with a generic tombstone.
 type Message struct {
+	TransactionID   string       `json:"transactionID,omitempty"`
 	ID              string       `json:"id"`
 	AccountID       string       `json:"accountID"`
 	ChatID          string       `json:"chatID"`
@@ -57,7 +94,18 @@ type Message struct {
 }
 
 type Chat struct {
-	beeperdesktopapi.Chat
+	ID                     string       `json:"id"`
+	AccountID              string       `json:"accountID"`
+	Participants           Participants `json:"participants"`
+	Title                  string       `json:"title"`
+	Type                   ChatType     `json:"type"`
+	UnreadCount            int64        `json:"unreadCount"`
+	IsArchived             bool         `json:"isArchived"`
+	IsMuted                bool         `json:"isMuted"`
+	IsPinned               bool         `json:"isPinned"`
+	LastActivity           time.Time    `json:"lastActivity" format:"date-time"`
+	LastReadMessageSortKey string       `json:"lastReadMessageSortKey"`
+	LocalChatID            string       `json:"localChatID"`
 	// Extension for current renderer expectations.
 	Network string `json:"network,omitempty"`
 	// Chat-level image (Matrix m.room.avatar). Used by clients to show a real
@@ -103,16 +151,50 @@ type ListMessagesOutput struct {
 	LastReadByOtherSortKey string `json:"lastReadByOtherSortKey,omitempty"`
 }
 
-type SendMessageOutput = beeperdesktopapi.MessageSendResponse
-type EditMessageOutput = beeperdesktopapi.MessageUpdateResponse
+type SendMessageOutput struct {
+	ChatID           string `json:"chatID"`
+	PendingMessageID string `json:"pendingMessageID"`
+}
 
-type AddReactionOutput = beeperdesktopapi.ChatMessageReactionAddResponse
+type EditMessageOutput struct {
+	ChatID    string `json:"chatID"`
+	MessageID string `json:"messageID"`
+	Success   bool   `json:"success"`
+}
 
-type RemoveReactionOutput = beeperdesktopapi.ChatMessageReactionDeleteResponse
+type AddReactionOutput struct {
+	ChatID        string `json:"chatID"`
+	MessageID     string `json:"messageID"`
+	ReactionKey   string `json:"reactionKey"`
+	Success       bool   `json:"success"`
+	TransactionID string `json:"transactionID"`
+}
 
-type SendMessageInput = beeperdesktopapi.MessageSendParams
-type MessageAttachmentInput = beeperdesktopapi.MessageSendParamsAttachment
-type EditMessageInput = beeperdesktopapi.MessageUpdateParams
+type RemoveReactionOutput struct {
+	ChatID      string `json:"chatID"`
+	MessageID   string `json:"messageID"`
+	ReactionKey string `json:"reactionKey"`
+	Success     bool   `json:"success"`
+}
+
+type SendMessageInput struct {
+	Text             string                 `json:"text"`
+	ReplyToMessageID string                 `json:"replyToMessageID"`
+	Attachment       MessageAttachmentInput `json:"attachment"`
+}
+
+type MessageAttachmentInput struct {
+	UploadID string         `json:"uploadID"`
+	FileName string         `json:"fileName"`
+	MimeType string         `json:"mimeType"`
+	Duration float64        `json:"duration"`
+	Size     AttachmentSize `json:"size"`
+	Type     string         `json:"type"`
+}
+
+type EditMessageInput struct {
+	Text string `json:"text"`
+}
 
 type AddReactionInput struct {
 	ReactionKey   string `json:"reactionKey"`

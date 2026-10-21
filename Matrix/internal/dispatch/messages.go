@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -21,7 +20,6 @@ import (
 	"maunium.net/go/mautrix/id"
 
 	"relay/core/internal/compat"
-	errs "relay/core/internal/errors"
 )
 
 const (
@@ -40,33 +38,41 @@ const timelineSelectBase = `
 
 var errSkipEvent = errors.New("skip event")
 
-func (s *Dispatcher) listMessages(w http.ResponseWriter, r *http.Request) error {
-	chatID := readChatID(r, "")
+func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (any, error) {
+	var req struct {
+		ChatID    string `json:"chatID"`
+		Cursor    string `json:"cursor"`
+		Direction string `json:"direction"`
+	}
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
+	}
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
-	direction, err := parseDirection(r.URL.Query().Get("direction"))
+	direction, err := parseDirection(req.Direction)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cursorValue, err := parseMessageCursor(r.URL.Query().Get("cursor"))
+	cursorValue, err := parseMessageCursor(req.Cursor)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	lookup, err := s.buildAccountLookup(r.Context())
+	lookup, err := s.buildAccountLookup(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	room, err := s.rt.Client().DB.Room.Get(r.Context(), id.RoomID(chatID))
+	room, err := s.rt.Client().DB.Room.Get(ctx, id.RoomID(chatID))
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to get room: %w", err))
+		return nil, fmt.Errorf("failed to get room: %w", err)
 	}
 	if room == nil {
-		return errs.NotFound("Chat not found")
+		return nil, errors.New("Chat not found")
 	}
 
-	lastReadKey := s.loadLastReadSortKey(r.Context(), id.RoomID(chatID))
+	lastReadKey := s.loadLastReadSortKey(ctx, id.RoomID(chatID))
 	var lastReadInt int64
 	if lastReadKey != "" {
 		lastReadInt, _ = strconv.ParseInt(lastReadKey, 10, 64)
@@ -76,34 +82,34 @@ func (s *Dispatcher) listMessages(w http.ResponseWriter, r *http.Request) error 
 	const scanLimit = messagePageSize + 1
 	var events []*database.Event
 	var hasMore bool
-	events, hasMore, err = s.loadTimelineEvents(r.Context(), room.ID, cursorValue, direction, scanLimit)
+	events, hasMore, err = s.loadTimelineEvents(ctx, room.ID, cursorValue, direction, scanLimit)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	s.RefreshPreview(r.Context(), room.ID, events)
-	room, _ = s.rt.Client().DB.Room.Get(r.Context(), room.ID)
+	s.RefreshPreview(ctx, room.ID, events)
+	room, _ = s.rt.Client().DB.Room.Get(ctx, room.ID)
 	if room == nil {
-		return errs.NotFound("Chat not found")
+		return nil, errors.New("Chat not found")
 	}
-	summaries, err := s.loadChatSummaries(r.Context(), []*database.Room{room}, 0, lookup, true)
+	summaries, err := s.loadChatSummaries(ctx, []*database.Room{room}, 0, lookup, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	summary := summaries[room.ID]
-	if err = s.populateLastEditRefs(r.Context(), events); err != nil {
-		return err
+	if err = s.populateLastEditRefs(ctx, events); err != nil {
+		return nil, err
 	}
-	memberNames := s.loadNamesForEvents(r.Context(), events)[room.ID]
-	reactions, err := s.loadReactionMap(r.Context(), room.ID, events)
+	memberNames := s.loadNamesForEvents(ctx, events)[room.ID]
+	reactions, err := s.loadReactionMap(ctx, room.ID, events)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	messages := make([]compat.Message, 0, messagePageSize)
 	nextCursor := cursorValue
 	for index, evt := range events {
 		nextCursor = int64(evt.TimelineRowID)
-		mapped, mapErr := s.mapEventToMessage(r.Context(), evt, room, lookup, reactionBundle{Names: memberNames, Reactions: reactions})
+		mapped, mapErr := s.mapEventToMessage(ctx, evt, room, lookup, reactionBundle{Names: memberNames, Reactions: reactions})
 		if mapErr != nil {
 			continue
 		}
@@ -119,14 +125,14 @@ func (s *Dispatcher) listMessages(w http.ResponseWriter, r *http.Request) error 
 	}
 	var preview *compat.Message
 	if summary.preview != nil {
-		if mapped, mapErr := s.mapEventToMessage(r.Context(), summary.preview, room, lookup, reactionBundle{Names: summary.names}); mapErr == nil {
+		if mapped, mapErr := s.mapEventToMessage(ctx, summary.preview, room, lookup, reactionBundle{Names: summary.names}); mapErr == nil {
 			preview = &mapped
 		}
 	}
 
 	// Load other participants' read receipts to determine the "read by other" position.
 	var lastReadByOtherSortKey string
-	otherReceipts, _ := s.loadOtherReadReceipts(r.Context(), id.RoomID(chatID))
+	otherReceipts, _ := s.loadOtherReadReceipts(ctx, id.RoomID(chatID))
 	if len(otherReceipts) > 0 {
 		maxOtherRead := computeMaxOtherRead(otherReceipts)
 		if maxOtherRead != 0 {
@@ -134,128 +140,128 @@ func (s *Dispatcher) listMessages(w http.ResponseWriter, r *http.Request) error 
 		}
 	}
 
-	return writeJSON(w, compat.ListMessagesOutput{
+	return compat.ListMessagesOutput{
 		Items:                  messages,
 		HasMore:                hasMore,
 		OldestCursor:           strconv.FormatInt(nextCursor, 10),
 		Preview:                preview,
 		LastReadByOtherSortKey: lastReadByOtherSortKey,
-	})
+	}, nil
 }
 
-func (s *Dispatcher) sendMessage(w http.ResponseWriter, r *http.Request) error {
+func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID string `json:"chatID"`
 		compat.SendMessageInput
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		return err
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
 	}
-	chatID := readChatID(r, req.ChatID)
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
-	text := strings.TrimSpace(req.Text.Or(""))
+	text := strings.TrimSpace(req.Text)
 	hasAttachment := strings.TrimSpace(req.Attachment.UploadID) != ""
 	if text == "" && !hasAttachment {
-		return errs.Validation(map[string]any{"text": "text or attachment is required"})
+		return nil, errors.New("text or attachment is required")
 	}
 
 	cli := s.rt.Client()
 	roomID := id.RoomID(chatID)
-	if room, err := cli.DB.Room.Get(r.Context(), roomID); err != nil {
-		return errs.Internal(fmt.Errorf("failed to get room: %w", err))
+	if room, err := cli.DB.Room.Get(ctx, roomID); err != nil {
+		return nil, fmt.Errorf("failed to get room: %w", err)
 	} else if room == nil {
-		return errs.NotFound("Chat not found")
+		return nil, errors.New("Chat not found")
 	}
 
 	var base *event.MessageEventContent
 	var err error
 	if hasAttachment {
-		base, err = s.buildAttachmentMessageContent(r.Context(), &req.Attachment, roomID)
+		base, err = s.buildAttachmentMessageContent(ctx, &req.Attachment, roomID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	var relatesTo *event.RelatesTo
-	replyToMessageID := strings.TrimSpace(req.ReplyToMessageID.Or(""))
+	replyToMessageID := strings.TrimSpace(req.ReplyToMessageID)
 	if replyToMessageID != "" {
 		relatesTo = &event.RelatesTo{InReplyTo: &event.InReplyTo{EventID: id.EventID(replyToMessageID)}}
 	}
 
-	dbEvent, err := cli.SendMessage(r.Context(), roomID, base, nil, text, relatesTo, nil, nil)
+	dbEvent, err := cli.SendMessage(ctx, roomID, base, nil, text, relatesTo, nil, nil)
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to send message: %w", err))
+		return nil, fmt.Errorf("failed to send message: %w", err)
 	}
 	pendingMessageID := dbEvent.TransactionID
 	if pendingMessageID == "" {
 		pendingMessageID = string(dbEvent.ID)
 	}
 
-	return writeJSON(w, compat.SendMessageOutput{ChatID: chatID, PendingMessageID: pendingMessageID})
+	return compat.SendMessageOutput{ChatID: chatID, PendingMessageID: pendingMessageID}, nil
 }
 
-func (s *Dispatcher) editMessage(w http.ResponseWriter, r *http.Request) error {
+func (s *Dispatcher) editMessage(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID    string `json:"chatID"`
 		MessageID string `json:"messageID"`
 		compat.EditMessageInput
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		return err
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
 	}
-	chatID := readChatID(r, req.ChatID)
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
-	messageID := readMessageID(r, req.MessageID)
+	messageID := strings.TrimSpace(req.MessageID)
 	if messageID == "" {
-		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+		return nil, errors.New("messageID is required")
 	}
 	if strings.TrimSpace(req.Text) == "" {
-		return errs.Validation(map[string]any{"text": "text is required"})
+		return nil, errors.New("text is required")
 	}
 
 	cli := s.rt.Client()
-	targetEvent, err := cli.DB.Event.GetByID(r.Context(), id.EventID(messageID))
+	targetEvent, err := cli.DB.Event.GetByID(ctx, id.EventID(messageID))
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to get target message: %w", err))
+		return nil, fmt.Errorf("failed to get target message: %w", err)
 	}
 	if targetEvent == nil {
-		return errs.NotFound("Message not found")
+		return nil, errors.New("Message not found")
 	}
 	if eventHasAttachment(targetEvent) {
-		return errs.Validation(map[string]any{"messageID": "cannot edit messages with attachments"})
+		return nil, errors.New("messageID: cannot edit messages with attachments")
 	}
 
 	relatesTo := &event.RelatesTo{Type: event.RelReplace, EventID: id.EventID(messageID)}
-	if _, err = cli.SendMessage(r.Context(), id.RoomID(chatID), nil, nil, req.Text, relatesTo, nil, nil); err != nil {
-		return errs.Internal(fmt.Errorf("failed to edit message: %w", err))
+	if _, err = cli.SendMessage(ctx, id.RoomID(chatID), nil, nil, req.Text, relatesTo, nil, nil); err != nil {
+		return nil, fmt.Errorf("failed to edit message: %w", err)
 	}
 
-	return writeJSON(w, compat.EditMessageOutput{ChatID: chatID, MessageID: messageID, Success: true})
+	return compat.EditMessageOutput{ChatID: chatID, MessageID: messageID, Success: true}, nil
 }
 
-func (s *Dispatcher) addReaction(w http.ResponseWriter, r *http.Request) error {
+func (s *Dispatcher) addReaction(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID    string `json:"chatID"`
 		MessageID string `json:"messageID"`
 		compat.AddReactionInput
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		return err
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
 	}
-	chatID := readChatID(r, req.ChatID)
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
-	messageID := readMessageID(r, req.MessageID)
+	messageID := strings.TrimSpace(req.MessageID)
 	if messageID == "" {
-		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+		return nil, errors.New("messageID is required")
 	}
 	if strings.TrimSpace(req.ReactionKey) == "" {
-		return errs.Validation(map[string]any{"reactionKey": "reactionKey is required"})
+		return nil, errors.New("reactionKey is required")
 	}
 
 	content := &event.ReactionEventContent{
@@ -265,9 +271,9 @@ func (s *Dispatcher) addReaction(w http.ResponseWriter, r *http.Request) error {
 			Key:     req.ReactionKey,
 		},
 	}
-	dbEvt, err := s.rt.Client().Send(r.Context(), id.RoomID(chatID), event.EventReaction, content, false, false)
+	dbEvt, err := s.rt.Client().Send(ctx, id.RoomID(chatID), event.EventReaction, content, false, false)
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to add reaction: %w", err))
+		return nil, fmt.Errorf("failed to add reaction: %w", err)
 	}
 	transactionID := req.TransactionID
 	if transactionID == "" && dbEvt != nil {
@@ -277,45 +283,42 @@ func (s *Dispatcher) addReaction(w http.ResponseWriter, r *http.Request) error {
 		transactionID = randomID()
 	}
 
-	return writeJSON(w, compat.AddReactionOutput{
+	return compat.AddReactionOutput{
 		Success:       true,
 		ChatID:        chatID,
 		MessageID:     messageID,
 		ReactionKey:   req.ReactionKey,
 		TransactionID: transactionID,
-	})
+	}, nil
 }
 
-func (s *Dispatcher) removeReaction(w http.ResponseWriter, r *http.Request) error {
+func (s *Dispatcher) removeReaction(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID    string `json:"chatID"`
 		MessageID string `json:"messageID"`
 		compat.RemoveReactionInput
 	}
-	if err := decodeOptionalJSON(r, &req); err != nil {
-		return err
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
 	}
-	chatID := readChatID(r, req.ChatID)
+	chatID := strings.TrimSpace(req.ChatID)
 	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+		return nil, errors.New("chatID is required")
 	}
-	messageID := readMessageID(r, req.MessageID)
+	messageID := strings.TrimSpace(req.MessageID)
 	if messageID == "" {
-		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+		return nil, errors.New("messageID is required")
 	}
 	reactionKey := strings.TrimSpace(req.ReactionKey)
 	if reactionKey == "" {
-		reactionKey = strings.TrimSpace(r.URL.Query().Get("reactionKey"))
-	}
-	if reactionKey == "" {
-		return errs.Validation(map[string]any{"reactionKey": "reactionKey is required"})
+		return nil, errors.New("reactionKey is required")
 	}
 
 	cli := s.rt.Client()
 	roomID := id.RoomID(chatID)
-	related, err := cli.DB.Event.GetRelatedEvents(r.Context(), roomID, id.EventID(messageID), event.RelAnnotation)
+	related, err := cli.DB.Event.GetRelatedEvents(ctx, roomID, id.EventID(messageID), event.RelAnnotation)
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to query related events: %w", err))
+		return nil, fmt.Errorf("failed to query related events: %w", err)
 	}
 	toRedact := make([]id.EventID, 0)
 	for _, evt := range related {
@@ -332,17 +335,17 @@ func (s *Dispatcher) removeReaction(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	for _, reactionEventID := range toRedact {
-		if _, err = cli.Client.RedactEvent(r.Context(), roomID, reactionEventID, mautrix.ReqRedact{}); err != nil {
-			return errs.Internal(fmt.Errorf("failed to remove reaction: %w", err))
+		if _, err = cli.Client.RedactEvent(ctx, roomID, reactionEventID, mautrix.ReqRedact{}); err != nil {
+			return nil, fmt.Errorf("failed to remove reaction: %w", err)
 		}
 	}
 
-	return writeJSON(w, compat.RemoveReactionOutput{
+	return compat.RemoveReactionOutput{
 		Success:     true,
 		ChatID:      chatID,
 		MessageID:   messageID,
 		ReactionKey: reactionKey,
-	})
+	}, nil
 }
 
 func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, cursorValue int64, direction string, limit int) ([]*database.Event, bool, error) {
@@ -357,7 +360,7 @@ func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, c
 
 	rows, err := cli.DB.Query(ctx, query, roomID, cursorValue, cursorValue, limit)
 	if err != nil {
-		return nil, false, errs.Internal(fmt.Errorf("failed to query timeline: %w", err))
+		return nil, false, fmt.Errorf("failed to query timeline: %w", err)
 	}
 	defer rows.Close()
 
@@ -365,12 +368,12 @@ func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, c
 	for rows.Next() {
 		evt := &database.Event{}
 		if _, scanErr := evt.Scan(rows); scanErr != nil {
-			return nil, false, errs.Internal(fmt.Errorf("failed to scan timeline event: %w", scanErr))
+			return nil, false, fmt.Errorf("failed to scan timeline event: %w", scanErr)
 		}
 		events = append(events, evt)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, false, errs.Internal(fmt.Errorf("timeline query failed: %w", err))
+		return nil, false, fmt.Errorf("timeline query failed: %w", err)
 	}
 
 	hasMore := len(events) == limit
@@ -408,7 +411,7 @@ func (s *Dispatcher) populateLastEditRefs(ctx context.Context, events []*databas
 
 	editEvents, err := cli.DB.Event.GetByRowIDs(ctx, editRowIDs...)
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to load edited message references: %w", err))
+		return fmt.Errorf("failed to load edited message references: %w", err)
 	}
 	editByRowID := make(map[database.EventRowID]*database.Event, len(editEvents))
 	for _, evt := range editEvents {
@@ -443,7 +446,7 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 	}
 	result, err := s.rt.Client().DB.Event.GetReactions(ctx, roomID, eventIDs...)
 	if err != nil {
-		return nil, errs.Internal(fmt.Errorf("failed to read reactions: %w", err))
+		return nil, fmt.Errorf("failed to read reactions: %w", err)
 	}
 	output := make(map[id.EventID][]compat.Reaction, len(result))
 	for evtID, reactionResult := range result {
@@ -707,22 +710,22 @@ func (s *Dispatcher) buildAttachmentMessageContent(ctx context.Context, attachme
 	if err != nil {
 		return nil, err
 	}
-	fileName := strings.TrimSpace(attachment.FileName.Or(""))
+	fileName := strings.TrimSpace(attachment.FileName)
 	if fileName == "" {
 		fileName = meta.FileName
 	}
-	mimeType := strings.TrimSpace(attachment.MimeType.Or(""))
+	mimeType := strings.TrimSpace(attachment.MimeType)
 	if mimeType == "" {
 		mimeType = meta.MimeType
 	}
 	file, err := os.Open(meta.FilePath)
 	if err != nil {
-		return nil, errs.Internal(fmt.Errorf("failed to open uploaded asset: %w", err))
+		return nil, fmt.Errorf("failed to open uploaded asset: %w", err)
 	}
 	defer file.Close()
 	stat, err := file.Stat()
 	if err != nil {
-		return nil, errs.Internal(fmt.Errorf("failed to stat uploaded asset: %w", err))
+		return nil, fmt.Errorf("failed to stat uploaded asset: %w", err)
 	}
 
 	room, err := s.rt.Client().DB.Room.Get(ctx, roomID)
@@ -746,7 +749,7 @@ func (s *Dispatcher) buildAttachmentMessageContent(ctx context.Context, attachme
 		_ = encryptedReader.Close()
 	}
 	if err != nil {
-		return nil, errs.Internal(fmt.Errorf("failed to upload media to Matrix: %w", err))
+		return nil, fmt.Errorf("failed to upload media to Matrix: %w", err)
 	}
 
 	msgType := messageTypeFromAttachment(mimeType, strings.TrimSpace(attachment.Type))
@@ -770,7 +773,7 @@ func (s *Dispatcher) buildAttachmentMessageContent(ctx context.Context, attachme
 		content.Info.Width = int(attachment.Size.Width)
 		content.Info.Height = int(attachment.Size.Height)
 	}
-	duration := attachment.Duration.Or(0)
+	duration := attachment.Duration
 	if duration <= 0 {
 		duration = meta.Duration
 	}
@@ -799,24 +802,31 @@ func messageTypeFromAttachment(mimeType, hint string) event.MessageType {
 	return event.MsgFile
 }
 
-func (s *Dispatcher) deleteMessage(w http.ResponseWriter, r *http.Request) error {
-	chatID := readChatID(r, "")
-	if chatID == "" {
-		return errs.Validation(map[string]any{"chatID": "chatID is required"})
+func (s *Dispatcher) deleteMessage(ctx context.Context, input json.RawMessage) (any, error) {
+	var req struct {
+		ChatID    string `json:"chatID"`
+		MessageID string `json:"messageID"`
 	}
-	messageID := readMessageID(r, "")
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
+	}
+	chatID := strings.TrimSpace(req.ChatID)
+	if chatID == "" {
+		return nil, errors.New("chatID is required")
+	}
+	messageID := strings.TrimSpace(req.MessageID)
 	if messageID == "" {
-		return errs.Validation(map[string]any{"messageID": "messageID is required"})
+		return nil, errors.New("messageID is required")
 	}
 
 	cli := s.rt.Client()
 	roomID := id.RoomID(chatID)
 	eventID := id.EventID(messageID)
 
-	_, err := cli.Client.RedactEvent(r.Context(), roomID, eventID, mautrix.ReqRedact{})
+	_, err := cli.Client.RedactEvent(ctx, roomID, eventID, mautrix.ReqRedact{})
 	if err != nil {
-		return errs.Internal(fmt.Errorf("failed to redact event: %w", err))
+		return nil, fmt.Errorf("failed to redact event: %w", err)
 	}
 
-	return writeJSON(w, map[string]any{"success": true})
+	return map[string]any{"success": true}, nil
 }

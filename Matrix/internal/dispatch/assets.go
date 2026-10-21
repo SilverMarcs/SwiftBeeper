@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 
 	"encoding/hex"
 	"encoding/json"
@@ -14,7 +15,6 @@ import (
 	_ "image/png"
 	"io"
 
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,8 +24,6 @@ import (
 
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
-
-	errs "relay/core/internal/errors"
 )
 
 // encryptedFileRegistry caches EncryptedFile info for mxc URLs so
@@ -79,37 +77,21 @@ type uploadMetadata struct {
 	Duration float64 `json:"duration,omitempty"`
 }
 
-func (s *Dispatcher) serveAsset(w http.ResponseWriter, r *http.Request) error {
-	assetURL := strings.TrimSpace(r.URL.Query().Get("url"))
-	if assetURL == "" {
-		return errs.Validation(map[string]any{"url": "url is required"})
-	}
-	filePath, err := s.resolveServePath(r.Context(), assetURL)
-	if err != nil {
-		return err
-	}
-	if _, statErr := os.Stat(filePath); statErr != nil {
-		return errs.NotFound("Asset not found")
-	}
-	http.ServeFile(w, r, filePath)
-	return nil
-}
-
 func (s *Dispatcher) resolveServePath(ctx context.Context, raw string) (string, error) {
 	if strings.HasPrefix(raw, "file://") {
 		parsed, err := url.Parse(raw)
 		if err != nil {
-			return "", errs.Validation(map[string]any{"url": "invalid file url"})
+			return "", errors.New("invalid file url")
 		}
 		path := filepath.Clean(parsed.Path)
 		if !s.isAllowedServePath(path) {
-			return "", errs.Forbidden("Access denied: path is outside allowed directories")
+			return "", errors.New("Access denied: path is outside allowed directories")
 		}
 		return path, nil
 	}
 	path, err := s.resolveAssetURL(ctx, raw)
 	if err != nil {
-		return "", errs.NotFound(err.Error())
+		return "", err
 	}
 	return path, nil
 }
@@ -181,22 +163,22 @@ func (s *Dispatcher) writeUploadMetadata(meta uploadMetadata) error {
 
 func (s *Dispatcher) loadUploadMetadataByID(uploadID string) (uploadMetadata, error) {
 	if !safeUploadIDPattern.MatchString(uploadID) {
-		return uploadMetadata{}, errs.Validation(map[string]any{"uploadID": "invalid uploadID"})
+		return uploadMetadata{}, errors.New("invalid uploadID")
 	}
 	metaPath := filepath.Join(s.uploadRootDir(), uploadID, "metadata.json")
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
-		return uploadMetadata{}, errs.NotFound("Upload not found")
+		return uploadMetadata{}, errors.New("Upload not found")
 	}
 	var meta uploadMetadata
 	if err = json.Unmarshal(data, &meta); err != nil {
-		return uploadMetadata{}, errs.Internal(fmt.Errorf("failed to parse upload metadata: %w", err))
+		return uploadMetadata{}, fmt.Errorf("failed to parse upload metadata: %w", err)
 	}
 	if meta.FilePath == "" {
-		return uploadMetadata{}, errs.NotFound("Upload has expired")
+		return uploadMetadata{}, errors.New("Upload has expired")
 	}
 	if _, err = os.Stat(meta.FilePath); err != nil {
-		return uploadMetadata{}, errs.NotFound("Upload has expired")
+		return uploadMetadata{}, errors.New("Upload has expired")
 	}
 	return meta, nil
 }

@@ -31,13 +31,13 @@ struct ClientState: Decodable {
 
 extension APIClient {
     static func manageState() async throws -> ManageState {
-        try await get(url: manageURL("state"))
+        try await execute("state", arguments: EmptyArguments())
     }
 
     static func beeperStartLogin(domain: String) async throws -> String {
         struct Body: Encodable { let domain: String }
         struct Response: Decodable { let request: String? }
-        let resp: Response = try await post(url: manageURL("beeper/start-login"), body: Body(domain: domain))
+        let resp: Response = try await execute("beeper-start-login", arguments: Body(domain: domain))
         guard let request = resp.request, !request.isEmpty else {
             throw APIError.decoding("Beeper did not return a request id")
         }
@@ -46,15 +46,13 @@ extension APIClient {
 
     static func beeperRequestCode(domain: String, request: String, email: String) async throws {
         struct Body: Encodable { let domain: String; let request: String; let email: String }
-        let url = manageURL("beeper/request-code")
-        let req = try Self.request(url: url, method: .post, body: Body(domain: domain, request: request, email: email), accessToken: accessToken)
-        _ = try await sendRaw(req)
+        try await executeRaw("beeper-request-code", arguments: Body(domain: domain, request: request, email: email))
     }
 
     static func beeperSubmitCode(domain: String, request: String, code: String) async throws -> String {
         struct Body: Encodable { let domain: String; let request: String; let response: String }
         struct Response: Decodable { let token: String? }
-        let resp: Response = try await post(url: manageURL("beeper/submit-code"), body: Body(domain: domain, request: request, response: code))
+        let resp: Response = try await execute("beeper-submit-code", arguments: Body(domain: domain, request: request, response: code))
         guard let token = resp.token, !token.isEmpty else {
             throw APIError.decoding("Beeper did not return a JWT")
         }
@@ -64,7 +62,7 @@ extension APIClient {
     static func loginCustomJWT(homeserverURL: String, jwt: String) async throws -> ManageState {
         struct Inner: Encodable { let type: String; let token: String }
         struct Body: Encodable { let homeserverURL: String; let request: Inner }
-        return try await post(url: manageURL("login-custom"), body: Body(
+        return try await execute("login-custom", arguments: Body(
             homeserverURL: homeserverURL,
             request: Inner(type: "org.matrix.login.jwt", token: jwt)
         ))
@@ -72,11 +70,8 @@ extension APIClient {
 
     static func verifyRecoveryKey(_ recoveryKey: String) async throws -> ManageState {
         struct Body: Encodable { let recoveryKey: String }
-        return try await post(url: manageURL("verify"), body: Body(recoveryKey: recoveryKey))
+        return try await execute("verify", arguments: Body(recoveryKey: recoveryKey))
     }
 
 
-    private static func manageURL(_ path: String) -> URL {
-        APIConfiguration.baseURL.appending(path: "/manage/\(path)")
-    }
 }

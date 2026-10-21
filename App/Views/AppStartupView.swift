@@ -28,7 +28,7 @@ struct AppStartupView: View {
                 try await MatrixRuntime.shared.start()
                 let state = try await APIClient.manageState()
                 if state.clientState?.isLoggedIn == true, state.clientState?.isVerified == true {
-                    sessionStore.accessToken = try MatrixFiles.configuration().accessToken
+                    sessionStore.accessToken = UUID().uuidString
                 }
                 ready = true
             } catch { errorMessage = error.localizedDescription }
