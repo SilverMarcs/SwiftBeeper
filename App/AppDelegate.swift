@@ -57,18 +57,21 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
         }
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        let content = response.notification.request.content
-        let chatID = content.userInfo["chatID"] as? String ?? content.threadIdentifier
-        guard !chatID.isEmpty else { return }
-        if let reply = response as? UNTextInputNotificationResponse,
-           response.actionIdentifier == NotificationCategory.reply {
-            let text = reply.userText
-            let messageID = content.userInfo["messageID"] as? String
-            await Self.sendReply(text, chatID: chatID, messageID: messageID)
-        } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
-            let draft = content.userInfo["replyDraft"] as? String
-            await MainActor.run {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                           withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
+        Task { @MainActor in
+            // UIKit updates its snapshot when this completes; finish on the main actor.
+            defer { completionHandler() }
+            let content = response.notification.request.content
+            let chatID = content.userInfo["chatID"] as? String ?? content.threadIdentifier
+            guard !chatID.isEmpty else { return }
+            if let reply = response as? UNTextInputNotificationResponse,
+               response.actionIdentifier == NotificationCategory.reply {
+                let text = reply.userText
+                let messageID = content.userInfo["messageID"] as? String
+                await Self.sendReply(text, chatID: chatID, messageID: messageID)
+            } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+                let draft = content.userInfo["replyDraft"] as? String
                 if let draft { Self.inputManager?.restoreNotificationDraft(draft, for: chatID) }
                 Self.chatStore?.openNotificationChat(chatID)
             }

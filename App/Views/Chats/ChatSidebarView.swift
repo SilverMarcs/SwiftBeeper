@@ -100,7 +100,7 @@ struct ChatSidebarView: View {
     }
 
     private var chatList: some View {
-        // Compute once for the rows, pagination sentinel, and animation key.
+        // Compute once for the rows and animation key.
         let displayedChats = chatStore.displayedChats
         return List(selection: Bindable(chatStore).selectedChatID) {
             ForEach(displayedChats) { chat in
@@ -112,19 +112,14 @@ struct ChatSidebarView: View {
                     .tag(chat.id)
             }
 
-            if chatStore.isLoadingMoreChats {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .controlSize(.small)
-                    Spacer()
-                }
-                .listRowSeparator(.hidden)
-            } else if chatStore.hasMoreChats && chatStore.searchQuery.isBlank && chatStore.chatsError == nil {
-                Button("Load More Conversations") {
-                    Task { await chatStore.loadMoreChats() }
-                }
-                .disabled(chatStore.isLoadingChats)
+            if chatStore.hasMoreChats, chatStore.searchQuery.isBlank {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .listRowSeparator(.hidden)
+                    .task {
+                        await chatStore.loadMoreChats()
+                    }
             }
         }
         .if(isIPhone) { $0.listStyle(.plain) }

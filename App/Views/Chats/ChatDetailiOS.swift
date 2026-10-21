@@ -68,7 +68,7 @@ struct ChatDetailiOS: View {
             ScrollViewReader { proxy in
                 List {
                     if chatStore.isLoadingOlderMessages {
-                        ProgressView("Loading earlier messages…")
+                        ProgressView()
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
                     }

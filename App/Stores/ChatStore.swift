@@ -515,30 +515,36 @@ final class ChatStore: RealtimeEventHandler {
 
     func loadMoreChats() async {
         guard !APIClient.accessToken.isEmpty else { return }
+        guard !isLoadingChats, !isLoadingMoreChats,
+              searchQuery.isBlank, chatsError == nil else { return }
         guard hasMoreChats, let cursor = ChatPaginationCursor.encode(chats.last) ?? chatsCursor else { return }
-        guard !isLoadingMoreChats else { return }
+
+        let requestedFilter = selectedFilter
+        let requestID = latestChatsRequestID
+        let tokenAtStart = APIClient.accessToken
 
         isLoadingMoreChats = true
         defer { isLoadingMoreChats = false }
 
         do {
-            let requestedFilter = selectedFilter
-            let existingIDs = Set(chats.map(\.id))
-
             let response = try await APIClient.listChats(
                 inbox: selectedInboxFilter.rawValue,
                 accountIDs: requestedFilter.accountIDs,
                 cursor: cursor,
                 direction: "before"
             )
-            guard selectedFilter.id == requestedFilter.id else { return }
+            guard selectedFilter.id == requestedFilter.id,
+                  latestChatsRequestID == requestID, !isLoadingChats,
+                  APIClient.accessToken == tokenAtStart,
+                  searchQuery.isBlank, !Task.isCancelled else { return }
+            let existingIDs = Set(chats.map(\.id))
             let newChats = response.items.filter { !existingIDs.contains($0.id) }
             setChats(chats + newChats)
             chatWindowSize = max(chatWindowSize + 25, chats.count)
             chatsCursor = response.oldestCursor
-            hasMoreChats = response.hasMore ?? false
+            hasMoreChats = (response.hasMore ?? false) && response.oldestCursor != cursor
         } catch {
-            // The Load More button remains available to retry.
+            // Scrolling down again retries the same local page.
         }
     }
 
