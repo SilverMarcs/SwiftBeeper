@@ -6,7 +6,9 @@ import SwiftUI
 /// platforms' chat UIs grow apart.
 struct ChatDetailView: View {
     @Environment(ChatStore.self) private var chatStore
+    #if os(iOS)
     @Environment(InputManager.self) private var input
+    #endif
     @State private var isVisible = false
 
     var body: some View {
@@ -24,11 +26,15 @@ struct ChatDetailView: View {
         }
         .onDisappear {
             isVisible = false
+            #if os(iOS)
             input.sendAnimator.cancelAll()
+            #endif
             if chatStore.visibleChatID == chatID { chatStore.visibleChatID = nil }
         }
         .onChange(of: chatID) { _, newValue in
+            #if os(iOS)
             input.sendAnimator.cancelAll()
+            #endif
             if isVisible { chatStore.visibleChatID = newValue }
         }
     }

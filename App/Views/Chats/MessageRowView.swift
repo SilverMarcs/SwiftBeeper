@@ -5,7 +5,9 @@ import UIKit
 
 struct MessageRowView: View {
     @Environment(ChatStore.self) private var chatStore
+    #if os(iOS)
     @Environment(InputManager.self) private var input
+    #endif
 
     let message: Message
     let chat: Chat
@@ -157,10 +159,12 @@ struct MessageRowView: View {
             if !message.isDeletedMessage, let visibleText = message.visibleText {
                 MessageTextView(text: visibleText, isOutgoing: isOutgoing)
                     .messageBubbleChrome(isOutgoing: isOutgoing)
+                    #if os(iOS)
                     .modifier(MessageSendEffect(
                         animator: input.sendAnimator,
                         flight: isOutgoing ? input.sendAnimator.flight(forConfirmed: message.id) : nil
                     ))
+                    #endif
                     .overlay(alignment: alignment) {
                         reactionsOverlay(if: .text, isOutgoing: isOutgoing)
                     }

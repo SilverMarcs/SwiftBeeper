@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 
 /// Owns only short-lived presentation state; sending never waits for animation.
@@ -76,3 +77,4 @@ final class MessageSendAnimator {
         flights.removeAll()
     }
 }
+#endif

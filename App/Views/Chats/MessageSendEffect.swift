@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 
 /// Animate the actual bubble relative to its current layout, never a copied
@@ -30,3 +31,4 @@ struct MessageSendEffect: ViewModifier {
         }
     }
 }
+#endif

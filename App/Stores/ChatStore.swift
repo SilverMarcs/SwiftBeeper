@@ -274,8 +274,10 @@ final class ChatStore: RealtimeEventHandler {
     private var olderMessagesCursor: String?
     private var chatWindowSize = 25
     @ObservationIgnored private var outgoingSendTasks: [OutgoingMessage.ID: Task<Void, Never>] = [:]
+    #if os(iOS)
     /// Carries exact outbox identity across the local-to-canonical handoff.
     @ObservationIgnored var onOutgoingMessageConfirmed: ((OutgoingMessage.ID, Message) -> Void)?
+    #endif
 
     var activeComposerMessage: Message? {
         editingMessage ?? replyingToMessage
@@ -814,7 +816,9 @@ final class ChatStore: RealtimeEventHandler {
             }) else { continue }
 
             outgoing[index].confirmedMessageIDs.insert(message.id)
+            #if os(iOS)
             onOutgoingMessageConfirmed?(outgoing[index].id, message)
+            #endif
             if outgoing[index].confirmedMessageIDs.count >= outgoing[index].expectedConfirmationCount {
                 outgoing.remove(at: index)
             }

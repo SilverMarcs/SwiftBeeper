@@ -117,11 +117,13 @@ struct MessageInputView: View {
                         .padding(.horizontal, 4)
                         .padding(8)
                         .glassEffect(in: .rect(cornerRadius: 20))
+                        #if os(iOS)
                         .onGeometryChange(for: CGRect.self) { geometry in
                             geometry.frame(in: .global)
                         } action: { frame in
                             input.sendAnimator.sourceFrame = { frame }
                         }
+                        #endif
                         .onSubmit {
                             input.handleSubmit()
                             #if !os(macOS)

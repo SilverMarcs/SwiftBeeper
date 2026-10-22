@@ -2,7 +2,9 @@ import SwiftUI
 
 struct OutgoingMessageRowView: View {
     @Environment(ChatStore.self) private var chatStore
+    #if os(iOS)
     @Environment(InputManager.self) private var input
+    #endif
 
     let message: OutgoingMessage
     /// The quoted message for a reply, pre-resolved by the timeline grouping so
@@ -34,10 +36,12 @@ struct OutgoingMessageRowView: View {
                 if !message.text.isEmpty {
                     MessageTextView(text: message.text, isOutgoing: true)
                         .messageBubbleChrome(isOutgoing: true)
+                        #if os(iOS)
                         .modifier(MessageSendEffect(
                             animator: input.sendAnimator,
                             flight: input.sendAnimator.flight(forOutgoing: message.id)
                         ))
+                        #endif
                 }
 
                 if case .failed(let error) = message.state {

@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 
 /// A shared clock survives the optimistic row being replaced by its echo.
@@ -27,3 +28,4 @@ final class MessageSendFlight: Identifiable {
         return spring.value(target: CGFloat(1), time: max(0, seconds))
     }
 }
+#endif
