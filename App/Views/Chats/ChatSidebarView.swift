@@ -105,9 +105,10 @@ struct ChatSidebarView: View {
         return List(selection: Bindable(chatStore).selectedChatID) {
             ForEach(displayedChats) { chat in
                 ChatRowView(chat: chat)
-                    .if(isIPhone) {
-                        $0.listRowSeparator(.hidden, edges: .top)
-                            .listRowSeparator(.visible, edges: .bottom)
+                    .listRowSeparator(.hidden, edges: .top)
+                    .listRowSeparator(.visible, edges: .bottom)
+                    .if(isMacOrPad) {
+                        $0.listRowSeparatorTint(.primary.opacity(0.1), edges: .bottom)
                     }
                     .tag(chat.id)
             }

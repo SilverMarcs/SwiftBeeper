@@ -7,7 +7,11 @@ struct ChatRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            ChatAvatarView(chat: chat, dimension: 42)
+            #if os(macOS)
+            ChatAvatarView(chat: chat, dimension: 43)
+            #else
+            ChatAvatarView(chat: chat, dimension: 48)
+            #endif
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -32,7 +36,7 @@ struct ChatRowView: View {
                             .font(.body)
                             .foregroundStyle(.secondary)
                             .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
-                            .lineLimit(1)
+                            .lineLimit(2, reservesSpace: true)
                     }
 
                     Spacer()
@@ -49,7 +53,9 @@ struct ChatRowView: View {
                 }
             }
         }
-        .padding(3)
+        #if os(macOS)
+        .padding(5)
+        #endif
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             ChatRowActionsView(
                 chat: chat,
@@ -76,72 +82,3 @@ struct ChatRowView: View {
     }
 }
 
-#Preview {
-    VStack {
-        ChatRowView(chat: Chat(
-            id: "chat-2",
-            title: "Alice",
-            unreadCount: 3,
-            participants: nil,
-            preview: Message(
-                id: "message-2",
-                chatID: "chat-2",
-                senderID: "alice",
-                senderName: "Alice",
-                timestamp: .now,
-                sortKey: "2",
-                type: nil,
-                text: "Are you free tomorrow?",
-                isSender: false,
-                attachments: nil,
-                isUnread: nil,
-                reactions: nil,
-                linkedMessageID: nil,
-                isDeleted: nil,
-                transactionID: nil
-            ),
-            isMuted: false,
-            type: .single,
-            isPinned: nil,
-            isArchived: nil,
-            accountID: nil,
-            lastActivity: .now.addingTimeInterval(-3600),
-            lastReadMessageSortKey: nil,
-            imgURL: nil
-        ))
-
-        ChatRowView(chat: Chat(
-            id: "chat-1",
-            title: "General",
-            unreadCount: 5,
-            participants: nil,
-            preview: Message(
-                id: "message-1",
-                chatID: "chat-1",
-                senderID: "alice",
-                senderName: "Alice",
-                timestamp: .now,
-                sortKey: "1",
-                type: nil,
-                text: "Hey",
-                isSender: false,
-                attachments: nil,
-                isUnread: nil,
-                reactions: nil,
-                linkedMessageID: nil,
-                isDeleted: nil,
-                transactionID: nil
-            ),
-            isMuted: true,
-            type: .group,
-            isPinned: true,
-            isArchived: nil,
-            accountID: nil,
-            lastActivity: .now.addingTimeInterval(-86400),
-            lastReadMessageSortKey: nil,
-            imgURL: nil
-        ))
-    }
-    .environment(ChatStore())
-    .environment(SessionStore())
-}
