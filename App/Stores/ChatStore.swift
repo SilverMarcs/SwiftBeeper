@@ -274,6 +274,8 @@ final class ChatStore: RealtimeEventHandler {
     private var olderMessagesCursor: String?
     private var chatWindowSize = 25
     @ObservationIgnored private var outgoingSendTasks: [OutgoingMessage.ID: Task<Void, Never>] = [:]
+    /// Carries exact outbox identity across the local-to-canonical handoff.
+    @ObservationIgnored var onOutgoingMessageConfirmed: ((OutgoingMessage.ID, Message) -> Void)?
 
     var activeComposerMessage: Message? {
         editingMessage ?? replyingToMessage
@@ -812,6 +814,7 @@ final class ChatStore: RealtimeEventHandler {
             }) else { continue }
 
             outgoing[index].confirmedMessageIDs.insert(message.id)
+            onOutgoingMessageConfirmed?(outgoing[index].id, message)
             if outgoing[index].confirmedMessageIDs.count >= outgoing[index].expectedConfirmationCount {
                 outgoing.remove(at: index)
             }
@@ -825,12 +828,12 @@ final class ChatStore: RealtimeEventHandler {
     /// Adds a message to the outbox synchronously so the timeline can display it
     /// before any upload or Matrix request begins.
     @discardableResult
-    func sendMessage(text: String, attachments: [PendingAttachment], to chatID: String) -> Bool {
-        guard !APIClient.accessToken.isEmpty else { return false }
+    func sendMessage(text: String, attachments: [PendingAttachment], to chatID: String) -> OutgoingMessage? {
+        guard !APIClient.accessToken.isEmpty else { return nil }
 
         let trimmedText = text.trimmed
         let hasText = !trimmedText.isEmpty
-        guard hasText || !attachments.isEmpty else { return false }
+        guard hasText || !attachments.isEmpty else { return nil }
 
         let outgoing = OutgoingMessage(
             chatID: chatID,
@@ -842,7 +845,7 @@ final class ChatStore: RealtimeEventHandler {
         replyingToMessage = nil
         messagesError = nil
         startSending(outgoing)
-        return true
+        return outgoing
     }
 
     func retrySending(_ messageID: OutgoingMessage.ID) {

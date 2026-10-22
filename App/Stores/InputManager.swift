@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 @Observable
 final class InputManager {
     private let chatStore: ChatStore
+    let sendAnimator = MessageSendAnimator()
 
     /// Per-chat draft text, keyed by chat ID, so switching chats keeps drafts.
     private var draftsByChatID: [String: String] = [:]
@@ -33,6 +34,9 @@ final class InputManager {
 
     init(chatStore: ChatStore) {
         self.chatStore = chatStore
+        chatStore.onOutgoingMessageConfirmed = { [sendAnimator] outgoingID, message in
+            sendAnimator.confirm(outgoingID, as: message)
+        }
     }
 
     // MARK: - Draft text
@@ -142,26 +146,28 @@ final class InputManager {
 
     // MARK: - Submit
 
-    func handleSubmit() {
+    func handleSubmit(sourceFrame: CGRect? = nil) {
         if isEditing {
             saveEdit()
         } else {
-            sendMessage()
+            sendMessage(from: sourceFrame)
         }
     }
 
-    private func sendMessage() {
+    private func sendMessage(from sourceFrame: CGRect?) {
         guard let chatID = chatStore.selectedChat?.id else { return }
         let text = trimmedDraft
         let attachments = pendingAttachments
 
         guard !text.isEmpty || !attachments.isEmpty else { return }
+        let animationSource = sourceFrame ?? sendAnimator.sourceFrame?()
         let previousDraft = draft
         clearDraft(for: chatID)
         clearPendingAttachments(for: chatID)
 
-        let didQueue = chatStore.sendMessage(text: text, attachments: attachments, to: chatID)
-        if !didQueue {
+        if let outgoing = chatStore.sendMessage(text: text, attachments: attachments, to: chatID) {
+            sendAnimator.begin(outgoing, from: animationSource)
+        } else {
             if (draftsByChatID[chatID] ?? "").isEmpty {
                 draftsByChatID[chatID] = previousDraft
             }

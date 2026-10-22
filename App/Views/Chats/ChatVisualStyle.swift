@@ -1,6 +1,16 @@
 import SwiftUI
 
 enum ChatVisualStyle {
+    #if os(macOS)
+    static let bubbleHorizontalPadding: CGFloat = 12
+    static let bubbleVerticalPadding: CGFloat = 8
+    static let bubbleCornerRadius: CGFloat = 15
+    #else
+    static let bubbleHorizontalPadding: CGFloat = 13
+    static let bubbleVerticalPadding: CGFloat = 10
+    static let bubbleCornerRadius: CGFloat = 20
+    #endif
+
     static func reactionFill(isSelected: Bool) -> AnyShapeStyle {
         if isSelected {
             return AnyShapeStyle(.tint.secondary)
@@ -44,19 +54,11 @@ private struct MessageBubbleChromeModifier: ViewModifier {
     let isOutgoing: Bool
 
     func body(content: Content) -> some View {
-        #if os(macOS)
         content
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, ChatVisualStyle.bubbleHorizontalPadding)
+            .padding(.vertical, ChatVisualStyle.bubbleVerticalPadding)
             .bubbleBackground(isOutgoing: isOutgoing)
-            .clipShape(.rect(cornerRadius: 15))
-        #else
-        content
-            .padding(.horizontal, 13)
-            .padding(.vertical, 10)
-            .bubbleBackground(isOutgoing: isOutgoing)
-            .clipShape(.rect(cornerRadius: 20))
-        #endif
+            .clipShape(.rect(cornerRadius: ChatVisualStyle.bubbleCornerRadius))
     }
 }
 

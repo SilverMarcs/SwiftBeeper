@@ -156,6 +156,18 @@ struct ChatDetailMac: View {
                         .id(bottomAnchorID)
                 }
                 .defaultScrollAnchor(.bottom)
+                .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
+                .onChange(of: inputManager.sendAnimator.flights.map(\.id)) { oldIDs, newIDs in
+                    guard newIDs.contains(where: { !oldIDs.contains($0) }) else { return }
+                    firstUnreadID = nil
+                    Task { @MainActor in
+                        await Task.yield()
+                        guard chatStore.selectedChatID == selectedChat.id else { return }
+                        withAnimation(.smooth(duration: MessageSendFlight.duration)) {
+                            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+                        }
+                    }
+                }
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top < 80
                 } action: { _, nearTop in
@@ -212,6 +224,7 @@ struct ChatDetailMac: View {
                     // stable, deletions shrink the count — both still skipped.
                     guard newTracker.lastID != oldTracker.lastID else { return }
                     guard newTracker.count >= oldTracker.count else { return }
+                    guard !inputManager.sendAnimator.isAnimatingTail(newTracker.lastID) else { return }
 
                     let confirmedOptimisticMessage = oldTracker.lastID?.hasPrefix("outgoing-") == true
                         && newTracker.count == oldTracker.count

@@ -137,6 +137,18 @@ struct ChatDetailiOS: View {
                         .id(bottomAnchorID)
                 }
                 .defaultScrollAnchor(.bottom)
+                .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
+                .onChange(of: inputManager.sendAnimator.flights.map(\.id)) { oldIDs, newIDs in
+                    guard newIDs.contains(where: { !oldIDs.contains($0) }) else { return }
+                    firstUnreadID = nil
+                    Task { @MainActor in
+                        await Task.yield()
+                        guard chatStore.selectedChatID == selectedChat.id else { return }
+                        withAnimation(.smooth(duration: MessageSendFlight.duration)) {
+                            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+                        }
+                    }
+                }
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top < 80
                 } action: { _, nearTop in
@@ -204,6 +216,9 @@ struct ChatDetailiOS: View {
                     // stable, deletions shrink the count — both still skipped.
                     guard newTracker.lastID != oldTracker.lastID else { return }
                     guard newTracker.count >= oldTracker.count else { return }
+                    // The send already requested its animated scroll. The bubble's
+                    // visual effect follows any subsequent layout corrections.
+                    guard !inputManager.sendAnimator.isAnimatingTail(newTracker.lastID) else { return }
                     guard !(oldTracker.lastID?.hasPrefix("outgoing-") == true && newTracker.count == oldTracker.count) else {
                         return
                     }
@@ -281,16 +296,37 @@ struct ChatDetailiOS: View {
                         .searchFocused($isSearchFocused)
                         .searchPresentationToolbarBehavior(.avoidHidingContent)
                         .background(
-                            SearchIntrospector { textField in
-                                if delegateProxy == nil {
+                            SearchIntrospector { textField, referenceView in
+                                let animator = inputManager.sendAnimator
+                                animator.sourceFrame = { [weak animator, weak textField, weak referenceView] in
+                                    guard let animator, let textField, let referenceView,
+                                          textField.window != nil, !textField.isHidden else { return nil }
+                                    let frame = textField.convert(textField.bounds, to: referenceView)
+                                    let reference = animator.searchReferenceFrame
+                                    return frame.offsetBy(dx: reference.minX, dy: reference.minY)
+                                }
+                                if delegateProxy == nil || textField.delegate !== delegateProxy {
                                     let proxy = TextFieldDelegateProxy(originalDelegate: textField.delegate)
-                                    proxy.shouldReturn = {
-                                        inputManager.handleSubmit()
-                                        return false
-                                    }
                                     textField.delegate = proxy
                                     delegateProxy = proxy
                                 }
+                                // Use the field that received Return, even if
+                                // SwiftUI has replaced the searchable field.
+                                (delegateProxy as? TextFieldDelegateProxy)?.shouldReturn = { [weak referenceView] field in
+                                    let sourceFrame = referenceView.map {
+                                        field.convert(field.bounds, to: $0).offsetBy(
+                                            dx: animator.searchReferenceFrame.minX,
+                                            dy: animator.searchReferenceFrame.minY
+                                        )
+                                    }
+                                    inputManager.handleSubmit(sourceFrame: sourceFrame)
+                                    return false
+                                }
+                            }
+                            .onGeometryChange(for: CGRect.self) { geometry in
+                                geometry.frame(in: .global)
+                            } action: { frame in
+                                inputManager.sendAnimator.searchReferenceFrame = frame
                             }
                         )
                         .onSubmit(of: .search) {
@@ -303,7 +339,9 @@ struct ChatDetailiOS: View {
                             // search bar finishes dismissing, so the tracker's
                             // scroll fires mid-dismissal and gets swallowed by
                             // the inset animation. Re-scroll after it settles.
-                            scrollToBottom(with: proxy, animated: true, delay: .milliseconds(350))
+                            if inputManager.sendAnimator.flights.isEmpty {
+                                scrollToBottom(with: proxy, animated: true, delay: .milliseconds(350))
+                            }
                         }
                         .onChange(of: isSearchFocused) { _, focused in
                             guard focused else { return }
@@ -587,7 +625,7 @@ private struct TimelineEntry: Identifiable {
 
 private class TextFieldDelegateProxy: NSObject, UITextFieldDelegate {
     weak var originalDelegate: UITextFieldDelegate?
-    var shouldReturn: (() -> Bool)?
+    var shouldReturn: ((UITextField) -> Bool)?
 
     init(originalDelegate: UITextFieldDelegate?) {
         self.originalDelegate = originalDelegate
@@ -606,34 +644,42 @@ private class TextFieldDelegateProxy: NSObject, UITextFieldDelegate {
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         if let shouldReturn = shouldReturn {
-            return shouldReturn()
+            return shouldReturn(textField)
         }
         return originalDelegate?.textFieldShouldReturn?(textField) ?? true
     }
 }
 
 private struct SearchIntrospector: UIViewRepresentable {
-    var introspect: (UISearchTextField) -> Void
+    var introspect: (UISearchTextField, UIView) -> Void
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
-        DispatchQueue.main.async {
+        Task { @MainActor in
+            await Task.yield()
             if let searchField = findSearchTextField(startingFrom: view) {
-                introspect(searchField)
+                introspect(searchField, view)
             }
         }
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        Task { @MainActor in
+            await Task.yield()
+            if let searchField = findSearchTextField(startingFrom: uiView) {
+                introspect(searchField, uiView)
+            }
+        }
+    }
 
     private func findSearchTextField(startingFrom view: UIView) -> UISearchTextField? {
-        if let window = view.window, let field = findSearchTextField(in: window) {
-            return field
-        }
         var responder: UIResponder? = view
         while responder != nil {
             if let viewController = responder as? UIViewController {
+                if let field = viewController.navigationItem.searchController?.searchBar.searchTextField {
+                    return field
+                }
                 if let field = findSearchTextField(in: viewController.view) {
                     return field
                 }
@@ -643,6 +689,9 @@ private struct SearchIntrospector: UIViewRepresentable {
                 }
             }
             responder = responder?.next
+        }
+        if let window = view.window, let field = findSearchTextField(in: window) {
+            return field
         }
         return nil
     }
