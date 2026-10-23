@@ -3,7 +3,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 /// The inline composer used on macOS and iPad (the iPhone uses the navigation
-/// bar's `.searchable` field instead — see `ChatDetailiOS`). All state lives in
+/// bar's `.searchable` field instead — see `ChatTimelineView`). All state lives in
 /// `InputManager`; this view is just its presentation.
 struct MessageInputView: View {
     @Environment(InputManager.self) private var input

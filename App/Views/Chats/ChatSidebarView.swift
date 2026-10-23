@@ -19,7 +19,7 @@ struct ChatSidebarView: View {
             #if !os(macOS)
             if isIPhone {
                 // iPhone: gear opens Settings where the filter used to live;
-                // the filter moves to the bottom bar, styled like ChatDetailiOS.
+                // the filter moves to the bottom bar, styled like ChatTimelineView.
                 ToolbarItem(placement: .primaryAction) {
                     settingsButton
                 }

@@ -1,15 +1,18 @@
-#if os(macOS)
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ChatDetailMac: View {
+/// Shared message layout and scrolling, with platform-specific navigation and composers.
+struct ChatTimelineView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
-    @State private var showingChatInfo = false
-    @State private var timelinePosition = ScrollPosition(idType: String.self)
+    #if os(iOS)
+    @State private var isSearchPresented = false
+    @FocusState private var isSearchFocused: Bool
+    @State private var delegateProxy: AnyObject?
+    @State private var keyboardScrollTask: Task<Void, Never>?
+    #endif
     @State private var firstUnreadID: String?
-    @State private var profileSheetParticipant: ChatParticipant?
     // Timeline grouping does per-message `Calendar` work; cache it so unrelated
     // store changes (a sidebar refresh) don't recompute it on every body pass.
     @State private var timelineCache = MemoizedValue<TimelineCacheKey, [TimelineEntry]>()
@@ -20,7 +23,8 @@ struct ChatDetailMac: View {
     // The read indicator scans every message (isOutgoing + isReadByOther); memoize
     // it so an unrelated store change doesn't re-scan the timeline on each body pass.
     @State private var readIndicatorCache = MemoizedValue<ReadIndicatorKey, String?>()
-    private let bottomAnchorID = "bottom-id"
+    private let bottomAnchorID = "timeline-bottom"
+
 
     var body: some View {
         if sessionStore.accessToken.isEmpty {
@@ -58,81 +62,76 @@ struct ChatDetailMac: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if chatStore.isLoadingOlderMessages {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
+                    VStack(spacing: 0) {
+                        LazyVStack(spacing: 0) {
+                            if chatStore.isLoadingOlderMessages {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            }
 
-                        }
-
-                        ForEach(timelineEntries) { entry in
-                            VStack(spacing: 0) {
-                                if entry.message.id == firstUnreadID {
-                                    UnreadDividerView()
-                                        .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-                                        .padding(.vertical, 4)
-
-                                }
-
-                                if entry.showsTimestamp {
-                                    TimestampDividerView(timestamp: entry.message.timestamp)
-                                        .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-                                        .padding(.top, 10)
-                                        .padding(.bottom, 6)
-
-                                }
-
-                                MessageRowView(
-                                    message: entry.message,
-                                    chat: selectedChat,
-                                    showReadIndicator: entry.message.id == readIndicatorMessageID,
-                                    isFirstInGroup: entry.isFirstInGroup,
-                                    isLastInGroup: entry.isLastInGroup,
-                                    linkedMessage: entry.linkedMessage,
-                                    onTapLinkedMessage: { linkedID in
-                                        scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                            ForEach(timelineEntries) { entry in
+                                VStack(spacing: 0) {
+                                    if entry.message.id == firstUnreadID && outgoingMessages.isEmpty {
+                                        UnreadDividerView()
+                                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                                            .padding(.vertical, 4)
                                     }
-                                )
-                                .modifier(
-                                    TimelineFocusEffect(
-                                        isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
+
+                                    if entry.showsTimestamp {
+                                        TimestampDividerView(timestamp: entry.message.timestamp)
+                                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                                            .padding(.top, 10)
+                                            .padding(.bottom, 6)
+                                    }
+
+                                    MessageRowView(
+                                        message: entry.message,
+                                        chat: selectedChat,
+                                        showReadIndicator: entry.message.id == readIndicatorMessageID,
+                                        isFirstInGroup: entry.isFirstInGroup,
+                                        isLastInGroup: entry.isLastInGroup,
+                                        linkedMessage: entry.linkedMessage,
+                                        onTapLinkedMessage: { linkedID in
+                                            scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                                        }
                                     )
-                                )
-                                .padding(.vertical, 2)
-                            }
-                            .id(entry.message.timelineKey)
-                        }
-
-                        ForEach(outgoingTimelineEntries) { entry in
-                            VStack(spacing: 0) {
-                                if entry.showsTimestamp {
-                                    TimestampDividerView(timestamp: entry.message.createdAt)
-                                        .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-                                        .padding(.top, 10)
-                                        .padding(.bottom, 6)
-
+                                    .modifier(
+                                        TimelineFocusEffect(
+                                            isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
+                                        )
+                                    )
+                                    .padding(.vertical, 2)
                                 }
-
-                                OutgoingMessageRowView(
-                                    message: entry.message,
-                                    linkedMessage: entry.linkedMessage,
-                                    onTapLinkedMessage: { linkedID in
-                                        scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
-                                    }
-                                )
-                                .padding(.vertical, 2)
+                                .id(entry.message.timelineKey)
                             }
-                            .id(entry.id)
+
+                            ForEach(outgoingTimelineEntries) { entry in
+                                VStack(spacing: 0) {
+                                    if entry.showsTimestamp {
+                                        TimestampDividerView(timestamp: entry.message.createdAt)
+                                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                                            .padding(.top, 10)
+                                            .padding(.bottom, 6)
+                                    }
+
+                                    OutgoingMessageRowView(
+                                        message: entry.message,
+                                        linkedMessage: entry.linkedMessage,
+                                        onTapLinkedMessage: { linkedID in
+                                            scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                                        }
+                                    )
+                                    .padding(.vertical, 2)
+                                }
+                                .id(entry.id)
+                            }
                         }
-
+                        // Keep the scroll target available independently of lazy rows.
                         Color.clear
-                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
-
-                            .frame(height: 24)
+                            .frame(height: 1)
                             .id(bottomAnchorID)
+                            .accessibilityHidden(true)
                     }
-                    .padding(.horizontal, 10)
-                    .scrollTargetLayout()
                 }
                 // Recreate only the viewport when a chat opens or its first
                 // database page arrives. Its first layout starts at the bottom.
@@ -142,7 +141,35 @@ struct ChatDetailMac: View {
                 // explicit send scroll can animate to its new destination.
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.bottom, for: .alignment)
-                .scrollPosition($timelinePosition)
+                // Insets belong to the scroll view. Explicit scrolling targets
+                // the end marker rather than a persistent content-edge offset.
+                .contentMargins(.horizontal, 10, for: .scrollContent)
+                .contentMargins(.bottom, 24, for: .scrollContent)
+                #if os(iOS)
+                .scrollDismissesKeyboard(.interactively)
+                .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
+                .onChange(of: isSearchFocused || inputManager.isComposerFocused) { _, focused in
+                    keyboardScrollTask?.cancel()
+                    guard focused,
+                          chatStore.activeComposerMessage == nil else { return }
+                    // Focus changes keep arriving after the viewport is recreated
+                    // for another chat. Schedule from that event, not .task(id:).
+                    keyboardScrollTask = Task { @MainActor in
+                        do {
+                            try await Task.sleep(for: .milliseconds(1))
+                        } catch {
+                            return
+                        }
+                        guard !Task.isCancelled,
+                              chatStore.selectedChatID == selectedChat.id,
+                              chatStore.activeComposerMessage == nil else { return }
+                        scrollToLatest(with: proxy)
+                    }
+                }
+                .onDisappear {
+                    keyboardScrollTask?.cancel()
+                }
+                #endif
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top < 80
                 } action: { _, nearTop in
@@ -151,7 +178,6 @@ struct ChatDetailMac: View {
                     loadOlderMessages(chatID: selectedChat.id)
                 }
                 .onChange(of: selectedChat.id, initial: true) { _, _ in
-                    timelinePosition = ScrollPosition(idType: String.self)
                     firstUnreadID = nil
                 }
                 .onChange(of: chatStore.hasLoadedTimeline(for: selectedChat.id), initial: true) { _, loaded in
@@ -177,13 +203,10 @@ struct ChatDetailMac: View {
                     let confirmedOptimisticMessage = oldTracker.lastID?.hasPrefix("outgoing-") == true
                         && newTracker.count == oldTracker.count
                     firstUnreadID = nil
-                    // An edge position follows content growth, including the
-                    // outgoing row's replacement by its confirmed message.
-                    // Reissuing a nonanimated scroll here interrupts the send.
+                    // Confirmation replaces the outgoing row, but not the end
+                    // marker. Let the existing scroll animation finish.
                     guard !confirmedOptimisticMessage else { return }
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        timelinePosition.scrollTo(edge: .bottom)
-                    }
+                    scrollToLatest(with: proxy)
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
                     guard let newValue else { return }
@@ -192,38 +215,6 @@ struct ChatDetailMac: View {
                     }
                 }
                 .animation(.default, value: activeComposerMessageID)
-                .navigationTitle(selectedChat.displayTitle)
-                .navigationSubtitle(navigationSubtitle(for: selectedChat))
-                .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
-                .toolbar {
-                    ToolbarItem(placement: .navigation) {
-                        if selectedChat.isSingleChat, let other = selectedChat.otherParticipant {
-                            Button {
-                                profileSheetParticipant = other
-                            } label: {
-                                ChatAvatarView(chat: selectedChat, dimension: 28)
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            ChatAvatarView(chat: selectedChat, dimension: 28)
-                        }
-                    }
-                    .sharedBackgroundVisibility(.hidden)
-
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            showingChatInfo = true
-                        } label: {
-                            Label("Chat Info", systemImage: "info")
-                        }
-                    }
-                }
-                .sheet(isPresented: $showingChatInfo) {
-                    ChatInfoSheet(chat: selectedChat)
-                }
-                .sheet(item: $profileSheetParticipant) { participant in
-                    ParticipantProfileSheet(participant: participant)
-                }
                 .overlay {
                     if !chatStore.hasLoadedTimeline(for: selectedChat.id),
                        let error = chatStore.messagesError, !chatStore.isLoadingMessages {
@@ -241,8 +232,95 @@ struct ChatDetailMac: View {
                 .onDrop(of: [.item], isTargeted: nil) { providers in
                     inputManager.handleDrop(providers)
                 }
-                .safeAreaBar(edge: .bottom, spacing: 0) {
-                    MessageInputView()
+                #if os(iOS)
+                .if(isIPhone) {
+                    // iPhone: the navigation search field is the composer.
+                    $0.onChange(of: chatStore.editingMessage?.id) { _, _ in
+                        inputManager.editingMessageDidChange()
+                    }
+                    .searchable(text: inputManager.draftBinding, isPresented: $isSearchPresented, prompt: Text(inputManager.messageFieldPrompt))
+                        .searchFocused($isSearchFocused)
+                        .searchPresentationToolbarBehavior(.avoidHidingContent)
+                        .background(
+                            SearchIntrospector { textField, referenceView in
+                                if textField.returnKeyType != .send {
+                                    textField.returnKeyType = .send
+                                    if textField.isFirstResponder {
+                                        textField.reloadInputViews()
+                                    }
+                                }
+                                let animator = inputManager.sendAnimator
+                                animator.sourceFrame = { [weak animator, weak textField, weak referenceView] in
+                                    guard let animator, let textField, let referenceView,
+                                          textField.window != nil, !textField.isHidden else { return nil }
+                                    let frame = textField.convert(textField.bounds, to: referenceView)
+                                    let reference = animator.searchReferenceFrame
+                                    return frame.offsetBy(dx: reference.minX, dy: reference.minY)
+                                }
+                                if delegateProxy == nil || textField.delegate !== delegateProxy {
+                                    let proxy = TextFieldDelegateProxy(originalDelegate: textField.delegate)
+                                    textField.delegate = proxy
+                                    delegateProxy = proxy
+                                }
+                                // Use the field that received Return, even if
+                                // SwiftUI has replaced the searchable field.
+                                (delegateProxy as? TextFieldDelegateProxy)?.shouldReturn = { [weak referenceView] field in
+                                    let sourceFrame = referenceView.map {
+                                        field.convert(field.bounds, to: $0).offsetBy(
+                                            dx: animator.searchReferenceFrame.minX,
+                                            dy: animator.searchReferenceFrame.minY
+                                        )
+                                    }
+                                    inputManager.handleSubmit(sourceFrame: sourceFrame)
+                                    return false
+                                }
+                            }
+                            .onGeometryChange(for: CGRect.self) { geometry in
+                                geometry.frame(in: .global)
+                            } action: { frame in
+                                inputManager.sendAnimator.searchReferenceFrame = frame
+                            }
+                        )
+                        .onSubmit(of: .search) {
+                            inputManager.handleSubmit()
+                            isSearchFocused = true
+                        }
+                        .onChange(of: inputManager.isSavingEdit) { oldValue, newValue in
+                            if oldValue && !newValue {
+                                isSearchFocused = true
+                            }
+                        }
+                        .onChange(of: activeComposerMessageID) { _, newValue in
+                            // Entering reply/edit state:
+                            guard newValue != nil else { return }
+                            isSearchFocused = true
+                        }
+                        .onChange(of: isSearchPresented) { _, presented in
+                            // Exiting the search/compose mode (Cancel) should also
+                            // bail out of any reply/edit state — they're entered
+                            // together, so leaving one leaves the other. A bare
+                            // keyboard dismissal keeps the search presented, so this
+                            // only fires on a real search exit.
+                            guard !presented, chatStore.activeComposerMessage != nil else { return }
+                            inputManager.cancelComposerAction()
+                        }
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            MessagePendingAttachmentsBar()
+                        }
+                        .toolbar {
+                            ToolbarItem(placement: .bottomBar) {
+                                MessageInputMenu()
+                            }
+                            ToolbarSpacer(.fixed, placement: .bottomBar)
+                            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                        }
+                }
+                #endif
+                .if(isMacOrPad) {
+                    // macOS and iPad share the inline composer.
+                    $0.safeAreaBar(edge: .bottom, spacing: 0) {
+                        MessageInputView()
+                    }
                 }
             }
         } else {
@@ -251,16 +329,22 @@ struct ChatDetailMac: View {
                 systemImage: "list.bullet",
                 description: Text("Select a chat from the sidebar to view messages.")
             )
+            #if os(macOS)
             .task {
                 chatStore.selectedChatID = nil
             }
+            #endif
+        }
+    }
+
+    private func scrollToLatest(with proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.25)) {
+            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
     }
 
     private func scrollToLinkedMessage(_ linkedID: String, chatID: String, proxy: ScrollViewProxy) {
-        let messages = chatStore.messages(for: chatID)
-        guard let target = messages.first(where: { $0.id == linkedID }) else { return }
-
+        guard let target = chatStore.messages(for: chatID).first(where: { $0.id == linkedID }) else { return }
         withAnimation(.easeInOut(duration: 0.3)) {
             proxy.scrollTo(target.timelineKey, anchor: .center)
         }
@@ -270,8 +354,7 @@ struct ChatDetailMac: View {
         guard chatStore.selectedChatID == chatID, chatStore.hasMoreMessages(for: chatID),
               !chatStore.isLoadingOlderMessages else { return }
         Task { @MainActor in
-            // Stable scroll targets let SwiftUI preserve the visible messages
-            // while older history is inserted above them.
+            // Stable scroll targets preserve visible messages when history prepends.
             await chatStore.loadOlderMessages(for: chatID)
         }
     }
@@ -350,15 +433,6 @@ struct ChatDetailMac: View {
     private func shouldShowTimestamp(before message: Message, previousMessage: Message?) -> Bool {
         TimelineTimestampRule.showsDivider(before: message.timestamp, previous: previousMessage?.timestamp)
     }
-
-    private func navigationSubtitle(for chat: Chat) -> Text {
-        guard chat.isGroupChat else { return Text("") }
-
-        let participantCount = chat.participants?.total ?? chat.participants?.items.count ?? 0
-        guard participantCount > 0 else { return Text("") }
-
-        return Text("^[\(participantCount) member](inflect: true)")
-    }
 }
 
 private struct MessageListTracker: Equatable {
@@ -393,4 +467,4 @@ private struct TimelineEntry: Identifiable {
 
     var id: String { message.timelineKey }
 }
-#endif
+
