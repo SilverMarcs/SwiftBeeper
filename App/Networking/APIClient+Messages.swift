@@ -18,26 +18,24 @@ extension APIClient {
         ))
     }
 
-    static func editMessage(chatID: String, messageID: String, text: String) async throws -> EditMessageOutput {
+    static func editMessage(chatID: String, messageID: String, text: String) async throws {
         struct Arguments: Encodable { let chatID: String; let messageID: String; let text: String }
-        return try await execute("edit-message", arguments: Arguments(chatID: chatID, messageID: messageID, text: text))
+        try await executeRaw("edit-message", arguments: Arguments(chatID: chatID, messageID: messageID, text: text))
     }
 
-    static func addReaction(chatID: String, messageID: String, reactionKey: String) async throws -> AddReactionOutput {
-        try await execute("add-reaction", arguments: ReactionArguments(chatID: chatID, messageID: messageID, reactionKey: reactionKey))
+    static func addReaction(chatID: String, messageID: String, reactionKey: String) async throws {
+        try await executeRaw("add-reaction", arguments: ReactionArguments(chatID: chatID, messageID: messageID, reactionKey: reactionKey))
     }
 
-    static func removeReaction(chatID: String, messageID: String, reactionKey: String) async throws -> RemoveReactionOutput {
-        try await execute("remove-reaction", arguments: ReactionArguments(chatID: chatID, messageID: messageID, reactionKey: reactionKey))
+    static func removeReaction(chatID: String, messageID: String, reactionKey: String) async throws {
+        try await executeRaw("remove-reaction", arguments: ReactionArguments(chatID: chatID, messageID: messageID, reactionKey: reactionKey))
     }
 
-    static func deleteMessage(chatID: String, messageID: String) async throws -> DeleteMessageOutput {
+    static func deleteMessage(chatID: String, messageID: String) async throws {
         struct Arguments: Encodable { let chatID: String; let messageID: String }
-        return try await execute("delete-message", arguments: Arguments(chatID: chatID, messageID: messageID))
+        try await executeRaw("delete-message", arguments: Arguments(chatID: chatID, messageID: messageID))
     }
 }
-
-struct DeleteMessageOutput: Decodable { let success: Bool }
 
 private struct ReactionArguments: Encodable {
     let chatID: String

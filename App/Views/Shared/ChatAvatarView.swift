@@ -187,11 +187,7 @@ private extension ProfileAvatarView {
     init(source: AvatarSource, dimension: CGFloat) {
         switch source {
         case .participant(let participant):
-            self.init(
-                name: participant.displayName,
-                imageURLString: participant.imgURL,
-                dimension: dimension
-            )
+            self.init(participant: participant, dimension: dimension)
         case .fallback(let name):
             self.init(
                 name: name,

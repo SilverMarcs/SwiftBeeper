@@ -28,7 +28,7 @@ struct FileAttachmentView: View {
                         .lineLimit(1)
 
                     if let fileSize = attachment.fileSize {
-                        Text(formattedFileSize(fileSize))
+                        Text(Int64(fileSize).formatted(.byteCount(style: .file)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -51,10 +51,7 @@ struct FileAttachmentView: View {
         isDownloading = true
         defer { isDownloading = false }
 
-        guard let localURL = await AuthenticatedImageLoader.downloadToTempFile(
-            urlString: srcURL,
-            fileExtension: fileExtension
-        ) else { return }
+        guard let localURL = await MatrixMedia.temporaryFile(for: srcURL, fileExtension: fileExtension) else { return }
 
         previewURL = localURL
     }
@@ -98,11 +95,5 @@ struct FileAttachmentView: View {
             return type
         }
         return .data
-    }
-
-    private func formattedFileSize(_ bytes: Int) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: Int64(bytes))
     }
 }

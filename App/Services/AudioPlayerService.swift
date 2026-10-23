@@ -44,16 +44,12 @@ final class AudioPlayerService {
         currentTitle = title ?? "Voice Message"
 #if os(iOS)
         currentArtwork = nil
-        if let avatarURL, let request = AuthenticatedImageLoader.buildRequest(for: avatarURL) {
+        if let avatarURL {
             Task {
-                if let (data, response) = try? await URLSession.shared.data(for: request),
-                   let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode),
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        self.currentArtwork = MPMediaItemArtwork(boundsSize: image.size, requestHandler: { _ in image })
-                        self.updateNowPlayingInfo()
-                    }
-                }
+                guard let file = await MatrixMedia.localFile(for: avatarURL),
+                      let image = UIImage(contentsOfFile: file.path) else { return }
+                currentArtwork = MPMediaItemArtwork(boundsSize: image.size, requestHandler: { _ in image })
+                updateNowPlayingInfo()
             }
         }
 #endif

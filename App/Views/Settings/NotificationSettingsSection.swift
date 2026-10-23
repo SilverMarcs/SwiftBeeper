@@ -10,14 +10,29 @@ struct NotificationSettingsSection: View {
     var body: some View {
         Section {
             LabeledContent("Notifications") {
-                if let authorization = notificationService.authorizationStatus {
-                    Button(authorization == .authorized || authorization == .provisional ? "Reconnect" : "Allow", action: handleAction)
-                        .disabled(notificationService.isPreparing || notificationService.isRegistering)
-                } else {
+                switch notificationService.authorizationStatus {
+                case .denied:
+                    Button("Open Settings", action: openNotificationSettings)
+                case .notDetermined:
+                    Button("Allow", action: reconnect)
+                case .authorized, .provisional:
+                    if notificationService.errorMessage != nil {
+                        Button("Retry", action: reconnect)
+                    } else if notificationService.isRegistered {
+                        Text("On")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        // Waiting for Apple's push token or the push server.
+                        ProgressView().controlSize(.small)
+                    }
+                case nil:
                     ProgressView().controlSize(.small)
+                @unknown default:
+                    Button("Retry", action: reconnect)
                 }
             }
         }
+        .disabled(notificationService.isPreparing || notificationService.isRegistering)
         .task { await notificationService.refreshAuthorizationStatus() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -34,16 +49,17 @@ struct NotificationSettingsSection: View {
         }
     }
 
-    private func handleAction() {
-        if notificationService.authorizationStatus == .denied {
-            #if os(macOS)
-            let settingsURL = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
-            #else
-            let settingsURL = URL(string: UIApplication.openNotificationSettingsURLString)
-            #endif
-            if let settingsURL { openURL(settingsURL) }
-        } else {
-            Task { await notificationService.configure(signedIn: true, force: true) }
-        }
+    /// Asks again for permission, or registers again with a fresh Apple token.
+    private func reconnect() {
+        Task { await notificationService.configure(signedIn: true, force: true) }
+    }
+
+    private func openNotificationSettings() {
+        #if os(macOS)
+        let settingsURL = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
+        #else
+        let settingsURL = URL(string: UIApplication.openNotificationSettingsURLString)
+        #endif
+        if let settingsURL { openURL(settingsURL) }
     }
 }

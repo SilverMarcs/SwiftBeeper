@@ -37,43 +37,26 @@ private struct SubtleBackgroundModifier: ViewModifier {
     }
 }
 
-private struct BubbleBackgroundModifier: ViewModifier {
-    let isOutgoing: Bool
-    @Environment(\.colorScheme) private var colorScheme
-
-    func body(content: Content) -> some View {
-        if isOutgoing {
-            content.background(AnyShapeStyle(Color.accentColor.gradient))
-        } else {
-            content.background(colorScheme == .dark ? AnyShapeStyle(.background.tertiary) : AnyShapeStyle(.background.secondary))
-        }
-    }
-}
-
-private struct MessageBubbleChromeModifier: ViewModifier {
-    let isOutgoing: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, ChatVisualStyle.bubbleHorizontalPadding)
-            .padding(.vertical, ChatVisualStyle.bubbleVerticalPadding)
-            .bubbleBackground(isOutgoing: isOutgoing)
-            .clipShape(.rect(cornerRadius: ChatVisualStyle.bubbleCornerRadius))
-    }
-}
-
 extension View {
     func subtleBackground() -> some View {
         modifier(SubtleBackgroundModifier())
     }
 
+    @ViewBuilder
     func bubbleBackground(isOutgoing: Bool) -> some View {
-        modifier(BubbleBackgroundModifier(isOutgoing: isOutgoing))
+        if isOutgoing {
+            background(Color.accentColor.gradient)
+        } else {
+            subtleBackground()
+        }
     }
 
     /// Padding + background + clip shape for a text message bubble.
     /// iOS matches LynkChat's bubble chrome; macOS keeps the tighter style.
     func messageBubbleChrome(isOutgoing: Bool) -> some View {
-        modifier(MessageBubbleChromeModifier(isOutgoing: isOutgoing))
+        padding(.horizontal, ChatVisualStyle.bubbleHorizontalPadding)
+            .padding(.vertical, ChatVisualStyle.bubbleVerticalPadding)
+            .bubbleBackground(isOutgoing: isOutgoing)
+            .clipShape(.rect(cornerRadius: ChatVisualStyle.bubbleCornerRadius))
     }
 }

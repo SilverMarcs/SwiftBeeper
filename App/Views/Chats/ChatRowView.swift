@@ -63,27 +63,15 @@ struct ChatRowView: View {
         .padding(-1)
         #endif
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            ChatRowActionsView(
-                chat: chat,
-                includesReadAction: false,
-                includesArchiveAndMuteActions: true
-            )
+            ChatRowActionsView(chat: chat, placement: .trailingSwipe)
             .labelStyle(.iconOnly)
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            ChatRowActionsView(
-                chat: chat,
-                includesReadAction: true,
-                includesArchiveAndMuteActions: false
-            )
+            ChatRowActionsView(chat: chat, placement: .leadingSwipe)
             .labelStyle(.iconOnly)
         }
         .contextMenu {
-            ChatRowActionsView(
-                chat: chat,
-                includesReadAction: true,
-                includesArchiveAndMuteActions: true
-            )
+            ChatRowActionsView(chat: chat, placement: .contextMenu)
         }
     }
 }

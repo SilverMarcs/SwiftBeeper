@@ -4,8 +4,7 @@ import Foundation
 enum AttachmentUploader {
     static func upload(
         _ attachment: PendingAttachment,
-        onPrepared: (PendingAttachment) -> Void = { _ in },
-        onProgress: @escaping @MainActor @Sendable (Double) -> Void = { _ in }
+        onPrepared: (PendingAttachment) -> Void = { _ in }
     ) async throws -> MessageAttachmentInput {
         let prepared = await ImageAttachmentPreparer.prepare(attachment)
         try Task.checkCancellation()
@@ -13,13 +12,8 @@ enum AttachmentUploader {
         let result = try await APIClient.uploadAsset(
             fileData: prepared.fileData,
             fileName: prepared.fileName,
-            mimeType: prepared.mimeType,
-            onProgress: onProgress
+            mimeType: prepared.mimeType
         )
-        if let error = result.error, !error.isEmpty {
-            throw AttachmentUploadError.server(error)
-        }
-        onProgress(1)
         let size: AttachmentSizeInput?
         if let width = result.width, let height = result.height {
             size = AttachmentSizeInput(width: width, height: height)

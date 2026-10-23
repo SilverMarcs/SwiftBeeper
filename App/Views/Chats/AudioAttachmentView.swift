@@ -7,9 +7,8 @@ private let logger = Logger(subsystem: "Relay", category: "AudioAttachment")
 
 struct AudioAttachmentView: View {
     let attachment: Attachment
-    let isOutgoing: Bool
-    var title: String? = nil
-    var avatarURL: String? = nil
+    let message: Message
+    let chat: Chat
 
     @Environment(AudioPlayerService.self) private var playerService
 
@@ -88,7 +87,7 @@ struct AudioAttachmentView: View {
         .opacity(isAudioLoading ? 0.4 : 1.0)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .bubbleBackground(isOutgoing: isOutgoing)
+        .bubbleBackground(isOutgoing: message.isSender)
         .clipShape(.rect(cornerRadius: 12))
     }
 
@@ -102,10 +101,7 @@ struct AudioAttachmentView: View {
         defer { localIsLoading = false }
 
         let ext = Self.fileExtension(from: attachment.mimeType)
-        guard let fileURL = await AuthenticatedImageLoader.downloadToTempFile(
-            urlString: urlString,
-            fileExtension: ext
-        ) else {
+        guard let fileURL = await MatrixMedia.temporaryFile(for: urlString, fileExtension: ext) else {
             logger.error("Failed to download audio: \(urlString)")
             return
         }
@@ -113,18 +109,22 @@ struct AudioAttachmentView: View {
         let playableURL: URL
         if Self.isOggOpus(mimeType: attachment.mimeType, fileExtension: ext) {
             let m4aURL = fileURL.deletingPathExtension().appendingPathExtension("m4a")
-            do {
-                // CPU-bound transcode; the view is MainActor-isolated (project
-                // default), so hop off the main thread to keep the UI responsive.
-                try await Task.detached(priority: .userInitiated) {
-                    try OGGConverter.convertOpusOGGToM4aFile(src: fileURL, dest: m4aURL)
-                }.value
-                playableURL = m4aURL
-                logger.info("Converted OGG Opus to M4A")
-            } catch {
-                logger.error("OGG to M4A conversion failed: \(error)")
-                return
+            // A previous play may have converted this file already.
+            if !FileManager.default.fileExists(atPath: m4aURL.path) {
+                do {
+                    // CPU-bound transcode; the view is MainActor-isolated (project
+                    // default), so hop off the main thread to keep the UI responsive.
+                    try await Task.detached(priority: .userInitiated) {
+                        try OGGConverter.convertOpusOGGToM4aFile(src: fileURL, dest: m4aURL)
+                    }.value
+                } catch {
+                    // Don't leave a partial file for the next play to reuse.
+                    try? FileManager.default.removeItem(at: m4aURL)
+                    logger.error("OGG to M4A conversion failed: \(error)")
+                    return
+                }
             }
+            playableURL = m4aURL
         } else {
             playableURL = fileURL
         }
@@ -136,11 +136,12 @@ struct AudioAttachmentView: View {
         }
 
         await playerService.play(
-            attachmentURL: urlString, 
-            playableURL: playableURL, 
-            givenDuration: attachment.duration, 
-            title: title,
-            avatarURL: avatarURL
+            attachmentURL: urlString,
+            playableURL: playableURL,
+            givenDuration: attachment.duration,
+            // Now Playing names the other side of the conversation.
+            title: message.isSender ? chat.displayTitle : message.senderDisplayName,
+            avatarURL: message.isSender ? chat.imgURL : chat.participant(with: message.senderID)?.imgURL
         )
     }
 

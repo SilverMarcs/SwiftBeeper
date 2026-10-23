@@ -37,7 +37,7 @@ struct VideoAttachmentView: View {
         .clipShape(.rect(cornerRadius: 12))
         .task(id: showVideo) {
             guard showVideo, let source = attachment.resolvedURL else { return }
-            playbackURL = await AuthenticatedImageLoader.downloadToTempFile(urlString: source, fileExtension: "mp4")
+            playbackURL = await MatrixMedia.temporaryFile(for: source, fileExtension: "mp4")
         }
     }
 
@@ -72,7 +72,7 @@ struct VideoAttachmentView: View {
 
     @ViewBuilder
     private var posterImage: some View {
-        if let posterURL = AuthenticatedImageLoader.displayURL(for: attachment.posterImg) {
+        if let posterURL = MatrixMedia.displayURL(for: attachment.posterImg) {
             CachedAsyncImage(url: posterURL, targetSize: 450) {
                 Color.clear.subtleBackground()
             }

@@ -51,11 +51,7 @@ struct ChatInfoSheet: View {
                                 selectedParticipant = participant
                             } label: {
                                 HStack(spacing: 10) {
-                                    ProfileAvatarView(
-                                        name: participant.displayName,
-                                        imageURLString: participant.imgURL,
-                                        dimension: 32
-                                    )
+                                    ProfileAvatarView(participant: participant, dimension: 32)
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(participant.displayName)

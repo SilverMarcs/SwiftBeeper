@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct BeeperRecoveryStepView: View {
-    @Environment(SessionStore.self) private var sessionStore
     @Bindable var model: BeeperSignInModel
 
     var body: some View {
@@ -14,21 +13,16 @@ struct BeeperRecoveryStepView: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
                     guard model.canSubmitRecoveryKey else { return }
-                    Task {
-                        await model.submitRecoveryKey(sessionStore: sessionStore)
-                    }
+                    Task { await model.submitRecoveryKey() }
                 }
 
             Button("Verify and Continue") {
-                Task {
-                    await model.submitRecoveryKey(sessionStore: sessionStore)
-                }
+                Task { await model.submitRecoveryKey() }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
             .disabled(!model.canSubmitRecoveryKey)
-
         }
     }
 }

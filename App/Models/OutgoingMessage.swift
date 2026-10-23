@@ -6,8 +6,8 @@ enum OutgoingMessageState: Equatable {
 }
 
 /// A client-owned timeline item that exists immediately after Send is tapped.
-/// It remains independent from the currently selected chat while the remote
-/// server accepts the message and any attachments.
+/// It remains independent from the currently selected chat while the Matrix
+/// core accepts the message and any attachments.
 struct OutgoingMessage: Identifiable, Equatable {
     let id: UUID
     let chatID: String
@@ -16,7 +16,6 @@ struct OutgoingMessage: Identifiable, Equatable {
     let replyToMessageID: String?
     let createdAt: Date
     var state: OutgoingMessageState
-    var uploadProgressByAttachmentID: [PendingAttachment.ID: Double]
     var uploadFileNameByAttachmentID: [PendingAttachment.ID: String]
     var uploadMimeTypeByAttachmentID: [PendingAttachment.ID: String]
     var pendingMessageIDs: Set<String>
@@ -37,7 +36,6 @@ struct OutgoingMessage: Identifiable, Equatable {
         self.replyToMessageID = replyToMessageID
         self.createdAt = createdAt
         self.state = .sending
-        self.uploadProgressByAttachmentID = [:]
         self.uploadFileNameByAttachmentID = [:]
         self.uploadMimeTypeByAttachmentID = [:]
         self.pendingMessageIDs = []
@@ -46,24 +44,8 @@ struct OutgoingMessage: Identifiable, Equatable {
 
     var timelineKey: String { "outgoing-\(id.uuidString)" }
 
-    /// Changes only when this row starts or stops suppressing its canonical
-    /// counterpart, allowing timeline caches to invalidate without reacting to
-    /// every upload-progress update.
-    var suppressionID: ID? {
-        guard case .sending = state else { return nil }
-        return id
-    }
-
     var expectedConfirmationCount: Int {
         max(attachments.count, 1)
-    }
-
-    /// Whether a canonical timeline message is the server-confirmed form of this
-    /// optimistic row. This check is active from the moment the row is created,
-    /// so a fast WebSocket event cannot briefly render alongside it.
-    func suppressesConfirmedMessage(_ message: Message) -> Bool {
-        guard case .sending = state else { return false }
-        return matchesConfirmedMessage(message)
     }
 
     /// Whether a canonical message is the server-confirmed form of this row.
@@ -71,7 +53,7 @@ struct OutgoingMessage: Identifiable, Equatable {
     /// have committed the send before its acknowledgement was lost.
     func matchesConfirmedMessage(_ message: Message) -> Bool {
         guard message.chatID == chatID,
-              message.isSender == true,
+              message.isSender,
               message.timestamp >= createdAt.addingTimeInterval(-60),
               message.timestamp <= createdAt.addingTimeInterval(60 * 60)
         else { return false }

@@ -15,7 +15,7 @@ struct SettingsView: View {
             Form {
 
                 Section {
-                    if sessionStore.accessToken.isEmpty {
+                    if !sessionStore.isSignedIn {
                         Text("Not signed in.")
                             .foregroundStyle(.secondary)
                     } else {
@@ -24,7 +24,7 @@ struct SettingsView: View {
                     if let signOutError { Text(signOutError).foregroundStyle(.red) }
                 }
 
-                if !sessionStore.accessToken.isEmpty {
+                if sessionStore.isSignedIn {
                     NotificationSettingsSection()
                 }
 
@@ -39,7 +39,7 @@ struct SettingsView: View {
 
                 Section("Cache") {
                    Button {
-                       AuthenticatedImageLoader.clearTempFiles()
+                       MatrixMedia.clearTemporaryFiles()
                    } label: {
                        Label("Delete File Cache", systemImage: "trash")
                    }
@@ -65,11 +65,7 @@ struct SettingsView: View {
     private var profileRow: some View {
         HStack(spacing: 12) {
             let profile = chatStore.currentUserProfile
-            ProfileAvatarView(
-                name: profile?.displayName ?? "?",
-                imageURLString: profile?.imgURL,
-                dimension: 44
-            )
+            ProfileAvatarView(participant: profile, dimension: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile?.displayName ?? "Account")
                     .bold()
@@ -90,10 +86,10 @@ struct SettingsView: View {
                         _ = try await MatrixRuntime.shared.command(Data("{\"action\":\"logout\"}".utf8))
                     } catch {
                         signOutError = error.localizedDescription
-                        await notificationService.configure(signedIn: !sessionStore.accessToken.isEmpty)
+                        await notificationService.configure(signedIn: sessionStore.isSignedIn)
                         return
                     }
-                    sessionStore.clearToken()
+                    sessionStore.isSignedIn = false
                 }
             }
             .buttonStyle(.plain)

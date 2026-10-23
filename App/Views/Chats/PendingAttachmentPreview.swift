@@ -4,9 +4,9 @@ import UIKit
 #endif
 
 struct PendingAttachmentPreview: View {
+    @Environment(InputManager.self) private var input
+
     let pending: PendingAttachment
-    let isSending: Bool
-    let onRemove: () -> Void
 
     private var isImage: Bool {
         pending.mimeType.hasPrefix("image/")
@@ -39,7 +39,7 @@ struct PendingAttachmentPreview: View {
         }
         .overlay(alignment: .topTrailing) {
             Button {
-                onRemove()
+                input.removePendingAttachment(id: pending.id)
             } label: {
                 Image(systemName: "xmark")
                     .font(.caption)
@@ -48,7 +48,6 @@ struct PendingAttachmentPreview: View {
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .padding(5)
-            .disabled(isSending)
         }
     }
 

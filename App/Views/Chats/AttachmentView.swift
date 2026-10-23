@@ -2,9 +2,8 @@ import SwiftUI
 
 struct AttachmentView: View {
     let attachment: Attachment
-    let isOutgoing: Bool
-    var chatTitle: String? = nil
-    var avatarURL: String? = nil
+    let message: Message
+    let chat: Chat
 
     var body: some View {
         if attachment.isImage {
@@ -12,9 +11,9 @@ struct AttachmentView: View {
         } else if attachment.isVideo {
             VideoAttachmentView(attachment: attachment)
         } else if attachment.isAudio {
-            AudioAttachmentView(attachment: attachment, isOutgoing: isOutgoing, title: chatTitle, avatarURL: avatarURL)
+            AudioAttachmentView(attachment: attachment, message: message, chat: chat)
         } else {
-            FileAttachmentView(attachment: attachment, isOutgoing: isOutgoing)
+            FileAttachmentView(attachment: attachment, isOutgoing: message.isSender)
         }
     }
 }

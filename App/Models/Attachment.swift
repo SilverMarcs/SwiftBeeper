@@ -9,7 +9,6 @@ struct UploadAssetOutput: Decodable {
     let width: Int?
     let height: Int?
     let duration: Double?
-    let error: String?
 }
 
 struct MessageAttachmentInput: Encodable {
@@ -37,6 +36,10 @@ struct PendingAttachment: Identifiable, Equatable, Sendable {
         self.fileData = fileData
         self.fileName = fileName
         self.mimeType = mimeType
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
     }
 }
 
@@ -97,8 +100,6 @@ struct Attachment: Identifiable, Codable, Equatable, Sendable {
     let fileName: String?
     let fileSize: Int?
     let isGif: Bool?
-    let isSticker: Bool?
-    let isVoiceNote: Bool?
     let duration: Double?
     let posterImg: String?
     let size: AttachmentSize?
@@ -108,7 +109,7 @@ struct Attachment: Identifiable, Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case _id = "id"
         case type, srcURL, mimeType, fileName, fileSize
-        case isGif, isSticker, isVoiceNote, duration, posterImg, size
+        case isGif, duration, posterImg, size
     }
 
     var isImage: Bool { type == .image }

@@ -11,60 +11,47 @@ struct RelayApp: App {
     @State private var chatStore: ChatStore
     @State private var inputManager: InputManager
     @State private var notificationService: NotificationService
-    @State private var audioPlayerService: AudioPlayerService
+    @State private var audioPlayerService = AudioPlayerService()
 
     init() {
         URLProtocol.registerClass(MatrixURLProtocol.self)
-        let sessionStore = SessionStore()
         let notificationService = NotificationService()
-        AppDelegate.notificationService = notificationService
-        let audioPlayerService = AudioPlayerService()
-        let chatStore = ChatStore(
-            realtimeService: RealtimeService(),
-            notificationService: notificationService
-        )
-        AppDelegate.chatStore = chatStore
+        let chatStore = ChatStore(realtimeService: RealtimeService(), notificationService: notificationService)
         let inputManager = InputManager(chatStore: chatStore)
+        AppDelegate.notificationService = notificationService
+        AppDelegate.chatStore = chatStore
         AppDelegate.inputManager = inputManager
-        #if os(macOS)
-        chatStore.handleAppActivation(NSApplication.shared.isActive)
-        #endif
-        _sessionStore = State(initialValue: sessionStore)
+        _sessionStore = State(initialValue: SessionStore())
         _notificationService = State(initialValue: notificationService)
-        _audioPlayerService = State(initialValue: audioPlayerService)
         _chatStore = State(initialValue: chatStore)
         _inputManager = State(initialValue: inputManager)
-
-    }
-
-    private var root: RootView {
-        RootView(
-            sessionStore: sessionStore,
-            chatStore: chatStore,
-            inputManager: inputManager,
-            notificationService: notificationService,
-            audioPlayerService: audioPlayerService
-        )
     }
 
     var body: some Scene {
         #if os(macOS)
         Window("Relay", id: "main") {
-            root
+            withAppEnvironment(AppStartupView())
                 .frame(minWidth: 900, minHeight: 600)
         }
         .defaultSize(width: 1100, height: 750)
 
         Settings {
-            SettingsView()
-                .environment(sessionStore)
-                .environment(chatStore)
-                .environment(notificationService)
+            withAppEnvironment(SettingsView())
         }
         #else
         WindowGroup {
-            root
+            withAppEnvironment(AppStartupView())
         }
         #endif
+    }
+
+    /// Every scene gets the same app-wide stores.
+    private func withAppEnvironment(_ content: some View) -> some View {
+        content
+            .environment(sessionStore)
+            .environment(chatStore)
+            .environment(inputManager)
+            .environment(notificationService)
+            .environment(audioPlayerService)
     }
 }

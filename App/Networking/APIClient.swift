@@ -1,14 +1,6 @@
 import Foundation
 
 enum APIClient {
-    private static let _tokenLock = NSLock()
-    private static var _accessToken: String = ""
-
-    static var accessToken: String {
-        get { _tokenLock.withLock { _accessToken } }
-        set { _tokenLock.withLock { _accessToken = newValue } }
-    }
-
     static func execute<Arguments: Encodable, Response: Decodable>(
         _ action: String, arguments: Arguments
     ) async throws -> Response {
@@ -22,7 +14,7 @@ enum APIClient {
 
     @discardableResult
     static func executeRaw<Arguments: Encodable>(_ action: String, arguments: Arguments) async throws -> Data {
-        let input = try JSONEncoder.beeper.encode(MatrixCommand(action: action, arguments: arguments))
+        let input = try JSONEncoder().encode(MatrixCommand(action: action, arguments: arguments))
         return try await MatrixRuntime.shared.command(input)
     }
 }
@@ -52,8 +44,4 @@ extension JSONDecoder {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
-}
-
-extension JSONEncoder {
-    static let beeper = JSONEncoder()
 }

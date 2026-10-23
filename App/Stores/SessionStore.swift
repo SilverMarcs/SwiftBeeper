@@ -1,14 +1,10 @@
 import Foundation
 import Observation
 
-/// The UI's session generation. Matrix authentication is owned by Go.
+/// Whether the Matrix core has a signed-in, verified account. The core owns
+/// the credentials; this only drives which UI shows.
 @MainActor
 @Observable
 final class SessionStore {
-    var accessToken = ""
-
-    init() {}
-
-    func clearToken() { accessToken = "" }
-
+    var isSignedIn = false
 }

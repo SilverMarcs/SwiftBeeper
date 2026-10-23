@@ -12,15 +12,8 @@ private final class AttributedStringBox {
     init(_ value: AttributedString) { self.value = value }
 }
 
-/// Parsed markdown is identical for identical input, but parsing runs on every
-/// `body` re-evaluation. Cache by source string so re-renders are cheap.
-private let markdownCache: NSCache<NSString, AttributedStringBox> = {
-    let cache = NSCache<NSString, AttributedStringBox>()
-    cache.countLimit = 2000
-    return cache
-}()
-
-/// Cache the finished Markdown and link presentation for each bubble style.
+/// Markdown parsing and link detection are costly enough to hitch scrolling,
+/// and rows rebuild as they scroll into view, so cache by source text.
 private let messageTextCache: NSCache<NSString, AttributedStringBox> = {
     let cache = NSCache<NSString, AttributedStringBox>()
     cache.countLimit = 2000
@@ -30,22 +23,16 @@ private let messageTextCache: NSCache<NSString, AttributedStringBox> = {
 private let sharedLinkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
 extension String {
-    var markdownAttributed: AttributedString {
+    /// Inline Markdown with bare URLs turned into compact, underlined links.
+    /// Links take their color from the view's tint.
+    var messageAttributed: AttributedString {
         let key = self as NSString
-        if let cached = markdownCache.object(forKey: key) { return cached.value }
-        let parsed = (try? AttributedString(
+        if let cached = messageTextCache.object(forKey: key) { return cached.value }
+        var attributed = (try? AttributedString(
             markdown: self,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(self)
-        markdownCache.setObject(AttributedStringBox(parsed), forKey: key)
-        return parsed
-    }
-
-    func messageAttributed(isOutgoing: Bool) -> AttributedString {
-        let key = "\(isOutgoing)\u{1E}\(self)" as NSString
-        if let cached = messageTextCache.object(forKey: key) { return cached.value }
-        var attributed = markdownAttributed
-        attributed.condenseAndStyleLinks(isOutgoing: isOutgoing)
+        attributed.condenseAndStyleLinks()
         messageTextCache.setObject(AttributedStringBox(attributed), forKey: key)
         return attributed
     }
@@ -55,7 +42,7 @@ private extension AttributedString {
     /// Turns bare URLs into links without moving them into separate bubbles.
     /// Long destinations keep their full target while displaying a compact
     /// host/path label. Existing Markdown links keep their authored label.
-    mutating func condenseAndStyleLinks(isOutgoing: Bool) {
+    mutating func condenseAndStyleLinks() {
         guard let detector = sharedLinkDetector else { return }
 
         let plainText = String(characters)
@@ -79,19 +66,15 @@ private extension AttributedString {
 
             var replacement = AttributedString(destination.inlineDisplayLabel)
             replacement.link = destination
-            replacement.foregroundColor = isOutgoing ? .white : .blue
             replacement.underlineStyle = .single
             replaceSubrange(attributedRange, with: replacement)
         }
 
-        // Style authored Markdown links as well as the bare links inserted
-        // above. Outgoing bubbles use white for contrast on the accent fill.
+        // Underline authored Markdown links too.
         for run in runs where run.link != nil {
-            self[run.range].foregroundColor = isOutgoing ? .white : .blue
             self[run.range].underlineStyle = .single
         }
     }
-
 }
 
 private extension URL {

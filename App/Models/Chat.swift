@@ -103,40 +103,6 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
         participants?.items.first(where: { $0.id == id })
     }
 
-    /// Merges a freshly-fetched copy (`detail`) into this one. `detail` wins for
-    /// most fields, but we preserve richer data this copy may already hold.
-    func merging(detail: Chat) -> Chat {
-        var result = detail
-
-        // The list endpoint can return a non-nil but truncated `participants`
-        // (it doesn't pass `maxParticipantCount=-1`), so keep whichever side has
-        // more so fully-hydrated group avatars survive a list refresh.
-        if let existing = participants,
-           (detail.participants?.items.count ?? 0) < existing.items.count {
-            result.participants = existing
-        }
-
-        // Keep the newest preview by sort key so the sidebar always reflects the
-        // most recent activity, regardless of which fetch arrived last.
-        if let existing = preview,
-           (detail.preview?.numericSortKey ?? .min) < existing.numericSortKey {
-            result.preview = existing
-        }
-
-        // Fall back to existing values for optional fields the refresh omitted.
-        result.isMuted = detail.isMuted ?? isMuted
-        result.type = detail.type ?? type
-        result.isPinned = detail.isPinned ?? isPinned
-        result.isArchived = detail.isArchived ?? isArchived
-        result.isMarkedUnread = detail.isMarkedUnread ?? isMarkedUnread
-        result.accountID = detail.accountID ?? accountID
-        result.lastActivity = detail.lastActivity ?? lastActivity
-        result.lastReadMessageSortKey = detail.lastReadMessageSortKey ?? lastReadMessageSortKey
-        result.imgURL = detail.imgURL ?? imgURL
-
-        return result
-    }
-
     var lastActivityText: String? {
         guard let lastActivity else { return nil }
         let calendar = Calendar.app

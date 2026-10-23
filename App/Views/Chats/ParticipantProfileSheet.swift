@@ -9,12 +9,7 @@ struct ParticipantProfileSheet: View {
             Form {
                 Section {
                     VStack(spacing: 12) {
-                        ProfileAvatarView(
-                            name: participant.displayName,
-                            imageURLString: participant.imgURL,
-                            dimension: 96,
-                            allowsFullscreen: true
-                        )
+                        ProfileAvatarView(participant: participant, dimension: 96, allowsFullscreen: true)
 
                         VStack(spacing: 2) {
                             Text(participant.displayName)

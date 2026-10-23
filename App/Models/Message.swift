@@ -53,8 +53,6 @@ struct Reaction: Codable, Identifiable, Hashable, Sendable {
 }
 
 struct Message: Identifiable, Codable, Equatable, Sendable {
-
-
     let id: String
     let chatID: String
     let senderID: String
@@ -63,7 +61,7 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let sortKey: String
     let type: MessageKind?
     let text: String?
-    let isSender: Bool?
+    let isSender: Bool
     let attachments: [Attachment]?
     let isUnread: Bool?
     let reactions: [Reaction]?
@@ -71,11 +69,9 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     /// True when the server has redacted this message. Its original content may
     /// still be present when the server observed it before the redaction.
     let isDeleted: Bool?
-    /// Local transaction identifier attached to hydrated realtime events.
-    /// REST history may omit it.
+    /// Local transaction identifier attached to realtime events.
+    /// History pages may omit it.
     let transactionID: String?
-
-    var timelineKey: String { sortKey }
 
     /// Numeric sort key for correct ordering (handles negative backfill IDs).
     var numericSortKey: Int64 { Int64(sortKey) ?? 0 }
@@ -114,13 +110,9 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         return "Deleted message"
     }
 
-    private var isLegacyDeletedTombstone: Bool {
-        !hasText && (attachments ?? []).isEmpty
-    }
-
-    /// Includes the empty tombstone emitted by older server versions.
+    /// Redacted, or with nothing left to show (an empty body and no attachments).
     var isDeletedMessage: Bool {
-        isDeleted == true || isLegacyDeletedTombstone
+        isDeleted == true || (!hasText && (attachments ?? []).isEmpty)
     }
 
     var hasRetainedDeletedContent: Bool {
@@ -168,16 +160,6 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 
-    func isOutgoing(in chat: Chat) -> Bool {
-        if let isSender {
-            return isSender
-        }
-        guard let currentParticipantID = chat.participants?.items.first(where: { $0.isSelf == true })?.id else {
-            return false
-        }
-        return senderID == currentParticipantID
-    }
-
     var groupedReactions: [GroupedReaction]? {
         guard let reactions, !reactions.isEmpty else {
             return nil
@@ -199,31 +181,5 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         }
 
         return groups.values.sorted(by: { $0.reactionKey < $1.reactionKey })
-    }
-
-    /// Merges a freshly-fetched copy (`detail`) into this one, preserving richer
-    /// data (like reactions or attachments) if the new copy omitted them.
-    func merging(detail: Message) -> Message {
-        let mergedSenderName = (detail.senderName?.isEmpty == false) ? detail.senderName : (senderName?.isEmpty == false ? senderName : nil)
-        let mergedReactions = detail.reactions ?? reactions
-        let mergedAttachments = detail.attachments ?? attachments
-
-        return Message(
-            id: detail.id,
-            chatID: detail.chatID,
-            senderID: detail.senderID,
-            senderName: mergedSenderName,
-            timestamp: detail.timestamp,
-            sortKey: detail.sortKey,
-            type: detail.type ?? type,
-            text: detail.text ?? text,
-            isSender: detail.isSender ?? isSender,
-            attachments: mergedAttachments,
-            isUnread: detail.isUnread ?? isUnread,
-            reactions: mergedReactions,
-            linkedMessageID: detail.linkedMessageID ?? linkedMessageID,
-            isDeleted: detail.isDeleted ?? isDeleted,
-            transactionID: detail.transactionID ?? transactionID
-        )
     }
 }

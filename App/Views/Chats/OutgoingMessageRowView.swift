@@ -1,56 +1,30 @@
 import SwiftUI
 
 struct OutgoingMessageRowView: View {
-    @Environment(ChatStore.self) private var chatStore
-    #if os(iOS)
-    @Environment(InputManager.self) private var input
-    #endif
-
-    let message: OutgoingMessage
-    /// The quoted message for a reply, pre-resolved by the timeline grouping so
-    /// the optimistic bubble shows the same header the confirmed one will.
-    var linkedMessage: Message? = nil
-    var onTapLinkedMessage: ((String) -> Void)? = nil
+    let entry: OutgoingTimelineEntry
 
     var body: some View {
+        let message = entry.message
         HStack(alignment: .bottom, spacing: 6) {
             Spacer(minLength: 50)
 
             VStack(alignment: .trailing, spacing: 4) {
-                if let replyToMessageID = message.replyToMessageID, !replyToMessageID.isEmpty {
-                    ReplyPreviewView(
-                        linkedMessage: linkedMessage,
-                        isOutgoing: true,
-                        onTap: { onTapLinkedMessage?(replyToMessageID) }
-                    )
+                if message.replyToMessageID?.isEmpty == false {
+                    ReplyPreviewView(linkedMessage: entry.linkedMessage, isOutgoing: true)
                 }
 
                 ForEach(message.attachments) { attachment in
-                    OutgoingAttachmentView(
-                        attachment: attachment,
-                        progress: message.uploadProgressByAttachmentID[attachment.id],
-                        state: message.state
-                    )
+                    OutgoingAttachmentView(attachment: attachment, message: message)
                 }
 
                 if !message.text.isEmpty {
                     MessageTextView(text: message.text, isOutgoing: true)
                         .messageBubbleChrome(isOutgoing: true)
-                        #if os(iOS)
-                        .modifier(MessageSendEffect(
-                            animator: input.sendAnimator,
-                            flight: input.sendAnimator.flight(forOutgoing: message.id)
-                        ))
-                        #endif
+                        .sendEffect(forOutgoing: message.id)
                 }
 
                 if case .failed(let error) = message.state {
-                    MessageDeliveryStatusView(
-                        status: .failed(
-                            error: error,
-                            retry: { chatStore.retrySending(message.id) }
-                        )
-                    )
+                    MessageDeliveryStatusView(status: .failed(messageID: message.id, error: error))
                 }
             }
         }

@@ -2,29 +2,9 @@ import Foundation
 
 struct ManageState: Decodable {
     let clientState: ClientState?
-    let homeserverHost: String?
 
     enum CodingKeys: String, CodingKey {
         case clientState = "client_state"
-        case homeserverHost = "homeserver_host"
-    }
-}
-
-struct ClientState: Decodable {
-    let isInitialized: Bool
-    let isLoggedIn: Bool
-    let isVerified: Bool
-    let userID: String?
-    let deviceID: String?
-    let homeserverURL: String?
-
-    enum CodingKeys: String, CodingKey {
-        case isInitialized = "is_initialized"
-        case isLoggedIn = "is_logged_in"
-        case isVerified = "is_verified"
-        case userID = "user_id"
-        case deviceID = "device_id"
-        case homeserverURL = "homeserver_url"
     }
 }
 
@@ -72,6 +52,4 @@ extension APIClient {
         struct Body: Encodable { let recoveryKey: String }
         return try await execute("verify", arguments: Body(recoveryKey: recoveryKey))
     }
-
-
 }

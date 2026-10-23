@@ -21,11 +21,11 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        Self.chatStore?.handleAppActivation(true)
+        Self.chatStore?.setAppActive(true)
     }
 
     func applicationDidResignActive(_ notification: Notification) {
-        Self.chatStore?.handleAppActivation(false)
+        Self.chatStore?.setAppActive(false)
     }
     #else
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -45,11 +45,11 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         await MainActor.run {
-            Self.notificationService?.badges.reconcileAfterNotification()
+            // Stay quiet for the chat already on screen.
             let content = notification.request.content
             let chatID = content.userInfo["chatID"] as? String ?? content.threadIdentifier
             if content.userInfo["replyDraft"] == nil,
-               Self.notificationService?.badges.isActive == true,
+               Self.notificationService?.isAppActive == true,
                !chatID.isEmpty, Self.chatStore?.visibleChatID == chatID {
                 return []
             }

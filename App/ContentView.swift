@@ -7,7 +7,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if sessionStore.accessToken.isEmpty {
+            if !sessionStore.isSignedIn {
                 OnboardingView()
             } else {
                 NavigationSplitView(preferredCompactColumn: $preferredCompactColumn) {
@@ -23,9 +23,6 @@ struct ContentView: View {
                     preferredCompactColumn = .detail
                 }
             }
-        }
-        .task(id: sessionStore.accessToken.isEmpty) {
-            await chatStore.updateAccessToken(sessionStore.accessToken)
         }
     }
 }

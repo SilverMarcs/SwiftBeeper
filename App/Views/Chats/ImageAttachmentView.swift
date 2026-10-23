@@ -12,7 +12,7 @@ struct ImageAttachmentView: View {
 
     var body: some View {
         Group {
-            if let url = AuthenticatedImageLoader.displayURL(for: attachment.resolvedURL) {
+            if let url = MatrixMedia.displayURL(for: attachment.resolvedURL) {
                 if attachment.isGif == true {
                     SMVGIFView(url: url, targetSize: targetSize)
                 } else {

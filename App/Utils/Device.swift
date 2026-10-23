@@ -8,8 +8,8 @@
 
 import SwiftUI
 
-public enum Device {
-    public static var isIPad: Bool {
+enum Device {
+    static var isIPad: Bool {
         #if os(iOS)
         return UIDevice.current.userInterfaceIdiom == .pad
         #else
@@ -17,7 +17,7 @@ public enum Device {
         #endif
     }
 
-    public static var isMac: Bool {
+    static var isMac: Bool {
         #if os(macOS)
         return true
         #else
@@ -25,7 +25,7 @@ public enum Device {
         #endif
     }
 
-    public static var isIPhone: Bool {
+    static var isIPhone: Bool {
         #if os(iOS)
         return UIDevice.current.userInterfaceIdiom == .phone
         #else
@@ -35,7 +35,7 @@ public enum Device {
 
     /// True on macOS and iPad — i.e. the "large canvas" layouts that show the
     /// chat list and detail side-by-side and auto-select a chat.
-    public static var isMacOrPad: Bool {
+    static var isMacOrPad: Bool {
         isMac || isIPad
     }
 }

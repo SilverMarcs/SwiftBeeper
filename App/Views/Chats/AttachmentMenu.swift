@@ -1,11 +1,12 @@
-#if !os(macOS)
 import SwiftUI
 import PhotosUI
 
-/// The "+" attachment menu shown in the iPhone chat detail's bottom toolbar,
-/// alongside the `.searchable` text input. Drives the shared `InputManager`.
-struct MessageInputMenu: View {
+/// The "+" menu that adds photos or files to the composer. Picks attach to the
+/// chat that was open when the menu was used, even if a picker finishes later.
+struct AttachmentMenu<MenuLabel: View>: View {
     @Environment(InputManager.self) private var input
+
+    @ViewBuilder let label: MenuLabel
 
     @State private var showingFilePicker = false
     @State private var showingPhotoPicker = false
@@ -14,23 +15,18 @@ struct MessageInputMenu: View {
 
     var body: some View {
         Menu {
-            Button {
+            Button("Photos Library", systemImage: "photo.on.rectangle.angled") {
                 attachmentTargetChatID = input.selectedChatID
                 showingPhotoPicker = true
-            } label: {
-                Label("Photos Library", systemImage: "photo.on.rectangle.angled")
             }
 
-            Button {
+            Button("Attach Files", systemImage: "paperclip") {
                 attachmentTargetChatID = input.selectedChatID
                 showingFilePicker = true
-            } label: {
-                Label("Attach Files", systemImage: "paperclip")
             }
         } label: {
-            Image(systemName: "plus")
+            label
         }
-        .menuIndicator(.hidden)
         .photosPicker(
             isPresented: $showingPhotoPicker,
             selection: $selectedPhotoItems,
@@ -56,4 +52,3 @@ struct MessageInputMenu: View {
         }
     }
 }
-#endif

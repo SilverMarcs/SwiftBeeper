@@ -58,11 +58,6 @@ final class InputManager {
         }
     }
 
-    /// Binding for text fields (`TextField`, `.searchable`).
-    var draftBinding: Binding<String> {
-        Binding(get: { self.draft }, set: { self.draft = $0 })
-    }
-
     var trimmedDraft: String { draft.trimmed }
 
     func restoreNotificationDraft(_ text: String, for chatID: String) {
@@ -81,10 +76,6 @@ final class InputManager {
 
     var isEditing: Bool { chatStore.editingMessage != nil }
 
-    var hasActiveComposerAction: Bool { chatStore.activeComposerMessage != nil }
-
-    var isSavingEdit: Bool { chatStore.isSavingEdit }
-
     var pendingAttachments: [PendingAttachment] {
         guard let selectedChatID else { return [] }
         return pendingAttachmentsByChatID[selectedChatID] ?? []
@@ -102,9 +93,10 @@ final class InputManager {
         return trimmedDraft.isEmpty && pendingAttachments.isEmpty
     }
 
-    var mostRecentEditableOutgoingMessage: Message? {
+    /// Scans the timeline, so only the Edit Last shortcut calls it, not a view body.
+    private var mostRecentEditableOutgoingMessage: Message? {
         guard let selectedChat = chatStore.selectedChat else { return nil }
-        return chatStore.messages(for: selectedChat.id).last { message in
+        return chatStore.timelineMessages.last { message in
             chatStore.canEdit(message, in: selectedChat)
         }
     }
@@ -159,7 +151,7 @@ final class InputManager {
     }
 
     private func sendMessage(from sourceFrame: CGRect?) {
-        guard let chatID = chatStore.selectedChat?.id else { return }
+        guard let chatID = chatStore.selectedChatID else { return }
         let text = trimmedDraft
         let attachments = pendingAttachments
 
@@ -167,24 +159,16 @@ final class InputManager {
         #if os(iOS)
         let animationSource = sourceFrame ?? sendAnimator.sourceFrame?()
         #endif
-        let previousDraft = draft
         clearDraft(for: chatID)
         clearPendingAttachments(for: chatID)
 
-        let outgoing = chatStore.sendMessage(text: text, attachments: attachments, to: chatID)
         #if os(iOS)
-        if let outgoing {
+        if let outgoing = chatStore.sendMessage(text: text, attachments: attachments, to: chatID) {
             sendAnimator.begin(outgoing, from: animationSource)
         }
+        #else
+        chatStore.sendMessage(text: text, attachments: attachments, to: chatID)
         #endif
-        if outgoing == nil {
-            if (draftsByChatID[chatID] ?? "").isEmpty {
-                draftsByChatID[chatID] = previousDraft
-            }
-            if (pendingAttachmentsByChatID[chatID] ?? []).isEmpty {
-                pendingAttachmentsByChatID[chatID] = attachments
-            }
-        }
     }
 
     private func saveEdit() {
@@ -194,17 +178,16 @@ final class InputManager {
         if let editingChatID {
             clearDraft(for: editingChatID)
         }
+        // The draft is already clear, so the edit ending must not clear
+        // anything typed while the save runs.
+        editingDraftChatID = nil
 
         Task {
             let didSave = await chatStore.saveEdit(newText: text)
-            if didSave {
-                if let editingChatID {
-                    clearDraft(for: editingChatID)
-                }
-            } else if
-                let editingChatID,
-                (draftsByChatID[editingChatID] ?? "").isEmpty
-            {
+            guard !didSave, let editingChatID else { return }
+            // Still editing: restore the text unless something new was typed.
+            editingDraftChatID = editingChatID
+            if (draftsByChatID[editingChatID] ?? "").isEmpty {
                 draftsByChatID[editingChatID] = previousDraft
             }
         }

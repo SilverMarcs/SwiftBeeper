@@ -9,11 +9,11 @@ struct ProfileAvatarView: View {
 
     var body: some View {
         Group {
-            if allowsFullscreen, let displayURL = AuthenticatedImageLoader.displayURL(for: imageURLString) {
+            if allowsFullscreen, let displayURL = MatrixMedia.displayURL(for: imageURLString) {
                 SMVImage(url: displayURL, targetSize: targetSize)
             } else {
                 CachedAsyncImage(
-                    url: AuthenticatedImageLoader.displayURL(for: imageURLString),
+                    url: MatrixMedia.displayURL(for: imageURLString),
                     targetSize: targetSize
                 ) {
                     initialsAvatar

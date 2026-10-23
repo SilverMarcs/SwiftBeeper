@@ -5,8 +5,7 @@ import UIKit
 
 struct OutgoingAttachmentView: View {
     let attachment: PendingAttachment
-    let progress: Double?
-    let state: OutgoingMessageState
+    let message: OutgoingMessage
 
     private var isImage: Bool {
         attachment.mimeType.hasPrefix("image/")
@@ -14,11 +13,12 @@ struct OutgoingAttachmentView: View {
 
     var body: some View {
         Group {
-            if isImage, let image = makeImage() {
-                image
+            if let decoded = decodedImage() {
+                let size = fittedSize(for: decoded.size)
+                decoded.image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: imageSize.width, height: imageSize.height)
+                    .frame(width: size.width, height: size.height)
                     .subtleBackground()
                     .clipShape(.rect(cornerRadius: 12))
             } else {
@@ -39,11 +39,12 @@ struct OutgoingAttachmentView: View {
             }
         }
         .overlay {
-            switch state {
+            switch message.state {
             case .sending:
                 ZStack {
                     Color.black.opacity(0.18)
-                    uploadProgressView
+                    ProgressView()
+                        .tint(.white)
                 }
                 .clipShape(.rect(cornerRadius: 12))
             case .failed:
@@ -53,35 +54,15 @@ struct OutgoingAttachmentView: View {
         }
     }
 
-    @ViewBuilder
-    private var uploadProgressView: some View {
-        if let progress, progress < 1 {
-            ProgressView(value: progress)
-                .progressViewStyle(.circular)
-                .tint(.white)
-        } else {
-            ProgressView()
-                .tint(.white)
-        }
-    }
-
-    private var imageSize: CGSize {
+    private func fittedSize(for sourceSize: CGSize) -> CGSize {
         let maxWidth: CGFloat = Device.isMacOrPad ? 400 : 275
         let maxHeight: CGFloat = 500
-        guard let sourceSize = platformImageSize, sourceSize.width > 0, sourceSize.height > 0 else {
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
             return CGSize(width: maxWidth, height: maxWidth)
         }
 
         let scale = min(maxWidth / sourceSize.width, maxHeight / sourceSize.height, 1)
         return CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
-    }
-
-    private var platformImageSize: CGSize? {
-        #if os(macOS)
-        NSImage(data: attachment.fileData)?.size
-        #else
-        UIImage(data: attachment.fileData)?.size
-        #endif
     }
 
     private var attachmentIcon: String {
@@ -90,13 +71,15 @@ struct OutgoingAttachmentView: View {
         return "doc"
     }
 
-    private func makeImage() -> Image? {
+    /// Decodes the picked image once per render; its size sets the bubble frame.
+    private func decodedImage() -> (image: Image, size: CGSize)? {
+        guard isImage else { return nil }
         #if os(macOS)
         guard let image = NSImage(data: attachment.fileData) else { return nil }
-        return Image(nsImage: image)
+        return (Image(nsImage: image), image.size)
         #else
         guard let image = UIImage(data: attachment.fileData) else { return nil }
-        return Image(uiImage: image)
+        return (Image(uiImage: image), image.size)
         #endif
     }
 }

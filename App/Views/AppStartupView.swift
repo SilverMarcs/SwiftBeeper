@@ -9,7 +9,7 @@ struct AppStartupView: View {
     var body: some View {
         Group {
             if ready {
-                ContentView()
+                RootView()
             } else if let errorMessage {
                 ContentUnavailableView {
                     Label("Couldn’t open messages", systemImage: "bubble.left.and.exclamationmark.bubble.right")
@@ -27,9 +27,7 @@ struct AppStartupView: View {
                 errorMessage = nil
                 try await MatrixRuntime.shared.start()
                 let state = try await APIClient.manageState()
-                if state.clientState?.isLoggedIn == true, state.clientState?.isVerified == true {
-                    sessionStore.accessToken = UUID().uuidString
-                }
+                sessionStore.isSignedIn = state.clientState?.isLoggedIn == true && state.clientState?.isVerified == true
                 ready = true
             } catch { errorMessage = error.localizedDescription }
         }

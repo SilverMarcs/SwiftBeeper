@@ -3,7 +3,6 @@ import UniformTypeIdentifiers
 
 /// Shared message layout and scrolling, with platform-specific navigation and composers.
 struct ChatTimelineView: View {
-    @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     #if os(iOS)
@@ -13,52 +12,19 @@ struct ChatTimelineView: View {
     @State private var keyboardScrollTask: Task<Void, Never>?
     #endif
     @State private var firstUnreadID: String?
-    // Timeline grouping does per-message `Calendar` work; cache it so unrelated
-    // store changes (a sidebar refresh) don't recompute it on every body pass.
-    @State private var timelineCache = MemoizedValue<TimelineCacheKey, [TimelineEntry]>()
-    // Same idea for the optimistic tail: its dividers and quoted replies only
-    // change when the timeline or the outgoing rows themselves change, not on
-    // every upload-progress tick.
-    @State private var outgoingTimelineCache = MemoizedValue<OutgoingTimelineKey, [OutgoingTimelineEntry]>()
-    // The read indicator scans every message (isOutgoing + isReadByOther); memoize
-    // it so an unrelated store change doesn't re-scan the timeline on each body pass.
-    @State private var readIndicatorCache = MemoizedValue<ReadIndicatorKey, String?>()
     private let bottomAnchorID = "timeline-bottom"
 
-
     var body: some View {
-        if sessionStore.accessToken.isEmpty {
-            SignInRequiredView()
-        } else if let selectedChat = chatStore.selectedChat {
-            let messages = chatStore.messages(for: selectedChat.id)
-            let outgoingMessages = chatStore.outgoingMessages(for: selectedChat.id)
-            let timelineVersion = chatStore.messagesChatID == selectedChat.id ? chatStore.messagesVersion : -1
-            let suppressingOutgoingIDs = outgoingMessages.compactMap(\.suppressionID)
-            let timelineEntries = timelineCache(TimelineCacheKey(
-                version: timelineVersion,
+        if let selectedChat = chatStore.selectedChat {
+            let messages = chatStore.timelineMessages
+            let outgoingMessages = chatStore.outgoingMessages
+            let timelineEntries = TimelineEntry.entries(
+                for: messages,
                 firstUnreadID: firstUnreadID,
-                suppressingOutgoingIDs: suppressingOutgoingIDs
-            )) {
-                self.timelineEntries(for: messages)
-            }
-            let outgoingTimelineEntries = outgoingTimelineCache(OutgoingTimelineKey(
-                version: timelineVersion,
-                suppressingOutgoingIDs: suppressingOutgoingIDs,
-                outgoingKeys: outgoingMessages.map(\.timelineKey)
-            )) {
-                TimelineTimestampRule.outgoingEntries(for: outgoingMessages, following: messages)
-            }
+                lastReadByOtherSortKey: chatStore.lastReadByOtherSortKey
+            )
+            let outgoingTimelineEntries = OutgoingTimelineEntry.entries(for: outgoingMessages, following: messages)
             let activeComposerMessageID = chatStore.activeComposerMessage?.id
-            let readIndicatorMessageID = readIndicatorCache(
-                ReadIndicatorKey(
-                    version: timelineVersion,
-                    lastReadByOtherSortKey: chatStore.lastReadByOtherSortKey,
-                    selfParticipantID: selectedChat.participants?.items.first(where: { $0.isSelf == true })?.id,
-                    suppressingOutgoingIDs: suppressingOutgoingIDs
-                )
-            ) {
-                self.lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
-            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -84,17 +50,7 @@ struct ChatTimelineView: View {
                                             .padding(.bottom, 6)
                                     }
 
-                                    MessageRowView(
-                                        message: entry.message,
-                                        chat: selectedChat,
-                                        showReadIndicator: entry.message.id == readIndicatorMessageID,
-                                        isFirstInGroup: entry.isFirstInGroup,
-                                        isLastInGroup: entry.isLastInGroup,
-                                        linkedMessage: entry.linkedMessage,
-                                        onTapLinkedMessage: { linkedID in
-                                            scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
-                                        }
-                                    )
+                                    MessageRowView(entry: entry, chat: selectedChat)
                                     .modifier(
                                         TimelineFocusEffect(
                                             isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
@@ -102,7 +58,7 @@ struct ChatTimelineView: View {
                                     )
                                     .padding(.vertical, 2)
                                 }
-                                .id(entry.message.timelineKey)
+                                .id(entry.id)
                             }
 
                             ForEach(outgoingTimelineEntries) { entry in
@@ -114,13 +70,7 @@ struct ChatTimelineView: View {
                                             .padding(.bottom, 6)
                                     }
 
-                                    OutgoingMessageRowView(
-                                        message: entry.message,
-                                        linkedMessage: entry.linkedMessage,
-                                        onTapLinkedMessage: { linkedID in
-                                            scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
-                                        }
-                                    )
+                                    OutgoingMessageRowView(entry: entry)
                                     .padding(.vertical, 2)
                                 }
                                 .id(entry.id)
@@ -133,9 +83,14 @@ struct ChatTimelineView: View {
                             .accessibilityHidden(true)
                     }
                 }
+                .environment(\.scrollToMessage, ScrollToMessageAction { messageID in
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(messageID, anchor: .center)
+                    }
+                })
                 // Recreate only the viewport when a chat opens or its first
                 // database page arrives. Its first layout starts at the bottom.
-                .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline(for: selectedChat.id))")
+                .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline)")
                 // Initial layout and short conversations align to the bottom.
                 // Content growth must preserve the starting offset so the
                 // explicit send scroll can animate to its new destination.
@@ -173,14 +128,13 @@ struct ChatTimelineView: View {
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top < 80
                 } action: { _, nearTop in
-                    guard nearTop, chatStore.hasLoadedTimeline(for: selectedChat.id),
-                          !messages.isEmpty else { return }
-                    loadOlderMessages(chatID: selectedChat.id)
+                    guard nearTop, !messages.isEmpty else { return }
+                    Task { await chatStore.loadOlderMessages() }
                 }
                 .onChange(of: selectedChat.id, initial: true) { _, _ in
                     firstUnreadID = nil
                 }
-                .onChange(of: chatStore.hasLoadedTimeline(for: selectedChat.id), initial: true) { _, loaded in
+                .onChange(of: chatStore.hasLoadedTimeline, initial: true) { _, loaded in
                     guard loaded else { return }
                     firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
                 }
@@ -188,15 +142,10 @@ struct ChatTimelineView: View {
                     count: messages.count + outgoingMessages.count,
                     lastID: outgoingMessages.last?.timelineKey ?? messages.last?.id
                 )) { oldTracker, newTracker in
-                    guard chatStore.hasLoadedTimeline(for: selectedChat.id), oldTracker.lastID != nil else { return }
-                    // 2026-06-06: a send lands as two store commits — the WS merge
-                    // grows the array but the new message isn't last yet (its sort
-                    // key settles on the follow-up loadMessages commit), then the
-                    // reload swaps lastID with the count unchanged. Requiring
-                    // count-grew AND lastID-changed in a single transition matched
-                    // neither commit, so sending never scrolled. Trigger on lastID
-                    // change with a non-decreasing count: pagination keeps lastID
-                    // stable, deletions shrink the count — both still skipped.
+                    guard chatStore.hasLoadedTimeline, oldTracker.lastID != nil else { return }
+                    // Scroll when the newest row changes and the count did not
+                    // shrink: pagination keeps lastID stable and deletions shrink
+                    // the count, so both are skipped.
                     guard newTracker.lastID != oldTracker.lastID else { return }
                     guard newTracker.count >= oldTracker.count else { return }
 
@@ -211,12 +160,12 @@ struct ChatTimelineView: View {
                 .onChange(of: activeComposerMessageID) { _, newValue in
                     guard let newValue else { return }
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(messages.first(where: { $0.id == newValue })?.timelineKey ?? newValue, anchor: .center)
+                        proxy.scrollTo(newValue, anchor: .center)
                     }
                 }
                 .animation(.default, value: activeComposerMessageID)
                 .overlay {
-                    if !chatStore.hasLoadedTimeline(for: selectedChat.id),
+                    if !chatStore.hasLoadedTimeline,
                        let error = chatStore.messagesError, !chatStore.isLoadingMessages {
                         ContentUnavailableView {
                             Label("Couldn’t Load Messages", systemImage: "exclamationmark.bubble")
@@ -224,7 +173,7 @@ struct ChatTimelineView: View {
                             Text(error)
                         } actions: {
                             Button("Try Again") {
-                                Task { await chatStore.loadMessages(for: selectedChat.id) }
+                                Task { await chatStore.loadMessages() }
                             }
                         }
                     }
@@ -238,7 +187,7 @@ struct ChatTimelineView: View {
                     $0.onChange(of: chatStore.editingMessage?.id) { _, _ in
                         inputManager.editingMessageDidChange()
                     }
-                    .searchable(text: inputManager.draftBinding, isPresented: $isSearchPresented, prompt: Text(inputManager.messageFieldPrompt))
+                    .searchable(text: Bindable(inputManager).draft, isPresented: $isSearchPresented, prompt: Text(inputManager.messageFieldPrompt))
                         .searchFocused($isSearchFocused)
                         .searchPresentationToolbarBehavior(.avoidHidingContent)
                         .background(
@@ -285,7 +234,7 @@ struct ChatTimelineView: View {
                             inputManager.handleSubmit()
                             isSearchFocused = true
                         }
-                        .onChange(of: inputManager.isSavingEdit) { oldValue, newValue in
+                        .onChange(of: chatStore.isSavingEdit) { oldValue, newValue in
                             if oldValue && !newValue {
                                 isSearchFocused = true
                             }
@@ -309,7 +258,10 @@ struct ChatTimelineView: View {
                         }
                         .toolbar {
                             ToolbarItem(placement: .bottomBar) {
-                                MessageInputMenu()
+                                AttachmentMenu {
+                                    Label("Attach", systemImage: "plus")
+                                }
+                                .menuIndicator(.hidden)
                             }
                             ToolbarSpacer(.fixed, placement: .bottomBar)
                             DefaultToolbarItem(kind: .search, placement: .bottomBar)
@@ -343,22 +295,6 @@ struct ChatTimelineView: View {
         }
     }
 
-    private func scrollToLinkedMessage(_ linkedID: String, chatID: String, proxy: ScrollViewProxy) {
-        guard let target = chatStore.messages(for: chatID).first(where: { $0.id == linkedID }) else { return }
-        withAnimation(.easeInOut(duration: 0.3)) {
-            proxy.scrollTo(target.timelineKey, anchor: .center)
-        }
-    }
-
-    private func loadOlderMessages(chatID: String) {
-        guard chatStore.selectedChatID == chatID, chatStore.hasMoreMessages(for: chatID),
-              !chatStore.isLoadingOlderMessages else { return }
-        Task { @MainActor in
-            // Stable scroll targets preserve visible messages when history prepends.
-            await chatStore.loadOlderMessages(for: chatID)
-        }
-    }
-
     private func firstUnreadMessageID(messages: [Message], chat: Chat) -> String? {
         guard chat.unreadCount > 0 else { return nil }
 
@@ -369,102 +305,9 @@ struct ChatTimelineView: View {
 
         return messages.first(where: { $0.isUnread == true })?.id
     }
-
-    /// Returns the ID of the outgoing message that should show the "Read" indicator.
-    /// Rules:
-    /// - Only the last outgoing message that the other side has read gets the indicator.
-    /// - If there's an incoming message AFTER that outgoing message, don't show
-    ///   the indicator — the reply itself proves they read it.
-    private func lastReadOutgoingMessageID(messages: [Message], chat: Chat) -> String? {
-        // Find the last outgoing message that the other side has read.
-        var lastReadOutgoing: Message?
-        for message in messages {
-            guard message.isOutgoing(in: chat) else { continue }
-            guard chatStore.isReadByOther(message: message) else { continue }
-            lastReadOutgoing = message
-        }
-        guard let target = lastReadOutgoing else { return nil }
-
-        // If there's any incoming message after the target, the reply proves
-        // reading — no need for an explicit indicator.
-        let hasIncomingAfter = messages.contains { msg in
-            !msg.isOutgoing(in: chat) && msg.numericSortKey > target.numericSortKey
-        }
-        if hasIncomingAfter {
-            return nil
-        }
-
-        return target.id
-    }
-
-    private func timelineEntries(for messages: [Message]) -> [TimelineEntry] {
-        var entries: [TimelineEntry] = []
-        let count = messages.count
-        // Resolve reply targets once here (the whole result is memoized) so each
-        // reply bubble gets its quoted message as plain data instead of
-        // subscribing to the store and re-scanning `messages` on every render.
-        let messagesByID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-
-        for i in 0..<count {
-            let message = messages[i]
-            let prev: Message? = i > 0 ? messages[i - 1] : nil
-            let next: Message? = i < count - 1 ? messages[i + 1] : nil
-
-            let showsTimestamp = shouldShowTimestamp(before: message, previousMessage: prev)
-
-            let sameSenderAsPrev = prev.map { $0.senderID == message.senderID } ?? false
-            let sameSenderAsNext = next.map { $0.senderID == message.senderID } ?? false
-
-            // A timestamp break or unread divider resets the group
-            let nextShowsTimestamp = next.map { shouldShowTimestamp(before: $0, previousMessage: message) } ?? false
-            let nextIsUnread = next.map { $0.id == firstUnreadID } ?? false
-
-            let isFirstInGroup = !sameSenderAsPrev || showsTimestamp || message.id == firstUnreadID
-            let isLastInGroup = !sameSenderAsNext || nextShowsTimestamp || nextIsUnread
-
-            let linkedMessage = message.linkedMessageID.flatMap { $0.isEmpty ? nil : messagesByID[$0] }
-
-            entries.append(TimelineEntry(message: message, showsTimestamp: showsTimestamp, isFirstInGroup: isFirstInGroup, isLastInGroup: isLastInGroup, linkedMessage: linkedMessage))
-        }
-
-        return entries
-    }
-
-    private func shouldShowTimestamp(before message: Message, previousMessage: Message?) -> Bool {
-        TimelineTimestampRule.showsDivider(before: message.timestamp, previous: previousMessage?.timestamp)
-    }
 }
 
 private struct MessageListTracker: Equatable {
     let count: Int
     let lastID: String?
 }
-
-/// Memoization key for the timeline grouping: it depends only on the timeline's
-/// content (tracked by the store's O(1) version counter) and the unread divider's
-/// position. `version` is -1 when no timeline is shown for the open chat yet.
-private struct TimelineCacheKey: Equatable {
-    let version: Int
-    let firstUnreadID: String?
-    let suppressingOutgoingIDs: [OutgoingMessage.ID]
-}
-
-/// Memoization key for the "Read" indicator: it depends on the timeline content,
-/// how far the other side has read, and who "self" is (which drives `isOutgoing`).
-private struct ReadIndicatorKey: Equatable {
-    let version: Int
-    let lastReadByOtherSortKey: String?
-    let selfParticipantID: String?
-    let suppressingOutgoingIDs: [OutgoingMessage.ID]
-}
-
-private struct TimelineEntry: Identifiable {
-    let message: Message
-    let showsTimestamp: Bool
-    let isFirstInGroup: Bool
-    let isLastInGroup: Bool
-    let linkedMessage: Message?
-
-    var id: String { message.timelineKey }
-}
-

@@ -3,8 +3,10 @@ import SwiftUI
 struct MessageDeliveryStatusView: View {
     enum Status {
         case read
-        case failed(error: String, retry: () -> Void)
+        case failed(messageID: OutgoingMessage.ID, error: String)
     }
+
+    @Environment(ChatStore.self) private var chatStore
 
     let status: Status
 
@@ -14,11 +16,13 @@ struct MessageDeliveryStatusView: View {
             case .read:
                 Text("Read")
                     .foregroundStyle(.secondary)
-            case .failed(let error, let retry):
-                Button("Not Delivered — Retry", action: retry)
-                    .foregroundStyle(.red)
-                    .buttonStyle(.plain)
-                    .help(error)
+            case .failed(let messageID, let error):
+                Button("Not Delivered — Retry") {
+                    chatStore.retrySending(messageID)
+                }
+                .foregroundStyle(.red)
+                .buttonStyle(.plain)
+                .help(error)
             }
         }
         .font(.caption2)

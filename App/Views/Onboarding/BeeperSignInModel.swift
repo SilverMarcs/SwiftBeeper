@@ -13,6 +13,8 @@ final class BeeperSignInModel {
     var isWorking = false
     var progressMessage = ""
     var errorMessage: String?
+    /// Set once the account is signed in and verified; the view then opens Relay.
+    private(set) var isFinished = false
 
     init(startsWithRecoveryKey: Bool) {
         step = startsWithRecoveryKey ? .recoveryKey : .email
@@ -43,7 +45,7 @@ final class BeeperSignInModel {
         }
     }
 
-    func submitCode(sessionStore: SessionStore) async {
+    func submitCode() async {
         await run("Checking your code…") {
             let normalizedCode = code.filter(\.isNumber)
             let jwt = try await APIClient.beeperSubmitCode(
@@ -58,25 +60,19 @@ final class BeeperSignInModel {
                 jwt: jwt
             )
             if state.clientState?.isVerified == true {
-                try await finish(sessionStore: sessionStore)
+                isFinished = true
             } else {
                 step = .recoveryKey
             }
         }
     }
 
-    func submitRecoveryKey(sessionStore: SessionStore) async {
+    func submitRecoveryKey() async {
         await run("Restoring your encryption keys…") {
             let key = recoveryKey
             _ = try await APIClient.verifyRecoveryKey(key)
             recoveryKey = ""
-            try await finish(sessionStore: sessionStore)
-        }
-    }
-
-    func skipRecoveryKey(sessionStore: SessionStore) async {
-        await run("Opening your messages…") {
-            try await finish(sessionStore: sessionStore)
+            isFinished = true
         }
     }
 
@@ -84,11 +80,6 @@ final class BeeperSignInModel {
         code = ""
         errorMessage = nil
         step = .email
-    }
-
-    private func finish(sessionStore: SessionStore) async throws {
-        sessionStore.accessToken = UUID().uuidString
-        await MatrixRuntime.shared.setActive(true)
     }
 
     private func run(_ message: String, _ work: () async throws -> Void) async {

@@ -1,6 +1,4 @@
 import SwiftUI
-import PhotosUI
-import UniformTypeIdentifiers
 
 /// The inline composer used on macOS and iPad (the iPhone uses the navigation
 /// bar's `.searchable` field instead — see `ChatTimelineView`). All state lives in
@@ -9,10 +7,6 @@ struct MessageInputView: View {
     @Environment(InputManager.self) private var input
     @Environment(ChatStore.self) private var chatStore
 
-    @State private var showingFilePicker = false
-    @State private var showingPhotoPicker = false
-    @State private var selectedPhotoItems: [PhotosPickerItem] = []
-    @State private var attachmentTargetChatID: String?
     @FocusState private var isMessageFieldFocused: Bool
 
     var body: some View {
@@ -42,39 +36,10 @@ struct MessageInputView: View {
                     ComposerErrorBanner(message: messagesError)
                 }
 
-                if !input.pendingAttachments.isEmpty {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 8) {
-                            ForEach(input.pendingAttachments) { pending in
-                                PendingAttachmentPreview(
-                                    pending: pending,
-                                    isSending: false,
-                                    onRemove: { input.removePendingAttachment(id: pending.id) }
-                                )
-                            }
-                        }
-                    }
-                    .scrollIndicators(.hidden)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                }
+                MessagePendingAttachmentsBar()
 
                 HStack(alignment: .bottom) {
-                    Menu {
-                        Button {
-                            attachmentTargetChatID = chatStore.selectedChatID
-                            showingPhotoPicker = true
-                        } label: {
-                            Label("Photos Library", systemImage: "photo.on.rectangle.angled")
-                        }
-
-                        Button {
-                            attachmentTargetChatID = chatStore.selectedChatID
-                            showingFilePicker = true
-                        } label: {
-                            Label("Attach Files", systemImage: "paperclip")
-                        }
-                    } label: {
+                    AttachmentMenu {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(.secondary, .clear)
                             .font(.largeTitle)
@@ -91,7 +56,7 @@ struct MessageInputView: View {
                     #endif
 
 
-                    if input.hasActiveComposerAction {
+                    if chatStore.activeComposerMessage != nil {
                         Button {
                             input.cancelComposerAction()
                         } label: {
@@ -108,7 +73,7 @@ struct MessageInputView: View {
 
                     TextField(
                         input.messageFieldPrompt,
-                        text: input.draftBinding,
+                        text: Bindable(input).draft,
                         axis: .vertical
                     )
                         .textFieldStyle(.plain)
@@ -138,7 +103,7 @@ struct MessageInputView: View {
                         #endif
                     } label: {
                         Group {
-                            if input.isSavingEdit {
+                            if chatStore.isSavingEdit {
                                 ProgressView()
                                     #if os(macOS)
                                     .controlSize(.small)
@@ -173,29 +138,6 @@ struct MessageInputView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
         }
-        .fileImporter(
-            isPresented: $showingFilePicker,
-            allowedContentTypes: [.item]
-        ) { result in
-            guard let attachmentTargetChatID else { return }
-            input.handleFileImport(result, for: attachmentTargetChatID)
-            self.attachmentTargetChatID = nil
-        }
-        .photosPicker(
-            isPresented: $showingPhotoPicker,
-            selection: $selectedPhotoItems,
-            matching: .any(of: [.images, .videos])
-        )
-        .onChange(of: selectedPhotoItems) { _, newItems in
-            guard !newItems.isEmpty, let attachmentTargetChatID else { return }
-            Task {
-                for item in newItems {
-                    await input.handlePhotoPick(item, for: attachmentTargetChatID)
-                }
-            }
-            selectedPhotoItems = []
-            self.attachmentTargetChatID = nil
-        }
         #if os(macOS)
         .pasteHandler()
         #endif
@@ -208,7 +150,7 @@ struct MessageInputView: View {
             input.isComposerFocused = focused
         }
         #if !os(macOS)
-        .onChange(of: input.isSavingEdit) { oldValue, newValue in
+        .onChange(of: chatStore.isSavingEdit) { oldValue, newValue in
             if oldValue && !newValue {
                 focusMessageField()
             }
@@ -246,7 +188,6 @@ struct MessageInputView: View {
                     input.editMostRecentOutgoingMessage()
                 }
                 .keyboardShortcut("e", modifiers: .command)
-                .disabled(input.mostRecentEditableOutgoingMessage == nil)
             }
         }
         #endif

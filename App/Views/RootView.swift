@@ -1,52 +1,39 @@
 import SwiftUI
 
-/// Shared root content for every platform. The enclosing scene
-/// (macOS `Window` vs iOS `WindowGroup`) lives in `RelayApp`.
+/// Owns sign-in and app lifecycle once the Matrix core has started and
+/// reported whether an account is signed in. Waiting for that matters: treating
+/// launch as signed out would clear delivered notifications and the
+/// notification extension's credentials, so pushes would arrive as placeholders.
 struct RootView: View {
-    let sessionStore: SessionStore
-    let chatStore: ChatStore
-    let inputManager: InputManager
-    let notificationService: NotificationService
-    let audioPlayerService: AudioPlayerService
-
+    @Environment(SessionStore.self) private var sessionStore
+    @Environment(ChatStore.self) private var chatStore
+    @Environment(NotificationService.self) private var notificationService
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        Group {
-            AppStartupView()
-        }
-            .task {
-                #if os(macOS)
-                notificationService.badges.setActive(NSApplication.shared.isActive)
-                #else
-                notificationService.badges.setActive(scenePhase == .active)
-                if scenePhase == .active { chatStore.handleAppForeground() }
+        ContentView()
+            .task(id: sessionStore.isSignedIn) {
+                await chatStore.setSignedIn(sessionStore.isSignedIn)
+            }
+            .task(id: sessionStore.isSignedIn) {
+                await syncCoreActivity()
+            }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                guard phase != .inactive else { return }
+                // macOS tracks app activation in AppDelegate instead, since its
+                // window stays in the foreground while another app is active.
+                #if os(iOS)
+                chatStore.setAppActive(phase == .active)
                 #endif
-            }
-            .task(id: sessionStore.accessToken) {
-                await MatrixRuntime.shared.setActive(!sessionStore.accessToken.isEmpty && scenePhase == .active)
-                await notificationService.configure(signedIn: !sessionStore.accessToken.isEmpty)
-            }
-            .environment(sessionStore)
-            .environment(chatStore)
-            .environment(inputManager)
-            .environment(notificationService)
-            .environment(audioPlayerService)
-            .onChange(of: scenePhase) { _, newPhase in
-                Task {
-                    if newPhase == .active {
-                        await MatrixRuntime.shared.setActive(!sessionStore.accessToken.isEmpty)
-                        await notificationService.configure(signedIn: !sessionStore.accessToken.isEmpty)
-                    } else if newPhase == .background {
-                        await MatrixRuntime.shared.setActive(false)
-                    }
-                }
-                if newPhase == .active {
-                    chatStore.handleAppForeground()
-                } else if newPhase == .background {
-                    chatStore.handleAppBackground()
-                }
+                Task { await syncCoreActivity() }
             }
     }
 
+    /// The core syncs eagerly only while Relay is open and signed in.
+    private func syncCoreActivity() async {
+        let signedIn = sessionStore.isSignedIn
+        await MatrixRuntime.shared.setActive(signedIn && scenePhase == .active)
+        guard scenePhase != .background else { return }
+        await notificationService.configure(signedIn: signedIn)
+    }
 }

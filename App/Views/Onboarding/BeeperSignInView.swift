@@ -45,6 +45,8 @@ struct BeeperSignInView: View {
         .frame(maxWidth: 420)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .disabled(model.isWorking)
-        .environment(sessionStore)
+        .onChange(of: model.isFinished) { _, finished in
+            if finished { sessionStore.isSignedIn = true }
+        }
     }
 }

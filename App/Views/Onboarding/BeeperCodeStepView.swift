@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct BeeperCodeStepView: View {
-    @Environment(SessionStore.self) private var sessionStore
     @Bindable var model: BeeperSignInModel
 
     var body: some View {
@@ -19,11 +18,11 @@ struct BeeperCodeStepView: View {
                 #endif
                 .onSubmit {
                     guard model.canSubmitCode else { return }
-                    Task { await model.submitCode(sessionStore: sessionStore) }
+                    Task { await model.submitCode() }
                 }
 
             Button("Verify") {
-                Task { await model.submitCode(sessionStore: sessionStore) }
+                Task { await model.submitCode() }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)

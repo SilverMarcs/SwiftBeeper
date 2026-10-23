@@ -5,7 +5,8 @@ import UserNotifications
 @MainActor
 @Observable
 final class NotificationService {
-    let badges = BadgeService()
+    /// Whether Relay is frontmost.
+    private(set) var isAppActive = false
     private(set) var authorizationStatus: UNAuthorizationStatus?
     private(set) var errorMessage: String?
     private(set) var isRegistering = false
@@ -16,21 +17,35 @@ final class NotificationService {
     @ObservationIgnored private var notificationsAllowed = false
     @ObservationIgnored private var identity: PushIdentity?
     @ObservationIgnored private var deviceToken: String?
+    /// The APNs token this process already registered, so returning to the
+    /// foreground does not register it again.
+    private var registeredToken: String?
     @ObservationIgnored private var registrationTask: Task<Void, Never>?
     @ObservationIgnored private var preferenceSyncTask: Task<Void, Error>?
     @ObservationIgnored private var preferenceSyncRequested = false
     @ObservationIgnored private var uploadedPreferences: Data?
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let installationID: String
+    @ObservationIgnored private let configuration = try? PushConfiguration.load()
     private let registrationKey = "push.registration"
-    private let enrollmentKey = "push.enrollment"
-    private let pendingRegistrationKey = "push.registrationPending"
 
     init() {
         let key = "push.installationID"
         let identifier = UserDefaults.standard.string(forKey: key) ?? UUID().uuidString
         installationID = identifier
         UserDefaults.standard.set(identifier, forKey: key)
+    }
+
+    /// Whether this launch registered with the push server, so pushes arrive.
+    var isRegistered: Bool { registeredToken != nil }
+
+    /// Opening Relay clears its badge and its entries in Notification Center.
+    func setAppActive(_ active: Bool) {
+        isAppActive = active
+        guard active else { return }
+        let center = UNUserNotificationCenter.current()
+        center.removeAllDeliveredNotifications()
+        Task { try? await center.setBadgeCount(0) }
     }
 
     func configure(signedIn: Bool, force: Bool = false) async {
@@ -41,6 +56,7 @@ final class NotificationService {
             identity = nil
             notificationsAllowed = false
             uploadedPreferences = nil
+            registeredToken = nil
             errorMessage = nil
             return
         }
@@ -57,7 +73,7 @@ final class NotificationService {
             } else {
                 try NotificationCredentials.remove()
             }
-            _ = try PushConfiguration.load()
+            _ = try pushConfiguration()
             let center = UNUserNotificationCenter.current()
             var settings = await center.notificationSettings()
             authorizationStatus = settings.authorizationStatus
@@ -69,7 +85,8 @@ final class NotificationService {
             guard isSignedIn, !Task.isCancelled else { return }
             guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
                 notificationsAllowed = false
-                if defaults.data(forKey: registrationKey) != nil || defaults.bool(forKey: pendingRegistrationKey) {
+                registeredToken = nil
+                if defaults.data(forKey: registrationKey) != nil {
                     let pending = registrationTask
                     pending?.cancel()
                     await pending?.value
@@ -79,7 +96,7 @@ final class NotificationService {
             }
             notificationsAllowed = true
             if force {
-                defaults.removeObject(forKey: enrollmentKey)
+                registeredToken = nil
                 requestedAppleToken = false
                 uploadedPreferences = nil
             }
@@ -149,18 +166,13 @@ final class NotificationService {
             defer { isRegistering = false; registrationTask = nil }
             // If Apple rotates the token during registration, finish this attempt
             // before enrolling the latest token. Sign-out waits for this task.
-            while isSignedIn, notificationsAllowed, let token = deviceToken {
+            while isSignedIn, notificationsAllowed, let token = deviceToken, token != registeredToken {
                 do {
                     try Task.checkCancellation()
-                    guard let identity else { return }
-                    let configuration = try PushConfiguration.load()
-                    let enrollment = PushEnrollment(token: token, identity: identity, configuration: configuration)
-                    let saved = defaults.data(forKey: enrollmentKey).flatMap { try? JSONDecoder().decode(PushEnrollment.self, from: $0) }
-                    if enrollment != saved || defaults.data(forKey: registrationKey) == nil {
-                        try await register(token: token)
-                        try Task.checkCancellation()
-                        defaults.set(try JSONEncoder().encode(enrollment), forKey: enrollmentKey)
-                    }
+                    guard identity != nil else { return }
+                    try await register(token: token)
+                    try Task.checkCancellation()
+                    registeredToken = token
                     if !Task.isCancelled { errorMessage = nil }
                 } catch {
                     if !Task.isCancelled { errorMessage = error.localizedDescription }
@@ -193,8 +205,7 @@ final class NotificationService {
                 try Task.checkCancellation()
                 guard isSignedIn else { return }
                 if body != uploadedPreferences {
-                    let configuration = try PushConfiguration.load()
-                    _ = try await send(configuration, method: "PUT", body: body, path: "notification-preferences")
+                    _ = try await send(method: "PUT", body: body, path: "notification-preferences")
                     try Task.checkCancellation()
                     uploadedPreferences = body
                 }
@@ -226,6 +237,7 @@ final class NotificationService {
             identity = nil
             requestedAppleToken = false
             deviceToken = nil
+            registeredToken = nil
             errorMessage = nil
         } catch {
             isSignedIn = true
@@ -249,11 +261,9 @@ final class NotificationService {
     }
 
     private func register(token: String) async throws {
-        try await syncNotificationPreferences()
-        let configuration = try PushConfiguration.load()
+        let configuration = try pushConfiguration()
         let body = try JSONEncoder().encode(["token": token])
-        defaults.set(true, forKey: pendingRegistrationKey)
-        let data = try await send(configuration, method: "PUT", body: body)
+        let data = try await send(method: "PUT", body: body)
         let registration = try JSONDecoder().decode(PushRegistration.self, from: data)
         guard registration.pushkey.count == 64,
               registration.pushkey.allSatisfy({ $0.isHexDigit }),
@@ -272,7 +282,6 @@ final class NotificationService {
                                           gatewayURL: configuration.serverURL.appending(path: "_matrix/push/v1/notify").absoluteString,
                                           deviceDisplayName: name)
         _ = try await MatrixRuntime.shared.command(JSONEncoder().encode(command))
-        defaults.removeObject(forKey: pendingRegistrationKey)
     }
 
     private func removeRegistration() async throws {
@@ -284,15 +293,19 @@ final class NotificationService {
         }
         // Delete by installation ID even if an interrupted enrollment never
         // returned its pushkey to this process.
-        if let configuration = try? PushConfiguration.load() {
-            _ = try await send(configuration, method: "DELETE")
+        if configuration != nil {
+            _ = try await send(method: "DELETE")
         }
         defaults.removeObject(forKey: registrationKey)
-        defaults.removeObject(forKey: enrollmentKey)
-        defaults.removeObject(forKey: pendingRegistrationKey)
     }
 
-    private func send(_ configuration: PushConfiguration, method: String, body: Data? = nil, path: String? = nil) async throws -> Data {
+    private func pushConfiguration() throws -> PushConfiguration {
+        guard let configuration else { throw PushError.notConfigured }
+        return configuration
+    }
+
+    private func send(method: String, body: Data? = nil, path: String? = nil) async throws -> Data {
+        let configuration = try pushConfiguration()
         let url = configuration.serverURL.appending(path: path ?? "devices/\(installationID)")
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.httpMethod = method

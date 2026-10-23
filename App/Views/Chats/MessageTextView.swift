@@ -8,9 +8,11 @@ struct MessageTextView: View {
 
     var body: some View {
         MessageTextLayout(displayScale: displayScale) {
-            Text(text.messageAttributed(isOutgoing: isOutgoing))
+            Text(text.messageAttributed)
                 .font(.body)
                 .foregroundStyle(isOutgoing ? .white : .primary)
+                // Links follow the tint; white keeps contrast on the accent fill.
+                .tint(isOutgoing ? .white : .blue)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }

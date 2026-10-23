@@ -1,10 +1,7 @@
-#if !os(macOS)
 import SwiftUI
 
-/// Shown on iPhone only while there are pending attachments. The iPhone uses
-/// the navigation `.searchable` field for text and sending (return key), so
-/// this transient bar just surfaces queued attachments — it is not a
-/// persistent input bar and has no send button of its own.
+/// The composer's queued attachments, shown only while there are some. On
+/// iPhone it sits above the navigation `.searchable` field, which sends.
 struct MessagePendingAttachmentsBar: View {
     @Environment(InputManager.self) private var input
 
@@ -13,11 +10,7 @@ struct MessagePendingAttachmentsBar: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     ForEach(input.pendingAttachments) { pending in
-                        PendingAttachmentPreview(
-                            pending: pending,
-                            isSending: false,
-                            onRemove: { input.removePendingAttachment(id: pending.id) }
-                        )
+                        PendingAttachmentPreview(pending: pending)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -27,4 +20,3 @@ struct MessagePendingAttachmentsBar: View {
         }
     }
 }
-#endif
