@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		134ABF470E1A49CC832A01A1 /* ChatLayout in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 134ABF470E1A49CC832A01A3 /* ChatLayout */; };
 		4900F6EF78F8F5B2F3228ECA /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = FA828B92661D73409A155297 /* SwiftMediaViewer */; };
 		65E043351D7771289EF3323C /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 7A21AB7F64A017C4E07D2E60 /* SwiftOGG */; };
 		83EED2CC0BBF097DADEFEA72 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A83D128B2CDFDD7CC54624BF /* Foundation.framework */; };
@@ -89,7 +88,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				134ABF470E1A49CC832A01A1 /* ChatLayout in Frameworks */,
 				4900F6EF78F8F5B2F3228ECA /* SwiftMediaViewer in Frameworks */,
 				65E043351D7771289EF3323C /* SwiftOGG in Frameworks */,
 				AEE3943A528DF64BF01F17E1 /* Security.framework in Frameworks */,
@@ -162,7 +160,6 @@
 			);
 			name = Relay;
 			packageProductDependencies = (
-				134ABF470E1A49CC832A01A3 /* ChatLayout */,
 				FA828B92661D73409A155297 /* SwiftMediaViewer */,
 				7A21AB7F64A017C4E07D2E60 /* SwiftOGG */,
 			);
@@ -224,7 +221,6 @@
 			mainGroup = DC658091D1A7F7FB428FB8C2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				134ABF470E1A49CC832A01A2 /* XCRemoteSwiftPackageReference "ChatLayout" */,
 				289DEDE04374286A5643DFAA /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */,
 				8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */,
 			);
@@ -704,14 +700,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		134ABF470E1A49CC832A01A2 /* XCRemoteSwiftPackageReference "ChatLayout" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ekazaev/ChatLayout";
-			requirement = {
-				kind = exactVersion;
-				version = 2.5.2;
-			};
-		};
 		289DEDE04374286A5643DFAA /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SilverMarcs/SwiftMediaViewer";
@@ -731,11 +719,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		134ABF470E1A49CC832A01A3 /* ChatLayout */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 134ABF470E1A49CC832A01A2 /* XCRemoteSwiftPackageReference "ChatLayout" */;
-			productName = ChatLayout;
-		};
 		7A21AB7F64A017C4E07D2E60 /* SwiftOGG */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */;

@@ -12,7 +12,7 @@ struct ChatDetailiOS: View {
     @State private var delegateProxy: AnyObject?
     @State private var firstUnreadID: String?
     @State private var profileSheetParticipant: ChatParticipant?
-    @State private var composerHeight: CGFloat = 0
+    @State private var keyboardScrollTask: Task<Void, Never>?
     // Timeline grouping does per-message `Calendar` work; cache it so unrelated
     // store changes (a sidebar refresh) don't recompute it on every body pass.
     @State private var timelineCache = MemoizedValue<TimelineCacheKey, [TimelineEntry]>()
@@ -23,7 +23,7 @@ struct ChatDetailiOS: View {
     // The read indicator scans every message (isOutgoing + isReadByOther); memoize
     // it so an unrelated store change doesn't re-scan the timeline on each body pass.
     @State private var readIndicatorCache = MemoizedValue<ReadIndicatorKey, String?>()
-    @State private var timelineController = MobileTimelineController()
+    private let bottomAnchorID = "timeline-bottom"
 
 
     var body: some View {
@@ -60,38 +60,159 @@ struct ChatDetailiOS: View {
                 self.lastReadOutgoingMessageID(messages: messages, chat: selectedChat)
             }
 
-            let outgoingRows: [MobileTimelineRow] = outgoingTimelineEntries.map { entry in
-                MobileTimelineRow(
-                    content: .outgoing(entry.message, showsTimestamp: entry.showsTimestamp, linkedMessage: entry.linkedMessage),
-                    chat: selectedChat,
-                    isFocused: activeComposerMessageID == nil
-                )
-            }
-            let messageRows: [MobileTimelineRow] = timelineEntries.map { entry in
-                MobileTimelineRow(
-                    content: .message(entry.message, showsTimestamp: entry.showsTimestamp, isFirstInGroup: entry.isFirstInGroup, isLastInGroup: entry.isLastInGroup, linkedMessage: entry.linkedMessage),
-                    chat: selectedChat,
-                    showsUnreadDivider: entry.message.id == firstUnreadID && outgoingMessages.isEmpty,
-                    showsReadIndicator: entry.message.id == readIndicatorMessageID,
-                    isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
-                )
-            }
-            let loadingRows = chatStore.isLoadingOlderMessages
-                ? [MobileTimelineRow(content: .loadingOlder, chat: selectedChat)] : []
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        LazyVStack(spacing: 0) {
+                            if chatStore.isLoadingOlderMessages {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            }
 
-            Group {
-                ZStack {
-                    MobileTimelineList(
-                        rows: loadingRows + messageRows + outgoingRows,
-                        controller: timelineController,
-                        composerHeight: isIPad ? composerHeight : 0,
-                        onLoadOlder: { loadOlderMessages(chatID: selectedChat.id) },
-                        onTapLinkedMessage: { id in
-                            scrollToLinkedMessage(id, chatID: selectedChat.id)
+                            ForEach(timelineEntries) { entry in
+                                VStack(spacing: 0) {
+                                    if entry.message.id == firstUnreadID && outgoingMessages.isEmpty {
+                                        UnreadDividerView()
+                                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                                            .padding(.vertical, 4)
+                                    }
+
+                                    if entry.showsTimestamp {
+                                        TimestampDividerView(timestamp: entry.message.timestamp)
+                                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                                            .padding(.top, 10)
+                                            .padding(.bottom, 6)
+                                    }
+
+                                    MessageRowView(
+                                        message: entry.message,
+                                        chat: selectedChat,
+                                        showReadIndicator: entry.message.id == readIndicatorMessageID,
+                                        isFirstInGroup: entry.isFirstInGroup,
+                                        isLastInGroup: entry.isLastInGroup,
+                                        linkedMessage: entry.linkedMessage,
+                                        onTapLinkedMessage: { linkedID in
+                                            scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                                        }
+                                    )
+                                    .modifier(
+                                        TimelineFocusEffect(
+                                            isFocused: activeComposerMessageID == nil || activeComposerMessageID == entry.message.id
+                                        )
+                                    )
+                                    .padding(.vertical, 2)
+                                }
+                                .id(entry.message.timelineKey)
+                            }
+
+                            ForEach(outgoingTimelineEntries) { entry in
+                                VStack(spacing: 0) {
+                                    if entry.showsTimestamp {
+                                        TimestampDividerView(timestamp: entry.message.createdAt)
+                                            .modifier(TimelineFocusEffect(isFocused: activeComposerMessageID == nil))
+                                            .padding(.top, 10)
+                                            .padding(.bottom, 6)
+                                    }
+
+                                    OutgoingMessageRowView(
+                                        message: entry.message,
+                                        linkedMessage: entry.linkedMessage,
+                                        onTapLinkedMessage: { linkedID in
+                                            scrollToLinkedMessage(linkedID, chatID: selectedChat.id, proxy: proxy)
+                                        }
+                                    )
+                                    .padding(.vertical, 2)
+                                }
+                                .id(entry.id)
+                            }
                         }
-                    )
-                    .ignoresSafeArea(.container, edges: .vertical)
+                        Color.clear
+                            .frame(height: 1)
+                            .id(bottomAnchorID)
+                            .accessibilityHidden(true)
+                    }
+                }
+                // Recreate only the viewport when a chat opens or its first
+                // database page arrives. Its first layout starts at the bottom.
+                .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline(for: selectedChat.id))")
+                // Initial layout and short conversations align to the bottom.
+                // Content growth must preserve the starting offset so the
+                // explicit send scroll can animate to its new destination.
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .defaultScrollAnchor(.bottom, for: .alignment)
+                // Insets belong to the scroll view. Explicit scrolling targets
+                // the end marker rather than a persistent content-edge offset.
+                .contentMargins(.horizontal, 10, for: .scrollContent)
+                .contentMargins(.bottom, 24, for: .scrollContent)
+                .scrollDismissesKeyboard(.interactively)
+                .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
+                .onChange(of: isSearchFocused || inputManager.isComposerFocused) { _, focused in
+                    keyboardScrollTask?.cancel()
+                    guard focused,
+                          chatStore.activeComposerMessage == nil else { return }
+                    // Focus changes keep arriving after the viewport is recreated
+                    // for another chat. Schedule from that event, not .task(id:).
+                    keyboardScrollTask = Task { @MainActor in
+                        do {
+                            try await Task.sleep(for: .milliseconds(1))
+                        } catch {
+                            return
+                        }
+                        guard !Task.isCancelled,
+                              chatStore.selectedChatID == selectedChat.id,
+                              chatStore.activeComposerMessage == nil else { return }
+                        scrollToLatest(with: proxy)
+                    }
+                }
+                .onDisappear {
+                    keyboardScrollTask?.cancel()
+                }
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top < 80
+                } action: { _, nearTop in
+                    guard nearTop, chatStore.hasLoadedTimeline(for: selectedChat.id),
+                          !messages.isEmpty else { return }
+                    loadOlderMessages(chatID: selectedChat.id)
+                }
+                .onChange(of: selectedChat.id, initial: true) { _, _ in
+                    firstUnreadID = nil
+                }
+                .onChange(of: chatStore.hasLoadedTimeline(for: selectedChat.id), initial: true) { _, loaded in
+                    guard loaded else { return }
+                    firstUnreadID = firstUnreadMessageID(messages: messages, chat: selectedChat)
+                }
+                .onChange(of: MessageListTracker(
+                    count: messages.count + outgoingMessages.count,
+                    lastID: outgoingMessages.last?.timelineKey ?? messages.last?.id
+                )) { oldTracker, newTracker in
+                    guard chatStore.hasLoadedTimeline(for: selectedChat.id), oldTracker.lastID != nil else { return }
+                    // 2026-06-06: a send lands as two store commits — the WS merge
+                    // grows the array but the new message isn't last yet (its sort
+                    // key settles on the follow-up loadMessages commit), then the
+                    // reload swaps lastID with the count unchanged. Requiring
+                    // count-grew AND lastID-changed in a single transition matched
+                    // neither commit, so sending never scrolled. Trigger on lastID
+                    // change with a non-decreasing count: pagination keeps lastID
+                    // stable, deletions shrink the count — both still skipped.
+                    guard newTracker.lastID != oldTracker.lastID else { return }
+                    guard newTracker.count >= oldTracker.count else { return }
 
+                    let confirmedOptimisticMessage = oldTracker.lastID?.hasPrefix("outgoing-") == true
+                        && newTracker.count == oldTracker.count
+                    firstUnreadID = nil
+                    // Confirmation replaces the outgoing row, but not the end
+                    // marker. Let the existing scroll animation finish.
+                    guard !confirmedOptimisticMessage else { return }
+                    scrollToLatest(with: proxy)
+                }
+                .onChange(of: activeComposerMessageID) { _, newValue in
+                    guard let newValue else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        proxy.scrollTo(messages.first(where: { $0.id == newValue })?.timelineKey ?? newValue, anchor: .center)
+                    }
+                }
+                .animation(.default, value: activeComposerMessageID)
+                .overlay {
                     if !chatStore.hasLoadedTimeline(for: selectedChat.id),
                        let error = chatStore.messagesError, !chatStore.isLoadingMessages {
                         ContentUnavailableView {
@@ -105,27 +226,9 @@ struct ChatDetailiOS: View {
                         }
                     }
                 }
-                .background(.background)
-                .onChange(of: chatStore.hasLoadedTimeline(for: selectedChat.id), initial: true) { _, loaded in
-                    guard loaded else { return }
-                    firstUnreadID = firstUnreadMessageID(messages: chatStore.messages(for: selectedChat.id), chat: selectedChat)
-                }
-                .onChange(of: MessageListTracker(
-                    count: messages.count + outgoingMessages.count,
-                    lastID: outgoingMessages.last?.timelineKey ?? messages.last?.id
-                )) { oldTracker, newTracker in
-                    // Scrolling belongs to the collection's committed snapshot.
-                    // This callback only dismisses the unread marker.
-                    guard oldTracker.lastID != nil, newTracker.lastID != oldTracker.lastID,
-                          newTracker.count >= oldTracker.count else { return }
-                    firstUnreadID = nil
-                }
-                .onChange(of: activeComposerMessageID) { _, newValue in
-                    guard let newValue,
-                          let target = chatStore.messages(for: selectedChat.id).first(where: { $0.id == newValue })
-                    else { return }
-                    timelineController.scrollToMessage(target.timelineKey)
-                }
+                // A chat header is inline even when the sidebar uses a large
+                // title. Its safe-area height must not collapse on first focus.
+                .toolbarTitleDisplayMode(.inline)
                 .modifier(NavigationBarFocusVisibilityModifier(isFocusedOnComposerMessage: activeComposerMessageID != nil))
                 .toolbar {
                     // iPad: avatar + name lives in the leading (navigation) slot.
@@ -212,10 +315,6 @@ struct ChatDetailiOS: View {
                             inputManager.handleSubmit()
                             isSearchFocused = true
                         }
-                        .onChange(of: isSearchFocused) { _, focused in
-                            guard focused, chatStore.activeComposerMessage == nil else { return }
-                            timelineController.scrollToLatest(animated: true)
-                        }
                         .onChange(of: inputManager.isSavingEdit) { oldValue, newValue in
                             if oldValue && !newValue {
                                 isSearchFocused = true
@@ -250,15 +349,6 @@ struct ChatDetailiOS: View {
                     // iPad: same inline composer as macOS.
                     $0.safeAreaBar(edge: .bottom, spacing: 0) {
                         MessageInputView()
-                            .onGeometryChange(for: CGFloat.self) { geometry in
-                                geometry.size.height
-                            } action: { height in
-                                composerHeight = height
-                            }
-                    }
-                    .onChange(of: inputManager.isComposerFocused) { _, focused in
-                        guard focused, chatStore.activeComposerMessage == nil else { return }
-                        timelineController.scrollToLatest(animated: true)
                     }
                 }
             }
@@ -271,16 +361,24 @@ struct ChatDetailiOS: View {
         }
     }
 
-    private func scrollToLinkedMessage(_ linkedID: String, chatID: String) {
+    private func scrollToLatest(with proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.25)) {
+            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
+    }
+
+    private func scrollToLinkedMessage(_ linkedID: String, chatID: String, proxy: ScrollViewProxy) {
         guard let target = chatStore.messages(for: chatID).first(where: { $0.id == linkedID }) else { return }
-        timelineController.scrollToMessage(target.timelineKey)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo(target.timelineKey, anchor: .center)
+        }
     }
 
     private func loadOlderMessages(chatID: String) {
         guard chatStore.selectedChatID == chatID, chatStore.hasMoreMessages(for: chatID),
               !chatStore.isLoadingOlderMessages else { return }
         Task { @MainActor in
-            // Older rows prepend; the collection layout preserves visible content.
+            // Stable scroll targets preserve visible messages when history prepends.
             await chatStore.loadOlderMessages(for: chatID)
         }
     }

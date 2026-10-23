@@ -4,12 +4,11 @@ import SwiftUI
 /// Animate the actual bubble relative to its current layout, never a copied
 /// destination rectangle. Only render transforms change on animation frames.
 struct MessageSendEffect: ViewModifier {
-    @Environment(\.messageSendAnimationsEnabled) private var animationsEnabled
     let animator: MessageSendAnimator
     let flight: MessageSendFlight?
 
     func body(content: Content) -> some View {
-        if let flight, animationsEnabled {
+        if let flight {
             let source = flight.sourceFrame
             let startedAt = flight.startedAt
             TimelineView(.animation) { _ in
