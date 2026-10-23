@@ -1,26 +1,20 @@
 import Foundation
 
 extension APIClient {
-    static func listChats(
-        inbox: String? = nil,
-        accountIDs: [String] = [],
-        cursor: String? = nil,
-        direction: String? = nil
-    ) async throws -> ListChatsOutput {
+    /// One page of chats, newest first, starting after `before` when given.
+    static func listChats(inbox: String, accountIDs: [String], before: Chat? = nil) async throws -> ListChatsOutput {
         try await execute("list-chats", arguments: ChatListArguments(
-            query: nil, inbox: inbox, accountIDs: accountIDs, cursor: cursor, direction: direction
+            query: nil,
+            inbox: inbox,
+            accountIDs: accountIDs,
+            beforeTS: before?.lastActivity.map { Int64(($0.timeIntervalSince1970 * 1000).rounded()) },
+            beforeRoomID: before?.id
         ))
     }
 
-    static func searchChats(
-        query: String? = nil,
-        inbox: String? = nil,
-        accountIDs: [String] = [],
-        cursor: String? = nil,
-        direction: String? = nil
-    ) async throws -> SearchChatsOutput {
+    static func searchChats(query: String, inbox: String, accountIDs: [String]) async throws -> SearchChatsOutput {
         try await execute("search-chats", arguments: ChatListArguments(
-            query: query, inbox: inbox, accountIDs: accountIDs, cursor: cursor, direction: direction
+            query: query, inbox: inbox, accountIDs: accountIDs, beforeTS: nil, beforeRoomID: nil
         ))
     }
 
@@ -51,8 +45,8 @@ extension APIClient {
 
 private struct ChatListArguments: Encodable {
     let query: String?
-    let inbox: String?
+    let inbox: String
     let accountIDs: [String]
-    let cursor: String?
-    let direction: String?
+    let beforeTS: Int64?
+    let beforeRoomID: String?
 }

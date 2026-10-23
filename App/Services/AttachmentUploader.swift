@@ -24,9 +24,7 @@ enum AttachmentUploader {
             uploadID: result.uploadID,
             mimeType: prepared.mimeType,
             fileName: prepared.fileName,
-            size: size,
-            duration: result.duration,
-            type: nil
+            size: size
         )
     }
 }

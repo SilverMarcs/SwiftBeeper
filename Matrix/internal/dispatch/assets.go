@@ -15,109 +15,69 @@ import (
 	_ "image/png"
 	"io"
 
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 
-	"maunium.net/go/mautrix/event"
+	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/id"
 )
-
-// encryptedFileRegistry caches EncryptedFile info for mxc URLs so
-// the serve endpoint can decrypt media fetched from the homeserver.
-var (
-	encryptedFileMu       sync.RWMutex
-	encryptedFileRegistry = make(map[string]*event.EncryptedFileInfo)
-)
-
-func registerEncryptedFile(mxcURL string, file *event.EncryptedFileInfo) {
-	if file == nil || mxcURL == "" {
-		return
-	}
-	encryptedFileMu.Lock()
-	encryptedFileRegistry[mxcURL] = file
-	encryptedFileMu.Unlock()
-}
-
-func lookupEncryptedFile(mxcURL string) *event.EncryptedFileInfo {
-	encryptedFileMu.RLock()
-	defer encryptedFileMu.RUnlock()
-	return encryptedFileRegistry[mxcURL]
-}
 
 const maxUploadSizeBytes = int64(500 * 1024 * 1024)
 
 var safeUploadIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
-// uploadAssetResponse is a custom type that omits zero-value fields
-// (the library type includes "error":"" which Swift treats as non-nil error).
+// uploadAssetResponse carries only what the app reads back.
 type uploadAssetResponse struct {
 	UploadID string  `json:"uploadID"`
-	SrcURL   string  `json:"srcURL,omitempty"`
-	FileName string  `json:"fileName,omitempty"`
-	MimeType string  `json:"mimeType,omitempty"`
-	FileSize float64 `json:"fileSize,omitempty"`
 	Width    float64 `json:"width,omitempty"`
 	Height   float64 `json:"height,omitempty"`
-	Duration float64 `json:"duration,omitempty"`
-	Error    string  `json:"error,omitempty"`
 }
 
 type uploadMetadata struct {
-	UploadID string  `json:"uploadID"`
-	FilePath string  `json:"filePath"`
-	FileName string  `json:"fileName"`
-	MimeType string  `json:"mimeType"`
-	FileSize int64   `json:"fileSize"`
-	Width    int     `json:"width,omitempty"`
-	Height   int     `json:"height,omitempty"`
-	Duration float64 `json:"duration,omitempty"`
+	UploadID string `json:"uploadID"`
+	FilePath string `json:"filePath"`
+	FileName string `json:"fileName"`
+	MimeType string `json:"mimeType"`
+	FileSize int64  `json:"fileSize"`
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
 }
 
-func (s *Dispatcher) resolveServePath(ctx context.Context, raw string) (string, error) {
-	if strings.HasPrefix(raw, "file://") {
-		parsed, err := url.Parse(raw)
-		if err != nil {
-			return "", errors.New("invalid file url")
-		}
-		path := filepath.Clean(parsed.Path)
-		if !s.isAllowedServePath(path) {
-			return "", errors.New("Access denied: path is outside allowed directories")
-		}
-		return path, nil
-	}
-	path, err := s.resolveAssetURL(ctx, raw)
-	if err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
+// resolveAssetURL returns a local file for Matrix media, downloading and
+// decrypting it on the first request.
 func (s *Dispatcher) resolveAssetURL(ctx context.Context, raw string) (string, error) {
 	normalized := strings.TrimSpace(raw)
 	if strings.HasPrefix(normalized, "localmxc://") {
 		normalized = "mxc://" + strings.TrimPrefix(normalized, "localmxc://")
 	}
-	s.mobileRestoreFileDescriptor(ctx, normalized)
 	parsedMXC := id.ContentURIString(normalized).ParseOrIgnore()
 	if !parsedMXC.IsValid() {
 		return "", fmt.Errorf("URL must be mxc:// or localmxc://")
 	}
 
 	cacheDir := s.assetCacheDir()
+	sum := sha256.Sum256([]byte(normalized))
+	plainPath := filepath.Join(cacheDir, hex.EncodeToString(sum[:]))
+	decryptedPath := plainPath + ".decrypted"
+	// A decrypted copy is always right. A plain copy is right only when the
+	// media isn't encrypted, which the SDK's media table records.
+	if _, err := os.Stat(decryptedPath); err == nil {
+		return decryptedPath, nil
+	}
+	var encFile *attachment.EncryptedFile
+	if media, err := s.rt.Client().DB.Media.Get(ctx, parsedMXC); err == nil && media != nil {
+		encFile = media.EncFile
+	}
+	cachePath := plainPath
+	if encFile != nil {
+		cachePath = decryptedPath
+	} else if _, err := os.Stat(plainPath); err == nil {
+		return plainPath, nil
+	}
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return "", fmt.Errorf("failed to create asset cache dir: %w", err)
-	}
-	sum := sha256.Sum256([]byte(normalized))
-	cachePath := filepath.Join(cacheDir, hex.EncodeToString(sum[:]))
-	if lookupEncryptedFile(normalized) != nil {
-		cachePath += ".decrypted"
-	}
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
 	}
 
 	resp, err := s.rt.Client().Client.Download(ctx, parsedMXC)
@@ -131,8 +91,7 @@ func (s *Dispatcher) resolveAssetURL(ctx context.Context, raw string) (string, e
 		return "", fmt.Errorf("failed to read downloaded asset: %w", err)
 	}
 
-	// Decrypt if we have encryption info for this mxc URL.
-	if encFile := lookupEncryptedFile(normalized); encFile != nil {
+	if encFile != nil {
 		if decryptErr := encFile.DecryptInPlace(data); decryptErr != nil {
 			return "", fmt.Errorf("failed to decrypt asset: %w", decryptErr)
 		}
@@ -196,33 +155,12 @@ func imageDimensions(filePath string) (int, int) {
 	return cfg.Width, cfg.Height
 }
 
-func fileURLFromPath(path string) string {
-	return (&url.URL{Scheme: "file", Path: path}).String()
-}
-
 func (s *Dispatcher) uploadRootDir() string {
 	return filepath.Join(s.rt.StateDir(), "api-uploads")
 }
 
 func (s *Dispatcher) assetCacheDir() string {
 	return filepath.Join(s.rt.StateDir(), "assets")
-}
-
-func (s *Dispatcher) isAllowedServePath(path string) bool {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return false
-	}
-	uploadRoot, err := filepath.Abs(s.uploadRootDir())
-	if err != nil {
-		return false
-	}
-	assetRoot, err := filepath.Abs(s.assetCacheDir())
-	if err != nil {
-		return false
-	}
-	return strings.HasPrefix(absPath, uploadRoot+string(os.PathSeparator)) ||
-		strings.HasPrefix(absPath, assetRoot+string(os.PathSeparator))
 }
 
 func randomID() string {

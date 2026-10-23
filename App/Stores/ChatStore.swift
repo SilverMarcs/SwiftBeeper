@@ -76,7 +76,6 @@ final class ChatStore {
     var isSearching = false
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var latestSearchRequestID: UUID?
-    private var chatsCursor: String?
     private var latestChatsRequestID: UUID?
     private var lastLoadedFilterID: String?
     private var chatWindowSize = 25
@@ -154,7 +153,7 @@ final class ChatStore {
 
     // MARK: Open-chat timeline
 
-    /// The open chat's messages, oldest first, without reactions or membership events.
+    /// The open chat's messages, oldest first.
     private(set) var messages: [Message] = []
     /// Whether the open chat's first page has arrived.
     private(set) var hasLoadedTimeline = false
@@ -344,8 +343,7 @@ final class ChatStore {
             }
             setChats(Array(refreshedChats.prefix(chatWindowSize)))
             if !preservesOlderPages {
-                chatsCursor = response.oldestCursor
-                hasMoreChats = response.hasMore ?? false
+                hasMoreChats = response.hasMore
             }
             chatsError = nil
             lastLoadedFilterID = requestedFilter.id
@@ -366,7 +364,7 @@ final class ChatStore {
     func loadMoreChats() async {
         guard isSignedIn, !isLoadingChats, !isLoadingMoreChats,
               searchQuery.isBlank, chatsError == nil else { return }
-        guard hasMoreChats, let cursor = ChatPaginationCursor.encode(chats.last) ?? chatsCursor else { return }
+        guard hasMoreChats, let lastChat = chats.last else { return }
 
         let requestedFilter = selectedFilter
         let requestID = latestChatsRequestID
@@ -376,11 +374,11 @@ final class ChatStore {
         defer { isLoadingMoreChats = false }
 
         do {
+            // Page from the last chat shown, which live updates may have changed.
             let response = try await APIClient.listChats(
                 inbox: selectedInboxFilter.rawValue,
                 accountIDs: requestedFilter.accountIDs,
-                cursor: cursor,
-                direction: "before"
+                before: lastChat
             )
             guard selectedFilter.id == requestedFilter.id,
                   latestChatsRequestID == requestID, !isLoadingChats,
@@ -390,8 +388,7 @@ final class ChatStore {
             let newChats = response.items.filter { !existingIDs.contains($0.id) }
             setChats(chats + newChats)
             chatWindowSize = max(chatWindowSize + 25, chats.count)
-            chatsCursor = response.oldestCursor
-            hasMoreChats = (response.hasMore ?? false) && response.oldestCursor != cursor
+            hasMoreChats = response.hasMore && !response.items.isEmpty
         } catch {
             // Scrolling down again retries the same local page.
         }
@@ -564,11 +561,7 @@ final class ChatStore {
 
         do {
             repeat {
-                let response = try await APIClient.listMessages(
-                    chatID: chatID,
-                    cursor: cursor,
-                    direction: "before"
-                )
+                let response = try await APIClient.listMessages(chatID: chatID, cursor: cursor)
                 guard generation == timelineGeneration else { return }
 
                 let countBefore = messages.count
@@ -591,7 +584,7 @@ final class ChatStore {
     /// complete, so the newest one wins outright.
     private func upsertMessages(_ incoming: [Message]) {
         var byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-        for message in incoming where message.isDisplayable {
+        for message in incoming {
             byID[message.id] = message
         }
         let updated = byID.values.sorted { ($0.numericSortKey, $0.id) < ($1.numericSortKey, $1.id) }
@@ -957,7 +950,6 @@ final class ChatStore {
     private func resetChatList() {
         setChats([])
         selectedChatID = nil
-        chatsCursor = nil
         hasMoreChats = false
         lastLoadedFilterID = nil
         chatWindowSize = 25

@@ -10,26 +10,6 @@ struct MessageInputView: View {
     @FocusState private var isMessageFieldFocused: Bool
 
     var body: some View {
-        if input.cannotMessage {
-            cannotMessageView
-        } else {
-            inputView
-        }
-    }
-
-    private var cannotMessageView: some View {
-        Text("You can't message this person")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
-            .glassEffect()
-            .padding(.horizontal)
-            .padding(.vertical, 10)
-    }
-
-    private var inputView: some View {
         GlassEffectContainer {
             VStack(spacing: 0) {
                 if let messagesError = chatStore.messagesError {
@@ -182,7 +162,6 @@ struct MessageInputView: View {
                     focusMessageField()
                 }
                 .keyboardShortcut("l", modifiers: .command)
-                .disabled(input.cannotMessage)
 
                 Button("Edit Last", systemImage: "pencil") {
                     input.editMostRecentOutgoingMessage()
@@ -194,7 +173,6 @@ struct MessageInputView: View {
     }
 
     private func focusMessageField() {
-        guard !input.cannotMessage else { return }
         Task { @MainActor in
             await Task.yield()
             isMessageFieldFocused = true

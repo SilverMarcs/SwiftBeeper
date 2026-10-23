@@ -51,13 +51,10 @@ with (build / "core.lock").open("w") as lock:
                 shutil.copyfile(source / name, prepared / name)
             for package in ("hicli", "rainbow"):
                 shutil.copytree(source / "pkg" / package, prepared / "pkg" / package,
-                    ignore=shutil.ignore_patterns("*_test.go", "testdata", "*_wasm.go", "print", "hitest", "json-commands.go"))
+                    ignore=shutil.ignore_patterns("*_test.go", "testdata", "*_wasm.go", "print", "hitest"))
             for path in prepared.rglob("*"):
                 path.chmod(0o755 if path.is_dir() else 0o644)
             prepared.chmod(0o755)
-            # The app calls SDK methods directly and consumes only its event models.
-            for name in ("commands.go", "params.go", "spec.go"):
-                (prepared / "pkg/hicli/jsoncmd" / name).unlink()
             subprocess.run(["/usr/bin/patch", "-s", "-p1", "-i", str(patch)], cwd=prepared, check=True)
             if vendor.exists():
                 shutil.rmtree(vendor)
@@ -65,19 +62,34 @@ with (build / "core.lock").open("w") as lock:
             stamp.write_text(signature)
         finally:
             shutil.rmtree(temporary)
+    destination = build / platform
+    library = "RelayCore" if component == "core" else "RelayNotifications"
+    package = "ffi" if component == "core" else "notifications"
+    headers = destination / ("Headers" if component == "core" else "NotificationHeaders")
+    archive = destination / ("lib" + library + ".a")
+    # Xcode runs this phase on every build. Skip the Go link, and Xcode's relink
+    # of the app, when nothing changed since the last one: no source file or
+    # directory (catching deletions and renames), and the same toolchain and SDK.
     sdk_path = output(["xcrun", "--sdk", sdk, "--show-sdk-path"])
+    stamp_file = destination / (library + ".stamp")
+    stamp_text = "\n".join([output(["go", "version"]), sdk_path, target])
+    inputs = [path for root in ("cmd", "internal", "SDKSource") for path in (matrix / root).rglob("*")
+              if path.is_dir() or path.suffix == ".go"]
+    inputs += [matrix / "go.mod", matrix / "go.sum", patch, Path(__file__)]
+    if archive.exists() and (headers / ("lib" + library + ".h")).exists() and \
+            stamp_file.exists() and stamp_file.read_text() == stamp_text and \
+            archive.stat().st_mtime >= max(path.stat().st_mtime for path in inputs):
+        print("Relay " + component + " for " + platform + " is up to date")
+        sys.exit(0)
     flags = "-target " + target + " -isysroot " + sdk_path
     environment = os.environ.copy()
     environment.update({"CGO_ENABLED": "1", "GOOS": go_os, "GOARCH": "arm64",
         "CC": output(["xcrun", "--sdk", sdk, "--find", "clang"]) + " " + flags,
         "CXX": output(["xcrun", "--sdk", sdk, "--find", "clang++"]) + " " + flags,
         "CGO_CFLAGS": flags, "CGO_CXXFLAGS": flags, "CGO_LDFLAGS": flags})
-    destination = build / platform
-    library = "RelayCore" if component == "core" else "RelayNotifications"
-    package = "ffi" if component == "core" else "notifications"
-    headers = destination / ("Headers" if component == "core" else "NotificationHeaders")
     headers.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["go", "build", "-tags", "goolm", "-trimpath", "-buildmode=c-archive", "-o", str(destination / ("lib" + library + ".a")), "./cmd/" + package], cwd=matrix, env=environment, check=True)
+    subprocess.run(["go", "build", "-tags", "goolm", "-trimpath", "-buildmode=c-archive", "-o", str(archive), "./cmd/" + package], cwd=matrix, env=environment, check=True)
     shutil.copyfile(destination / ("lib" + library + ".h"), headers / ("lib" + library + ".h"))
+    stamp_file.write_text(stamp_text)
     (headers / "module.modulemap").write_text('module ' + library + ' {\n    header "lib' + library + '.h"\n    export *\n}\n')
 print("Built Relay " + component + " for " + platform)

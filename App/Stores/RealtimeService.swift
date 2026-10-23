@@ -95,10 +95,9 @@ final class RealtimeService {
             } else {
                 onEvent(.resyncRequired)
             }
-        case "message.upserted", "message.deleted":
+        case "message.upserted":
             trackSequence(in: envelope)
-            // Deleted messages arrive with their retained content and an
-            // isDeleted marker, so both events update rows in place.
+            // Deletions arrive here too, as messages with an isDeleted marker.
             let messages = (try? JSONDecoder.beeper.decode(EntriesPayload<Message>.self, from: data))?.entries ?? []
             if let chatID = envelope.chatID, !messages.isEmpty {
                 onEvent(.messagesUpserted(chatID: chatID, messages: messages))

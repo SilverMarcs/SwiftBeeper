@@ -2,12 +2,16 @@ package dispatch
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
+	"time"
 
+	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
@@ -121,57 +125,95 @@ func (s *Dispatcher) findLatestEventID(ctx context.Context, roomID id.RoomID) (s
 	return eventID, nil
 }
 
-// loadOtherReadReceipts loads read receipts from real (non-bot) other participants.
-// Returns a map from userID → timeline rowid of the event they've read up to.
-// Bridge bots (e.g., @whatsappbot:beeper.local) are excluded because their
-// receipts represent message delivery, not actual reading by a person.
-func (s *Dispatcher) loadOtherReadReceipts(ctx context.Context, roomID id.RoomID) (map[string]int64, error) {
+// loadLastReadByOther returns the furthest timeline position another person has
+// read. Bridge bots are excluded: their receipts mean delivery, not reading.
+func (s *Dispatcher) loadLastReadByOther(ctx context.Context, roomID id.RoomID) string {
 	cli := s.rt.Client()
 	if cli == nil || cli.Account == nil {
-		return nil, nil
+		return ""
 	}
 	const query = `
-		SELECT r.user_id, t.rowid
+		SELECT COALESCE(MAX(t.rowid), 0)
 		FROM receipt r
 		JOIN event e ON e.event_id = r.event_id AND e.room_id = r.room_id
 		JOIN timeline t ON t.event_rowid = e.rowid AND t.room_id = r.room_id
-		WHERE r.room_id = ? AND r.receipt_type = 'm.read' AND r.user_id != ?
+		WHERE r.room_id = ? AND r.receipt_type = 'm.read' AND r.user_id != ? AND t.rowid > 0
+		  AND SUBSTR(SUBSTR(r.user_id,2,INSTR(r.user_id,':')-2),-3)<>'bot'
 	`
-	rows, err := cli.DB.Query(ctx, query, roomID, cli.Account.UserID)
-	if err != nil {
+	var maxRead int64
+	if err := cli.DB.QueryRow(ctx, query, roomID, cli.Account.UserID).Scan(&maxRead); err != nil || maxRead == 0 {
+		return ""
+	}
+	return strconv.FormatInt(maxRead, 10)
+}
+
+func (s *Dispatcher) archiveChat(ctx context.Context, input json.RawMessage) (any, error) {
+	var req struct {
+		Archived *bool  `json:"archived,omitempty"`
+		ChatID   string `json:"chatID,omitempty"`
+	}
+	if err := decodeJSON(input, &req); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make(map[string]int64)
-	for rows.Next() {
-		var userID string
-		var timelineRowID int64
-		if scanErr := rows.Scan(&userID, &timelineRowID); scanErr != nil {
-			continue
-		}
-		// Skip bridge bots — their receipts indicate delivery, not human reading.
-		if isBridgeBot(userID) {
-			continue
-		}
-		if timelineRowID > 0 || timelineRowID < 0 {
-			if existing, ok := result[userID]; !ok || timelineRowID > existing {
-				result[userID] = timelineRowID
+	chatID := strings.TrimSpace(req.ChatID)
+	if chatID == "" {
+		return nil, errors.New("chatID is required")
+	}
+	archived := true
+	if req.Archived != nil {
+		archived = *req.Archived
+	}
+
+	var content any = map[string]any{}
+	if archived {
+		content = map[string]any{"updated_ts": time.Now().UnixMilli()}
+	}
+	if err := s.rt.Client().Client.SetRoomAccountData(ctx, id.RoomID(chatID), "com.beeper.inbox.done", content); err != nil {
+		return nil, fmt.Errorf("failed to set archive state: %w", err)
+	}
+	// Archive actions always use Beeper Archive. Unarchive also removes an
+	// existing Low Priority tag, while preserving favorites and every other tag.
+	if err := s.clearLowPriority(ctx, id.RoomID(chatID)); err != nil {
+		return nil, fmt.Errorf("failed to remove low priority state: %w", err)
+	}
+	// Cache the new archive state before a concurrent message checks eligibility.
+	if cli := s.rt.Client(); cli != nil && cli.Account != nil {
+		raw, marshalErr := json.Marshal(content)
+		if marshalErr == nil {
+			_, cacheErr := cli.DB.AccountData.PutRoom(ctx, cli.Account.UserID, id.RoomID(chatID),
+				event.Type{Type: "com.beeper.inbox.done", Class: event.AccountDataEventType}, raw)
+			if cacheErr != nil {
+				log.Printf("cache archive state: %v", cacheErr)
 			}
 		}
 	}
-	return result, rows.Err()
+	return compat.ActionSuccessOutput{Success: true}, nil
 }
 
-// computeReadBy determines the furthest-read position among other participants.
-// For single chats, this is the other person's read receipt.
-// For group chats, this is the max of all other participants' receipts.
-// Returns the timeline rowid up to which someone else has read.
-func computeMaxOtherRead(receipts map[string]int64) int64 {
-	var maxRead int64
-	for _, tlRowID := range receipts {
-		if tlRowID > maxRead {
-			maxRead = tlRowID
-		}
+func (s *Dispatcher) clearLowPriority(ctx context.Context, roomID id.RoomID) error {
+	cli := s.rt.Client()
+	var raw []byte
+	err := cli.DB.QueryRow(ctx, `SELECT content FROM room_account_data WHERE user_id=? AND room_id=? AND type='m.tag'`, cli.Account.UserID, roomID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return err
 	}
-	return maxRead
+	var tags event.TagEventContent
+	if err := json.Unmarshal(raw, &tags); err != nil {
+		return err
+	}
+	if _, exists := tags.Tags[event.RoomTagLowPriority]; !exists {
+		return nil
+	}
+	if err := cli.Client.RemoveTag(ctx, roomID, event.RoomTagLowPriority); err != nil && !errors.Is(err, mautrix.MNotFound) {
+		return err
+	}
+	delete(tags.Tags, event.RoomTagLowPriority)
+	raw, err = json.Marshal(tags)
+	if err != nil {
+		return err
+	}
+	_, err = cli.DB.AccountData.PutRoom(ctx, cli.Account.UserID, roomID, event.AccountDataRoomTags, raw)
+	return err
 }

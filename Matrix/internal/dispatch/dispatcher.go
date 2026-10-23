@@ -16,6 +16,7 @@ type Dispatcher struct {
 func New(rt *gomuksruntime.Runtime) *Dispatcher {
 	s := &Dispatcher{rt: rt}
 	s.events = newEventHub(s)
+	rt.SetEventHandler(s.events.enqueue)
 	return s
 }
 

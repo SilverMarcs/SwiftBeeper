@@ -1,55 +1,9 @@
 import Foundation
 
-
-enum MessageKind: RawRepresentable, Codable, Equatable, Sendable {
-    case reaction
-    case memberJoin
-    case memberInvite
-    case unknown(String)
-
-    init(rawValue: String) {
-        switch rawValue {
-        case "REACTION":
-            self = .reaction
-        case "MEMBER_JOIN":
-            self = .memberJoin
-        case "MEMBER_INVITE":
-            self = .memberInvite
-        default:
-            self = .unknown(rawValue)
-        }
-    }
-
-    var rawValue: String {
-        switch self {
-        case .reaction:
-            return "REACTION"
-        case .memberJoin:
-            return "MEMBER_JOIN"
-        case .memberInvite:
-            return "MEMBER_INVITE"
-        case .unknown(let value):
-            return value
-        }
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        self = MessageKind(rawValue: try container.decode(String.self))
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(rawValue)
-    }
-}
-
 struct Reaction: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let reactionKey: String
-    let imgURL: String?
     let participantID: String
-    let emoji: Bool?
 }
 
 struct Message: Identifiable, Codable, Equatable, Sendable {
@@ -59,7 +13,6 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let senderName: String?
     let timestamp: Date
     let sortKey: String
-    let type: MessageKind?
     let text: String?
     let isSender: Bool
     let attachments: [Attachment]?
@@ -76,12 +29,6 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     /// Numeric sort key for correct ordering (handles negative backfill IDs).
     var numericSortKey: Int64 { Int64(sortKey) ?? 0 }
 
-    var isReaction: Bool { type == .reaction }
-
-    var isMembershipEvent: Bool {
-        type == .memberJoin || type == .memberInvite
-    }
-
     var senderDisplayName: String {
         if let senderName, senderName.isEmpty == false {
             return senderName
@@ -90,15 +37,6 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     }
 
     var displayText: String {
-        if isReaction {
-            let emoji = text?.trimmed ?? ""
-            let name = senderDisplayName
-            if emoji.isEmpty {
-                return "Reacted to a message"
-            }
-            return "\(name) reacted \(emoji)"
-        }
-
         if let visibleText {
             return visibleText
         }
@@ -117,13 +55,6 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
 
     var hasRetainedDeletedContent: Bool {
         isDeleted == true && (hasText || (attachments ?? []).isEmpty == false)
-    }
-
-    /// Whether this message represents real user content (not a reaction or membership event).
-    /// Deleted messages remain displayable with their retained content or a
-    /// tombstone when the original content is unavailable.
-    var isDisplayable: Bool {
-        !isReaction && !isMembershipEvent
     }
 
     /// User-visible body text after suppressing Matrix's required media

@@ -6,13 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"go.mau.fi/gomuks/pkg/hicli/database"
-	"go.mau.fi/util/emojirunes"
 	"io"
 	"maunium.net/go/mautrix"
 	matrixattachment "maunium.net/go/mautrix/crypto/attachment"
@@ -38,84 +35,60 @@ const timelineSelectBase = `
 
 var errSkipEvent = errors.New("skip event")
 
+// listMessages reads one page of the local timeline, newest first. Matrix sync
+// owns ingestion; paging never touches the network.
 func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
-		ChatID    string `json:"chatID"`
-		Cursor    string `json:"cursor"`
-		Direction string `json:"direction"`
+		ChatID string `json:"chatID"`
+		// Timeline position of the oldest message already shown.
+		Cursor string `json:"cursor"`
 	}
 	if err := decodeJSON(input, &req); err != nil {
 		return nil, err
 	}
-	chatID := strings.TrimSpace(req.ChatID)
-	if chatID == "" {
+	roomID := id.RoomID(strings.TrimSpace(req.ChatID))
+	if roomID == "" {
 		return nil, errors.New("chatID is required")
 	}
-	direction, err := parseDirection(req.Direction)
-	if err != nil {
-		return nil, err
-	}
-	cursorValue, err := parseMessageCursor(req.Cursor)
-	if err != nil {
-		return nil, err
+	var before int64
+	if req.Cursor != "" {
+		var err error
+		if before, err = strconv.ParseInt(req.Cursor, 10, 64); err != nil {
+			return nil, fmt.Errorf("invalid cursor: %w", err)
+		}
 	}
 
-	lookup, err := s.buildAccountLookup(ctx)
-	if err != nil {
-		return nil, err
-	}
-	room, err := s.rt.Client().DB.Room.Get(ctx, id.RoomID(chatID))
-	if err != nil {
+	if room, err := s.rt.Client().DB.Room.Get(ctx, roomID); err != nil {
 		return nil, fmt.Errorf("failed to get room: %w", err)
-	}
-	if room == nil {
+	} else if room == nil {
 		return nil, errors.New("Chat not found")
 	}
 
-	lastReadKey := s.loadLastReadSortKey(ctx, id.RoomID(chatID))
-	var lastReadInt int64
-	if lastReadKey != "" {
-		lastReadInt, _ = strconv.ParseInt(lastReadKey, 10, 64)
-	}
-
-	// UI pagination only reads the local timeline. Matrix sync owns ingestion.
-	const scanLimit = messagePageSize + 1
-	var events []*database.Event
-	var hasMore bool
-	events, hasMore, err = s.loadTimelineEvents(ctx, room.ID, cursorValue, direction, scanLimit)
+	reads, _ := s.loadLastReadSortKeys(ctx, roomID)
+	lastRead, _ := strconv.ParseInt(reads[roomID], 10, 64)
+	events, hasMore, err := s.loadTimelineEvents(ctx, roomID, before)
 	if err != nil {
 		return nil, err
 	}
-
-	s.RefreshPreview(ctx, room.ID, events)
-	room, _ = s.rt.Client().DB.Room.Get(ctx, room.ID)
-	if room == nil {
-		return nil, errors.New("Chat not found")
-	}
-	summaries, err := s.loadChatSummaries(ctx, []*database.Room{room}, 0, lookup, true)
-	if err != nil {
-		return nil, err
-	}
-	summary := summaries[room.ID]
 	if err = s.populateLastEditRefs(ctx, events); err != nil {
 		return nil, err
 	}
-	memberNames := s.loadNamesForEvents(ctx, events)[room.ID]
-	reactions, err := s.loadReactionMap(ctx, room.ID, events)
+	names := s.loadNamesForEvents(ctx, events)[roomID]
+	reactions, err := s.loadReactionMap(ctx, roomID, events)
 	if err != nil {
 		return nil, err
 	}
 	messages := make([]compat.Message, 0, messagePageSize)
-	nextCursor := cursorValue
+	oldest := before
 	for index, evt := range events {
-		nextCursor = int64(evt.TimelineRowID)
-		mapped, mapErr := s.mapEventToMessage(ctx, evt, room, lookup, reactionBundle{Names: memberNames, Reactions: reactions})
+		oldest = int64(evt.TimelineRowID)
+		mapped, mapErr := s.mapEventToMessage(evt, names, reactions)
 		if mapErr != nil {
 			continue
 		}
-		if lastReadInt != 0 && !mapped.IsSender {
+		if lastRead != 0 && !mapped.IsSender {
 			sortKey, _ := strconv.ParseInt(mapped.SortKey, 10, 64)
-			mapped.IsUnread = sortKey > lastReadInt
+			mapped.IsUnread = sortKey > lastRead
 		}
 		messages = append(messages, mapped)
 		if len(messages) == messagePageSize {
@@ -123,30 +96,17 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 			break
 		}
 	}
-	var preview *compat.Message
-	if summary.preview != nil {
-		if mapped, mapErr := s.mapEventToMessage(ctx, summary.preview, room, lookup, reactionBundle{Names: summary.names}); mapErr == nil {
-			preview = &mapped
-		}
-	}
 
-	// Load other participants' read receipts to determine the "read by other" position.
-	var lastReadByOtherSortKey string
-	otherReceipts, _ := s.loadOtherReadReceipts(ctx, id.RoomID(chatID))
-	if len(otherReceipts) > 0 {
-		maxOtherRead := computeMaxOtherRead(otherReceipts)
-		if maxOtherRead != 0 {
-			lastReadByOtherSortKey = strconv.FormatInt(maxOtherRead, 10)
-		}
+	output := compat.ListMessagesOutput{
+		Items:        messages,
+		HasMore:      hasMore,
+		OldestCursor: strconv.FormatInt(oldest, 10),
 	}
-
-	return compat.ListMessagesOutput{
-		Items:                  messages,
-		HasMore:                hasMore,
-		OldestCursor:           strconv.FormatInt(nextCursor, 10),
-		Preview:                preview,
-		LastReadByOtherSortKey: lastReadByOtherSortKey,
-	}, nil
+	// The app reads the other side's position only with the newest page.
+	if before == 0 {
+		output.LastReadByOtherSortKey = s.loadLastReadByOther(ctx, roomID)
+	}
+	return output, nil
 }
 
 func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage) (any, error) {
@@ -240,14 +200,14 @@ func (s *Dispatcher) editMessage(ctx context.Context, input json.RawMessage) (an
 		return nil, fmt.Errorf("failed to edit message: %w", err)
 	}
 
-	return compat.EditMessageOutput{ChatID: chatID, MessageID: messageID, Success: true}, nil
+	return compat.ActionSuccessOutput{Success: true}, nil
 }
 
 func (s *Dispatcher) addReaction(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID    string `json:"chatID"`
 		MessageID string `json:"messageID"`
-		compat.AddReactionInput
+		compat.ReactionInput
 	}
 	if err := decodeJSON(input, &req); err != nil {
 		return nil, err
@@ -271,32 +231,17 @@ func (s *Dispatcher) addReaction(ctx context.Context, input json.RawMessage) (an
 			Key:     req.ReactionKey,
 		},
 	}
-	dbEvt, err := s.rt.Client().Send(ctx, id.RoomID(chatID), event.EventReaction, content, false, false)
-	if err != nil {
+	if _, err := s.rt.Client().Send(ctx, id.RoomID(chatID), event.EventReaction, content, false, false); err != nil {
 		return nil, fmt.Errorf("failed to add reaction: %w", err)
 	}
-	transactionID := req.TransactionID
-	if transactionID == "" && dbEvt != nil {
-		transactionID = dbEvt.TransactionID
-	}
-	if transactionID == "" {
-		transactionID = randomID()
-	}
-
-	return compat.AddReactionOutput{
-		Success:       true,
-		ChatID:        chatID,
-		MessageID:     messageID,
-		ReactionKey:   req.ReactionKey,
-		TransactionID: transactionID,
-	}, nil
+	return compat.ActionSuccessOutput{Success: true}, nil
 }
 
 func (s *Dispatcher) removeReaction(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID    string `json:"chatID"`
 		MessageID string `json:"messageID"`
-		compat.RemoveReactionInput
+		compat.ReactionInput
 	}
 	if err := decodeJSON(input, &req); err != nil {
 		return nil, err
@@ -340,25 +285,18 @@ func (s *Dispatcher) removeReaction(ctx context.Context, input json.RawMessage) 
 		}
 	}
 
-	return compat.RemoveReactionOutput{
-		Success:     true,
-		ChatID:      chatID,
-		MessageID:   messageID,
-		ReactionKey: reactionKey,
-	}, nil
+	return compat.ActionSuccessOutput{Success: true}, nil
 }
 
-func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, cursorValue int64, direction string, limit int) ([]*database.Event, bool, error) {
-	cli := s.rt.Client()
+// loadTimelineEvents reads up to one page plus one event older than before
+// (or the newest when before is 0), newest first.
+func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, before int64) ([]*database.Event, bool, error) {
+	const limit = messagePageSize + 1
 	// SQLite skips state/reaction/edit rows before materializing the local page.
-	query := timelineSelectBase + ` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker')) AND (relation_type IS NULL OR relation_type<>'m.replace')`
-	if direction == "before" {
-		query += ` AND (?=0 OR timeline.rowid<?) ORDER BY timeline.rowid DESC LIMIT ?`
-	} else {
-		query += ` AND (?=0 OR timeline.rowid>?) ORDER BY timeline.rowid ASC LIMIT ?`
-	}
+	query := timelineSelectBase + ` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker')) AND (relation_type IS NULL OR relation_type<>'m.replace')` +
+		` AND (?=0 OR timeline.rowid<?) ORDER BY timeline.rowid DESC LIMIT ?`
 
-	rows, err := cli.DB.Query(ctx, query, roomID, cursorValue, cursorValue, limit)
+	rows, err := s.rt.Client().DB.Query(ctx, query, roomID, before, before, limit)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to query timeline: %w", err)
 	}
@@ -376,12 +314,7 @@ func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, c
 		return nil, false, fmt.Errorf("timeline query failed: %w", err)
 	}
 
-	hasMore := len(events) == limit
-
-	sort.Slice(events, func(i, j int) bool {
-		return events[i].TimelineRowID > events[j].TimelineRowID
-	})
-	return events, hasMore, nil
+	return events, len(events) == limit, nil
 }
 
 func (s *Dispatcher) populateLastEditRefs(ctx context.Context, events []*database.Event) error {
@@ -477,7 +410,6 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 				ID:            reactionID,
 				ReactionKey:   key,
 				ParticipantID: string(reactionEvt.Sender),
-				Emoji:         utf8.RuneCountInString(key) <= 100 && emojirunes.IsOnlyEmojis(key),
 			})
 		}
 		if len(reactions) > 0 {
@@ -487,95 +419,32 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 	return output, nil
 }
 
-func (s *Dispatcher) mapEventToMessage(ctx context.Context, evt *database.Event, room *database.Room, lookup *accountLookup, reactions reactionBundle) (compat.Message, error) {
-	if evt == nil {
-		return compat.Message{}, errSkipEvent
-	}
+// mapEventToMessage maps a message or sticker event; anything else is skipped.
+func (s *Dispatcher) mapEventToMessage(evt *database.Event, names map[string]string, reactions map[id.EventID][]compat.Reaction) (compat.Message, error) {
 	evtType := evt.GetType().Type
-	if evt.RelationType == event.RelReplace {
+	if evt.RelationType == event.RelReplace ||
+		(evtType != event.EventMessage.Type && evtType != event.EventSticker.Type) {
 		return compat.Message{}, errSkipEvent
 	}
-	if evtType != event.EventMessage.Type && evtType != event.EventSticker.Type &&
-		evtType != event.EventReaction.Type && evtType != event.StateMember.Type {
-		return compat.Message{}, errSkipEvent
-	}
-
-	accountID, _ := inferAccountForRoom(room.ID, lookup)
-	if lookup.roomAccounts != nil {
-		if resolved, ok := lookup.roomAccounts[room.ID]; ok {
-			accountID = resolved.accountID
-		}
-	}
-
 	message := compat.Message{
-		ID:        string(evt.ID),
-		ChatID:    string(evt.RoomID),
-		AccountID: accountID,
-		SenderID:  string(evt.Sender),
-		Timestamp: evt.Timestamp.Time.UTC(),
-		SortKey:   messageSortKey(evt),
-		IsSender:  evt.Sender == s.rt.Client().Account.UserID,
-		IsDeleted: evt.RedactedBy != "",
-		Reactions: reactions.Reactions[evt.ID],
+		ID:              string(evt.ID),
+		ChatID:          string(evt.RoomID),
+		SenderID:        string(evt.Sender),
+		SenderName:      string(evt.Sender),
+		Timestamp:       evt.Timestamp.Time.UTC(),
+		SortKey:         messageSortKey(evt),
+		IsSender:        evt.Sender == s.rt.Client().Account.UserID,
+		IsDeleted:       evt.RedactedBy != "",
+		LinkedMessageID: string(evt.GetReplyTo()),
+		Reactions:       reactions[evt.ID],
 	}
-	if name, ok := reactions.Names[string(evt.Sender)]; ok {
+	if name, ok := names[string(evt.Sender)]; ok {
 		message.SenderName = name
-	} else {
-		message.SenderName = string(evt.Sender)
 	}
-	if replyTo := evt.GetReplyTo(); replyTo != "" {
-		message.LinkedMessageID = string(replyTo)
-	}
-
-	switch evtType {
-	case event.StateMember.Type:
-		var member event.MemberEventContent
-		if err := json.Unmarshal(evt.GetContent(), &member); err != nil {
-			return compat.Message{}, errSkipEvent
-		}
-		switch member.Membership {
-		case event.MembershipJoin:
-			message.Type = compat.MessageType("MEMBER_JOIN")
-		case event.MembershipInvite:
-			message.Type = compat.MessageType("MEMBER_INVITE")
-		default:
-			return compat.Message{}, errSkipEvent
-		}
-		if evt.StateKey != nil && strings.TrimSpace(*evt.StateKey) != "" {
-			message.SenderID = *evt.StateKey
-			message.IsSender = message.SenderID == string(s.rt.Client().Account.UserID)
-		}
-		if name, ok := reactions.Names[message.SenderID]; ok {
-			message.SenderName = name
-		} else if strings.TrimSpace(member.Displayname) != "" {
-			message.SenderName = member.Displayname
-		} else {
-			message.SenderName = message.SenderID
-		}
-		if message.Type == compat.MessageType("MEMBER_JOIN") {
-			message.Text = message.SenderName + " joined the chat"
-		} else {
-			message.Text = message.SenderName + " was invited to the chat"
-		}
-		return message, nil
-	case event.EventReaction.Type:
-		var reaction event.ReactionEventContent
-		if err := json.Unmarshal(evt.GetContent(), &reaction); err == nil {
-			message.Type = compat.MessageType("REACTION")
-			message.Text = reaction.RelatesTo.Key
-			if message.LinkedMessageID == "" {
-				message.LinkedMessageID = string(reaction.RelatesTo.EventID)
-			}
-		}
-		return message, nil
-	case event.EventSticker.Type, event.EventMessage.Type:
-		if err := applyStoredMessageContent(&message, evt, evtType); err != nil {
-			return compat.Message{}, errSkipEvent
-		}
-		return message, nil
-	default:
+	if err := applyStoredMessageContent(&message, evt, evtType); err != nil {
 		return compat.Message{}, errSkipEvent
 	}
+	return message, nil
 }
 
 func applyStoredMessageContent(message *compat.Message, evt *database.Event, evtType string) error {
@@ -589,7 +458,6 @@ func applyStoredMessageContent(message *compat.Message, evt *database.Event, evt
 	content.RemoveReplyFallback()
 	content.RemovePerMessageProfileFallback()
 
-	message.Type = mapMessageType(evtType, content.MsgType)
 	if attachment, ok := messageAttachment(content, evtType); ok {
 		message.Attachments = []compat.Attachment{attachment}
 		// Matrix requires a Body for media and commonly fills it with the
@@ -604,28 +472,6 @@ func applyStoredMessageContent(message *compat.Message, evt *database.Event, evt
 	return nil
 }
 
-func mapMessageType(evtType string, msgType event.MessageType) compat.MessageType {
-	if evtType == event.EventSticker.Type {
-		return compat.MessageType("STICKER")
-	}
-	switch msgType {
-	case event.MsgNotice:
-		return compat.MessageType("NOTICE")
-	case event.MsgImage:
-		return compat.MessageType("IMAGE")
-	case event.MsgVideo:
-		return compat.MessageType("VIDEO")
-	case event.MsgAudio:
-		return compat.MessageType("AUDIO")
-	case event.MsgFile:
-		return compat.MessageType("FILE")
-	case event.MsgLocation:
-		return compat.MessageType("LOCATION")
-	default:
-		return compat.MessageType("TEXT")
-	}
-}
-
 func messageAttachment(content event.MessageEventContent, evtType string) (compat.Attachment, bool) {
 	msgType := content.MsgType
 	if evtType == event.EventSticker.Type {
@@ -636,14 +482,8 @@ func messageAttachment(content event.MessageEventContent, evtType string) (compa
 		return compat.Attachment{}, false
 	}
 	uri := string(content.URL)
-	if content.File != nil {
-		if uri == "" {
-			uri = string(content.File.URL)
-		}
-		// Register the encryption info so the asset serve endpoint can decrypt.
-		// Note: some events have both content.URL and content.File set to the
-		// same mxc:// URL (e.g. own outbound messages in encrypted rooms).
-		registerEncryptedFile(uri, content.File)
+	if uri == "" && content.File != nil {
+		uri = string(content.File.URL)
 	}
 	att := compat.Attachment{
 		ID:       uri,
@@ -673,10 +513,8 @@ func messageAttachment(content event.MessageEventContent, evtType string) (compa
 		att.Type = compat.AttachmentType("video")
 	case event.MsgAudio:
 		att.Type = compat.AttachmentType("audio")
-		att.IsVoiceNote = content.MSC3245Voice != nil
 	case "m.sticker":
 		att.Type = compat.AttachmentType("img")
-		att.IsSticker = true
 	}
 	return att, true
 }
@@ -752,7 +590,7 @@ func (s *Dispatcher) buildAttachmentMessageContent(ctx context.Context, attachme
 		return nil, fmt.Errorf("failed to upload media to Matrix: %w", err)
 	}
 
-	msgType := messageTypeFromAttachment(mimeType, strings.TrimSpace(attachment.Type))
+	msgType := messageTypeFromAttachment(mimeType)
 	content := &event.MessageEventContent{
 		MsgType:  msgType,
 		Body:     fileName,
@@ -767,29 +605,15 @@ func (s *Dispatcher) buildAttachmentMessageContent(ctx context.Context, attachme
 		encryptedFile.URL = uploadResp.ContentURI.CUString()
 		content.URL = ""
 		content.File = encryptedFile
-		registerEncryptedFile(string(encryptedFile.URL), encryptedFile)
 	}
 	if attachment.Size.Width > 0 || attachment.Size.Height > 0 {
 		content.Info.Width = int(attachment.Size.Width)
 		content.Info.Height = int(attachment.Size.Height)
 	}
-	duration := attachment.Duration
-	if duration <= 0 {
-		duration = meta.Duration
-	}
-	if duration > 0 {
-		content.Info.Duration = int(duration * 1000)
-	}
 	return content, nil
 }
 
-func messageTypeFromAttachment(mimeType, hint string) event.MessageType {
-	switch hint {
-	case "sticker":
-		return "m.sticker"
-	case "voiceNote":
-		return event.MsgAudio
-	}
+func messageTypeFromAttachment(mimeType string) event.MessageType {
 	if strings.HasPrefix(mimeType, "image/") {
 		return event.MsgImage
 	}

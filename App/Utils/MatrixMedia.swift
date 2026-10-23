@@ -46,6 +46,6 @@ enum MatrixMedia {
     }
 
     private static func isMatrixSource(_ url: URL) -> Bool {
-        ["mxc", "localmxc", "file"].contains(url.scheme ?? "")
+        url.scheme == "mxc" || url.scheme == "localmxc"
     }
 }

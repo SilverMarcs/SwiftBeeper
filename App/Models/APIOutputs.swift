@@ -2,8 +2,7 @@ import Foundation
 
 struct ListChatsOutput: Decodable {
     let items: [Chat]
-    let hasMore: Bool?
-    let oldestCursor: String?
+    let hasMore: Bool
 }
 
 struct SearchChatsOutput: Decodable {

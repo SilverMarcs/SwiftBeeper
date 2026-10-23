@@ -2,13 +2,8 @@ import Foundation
 
 struct UploadAssetOutput: Decodable {
     let uploadID: String
-    let srcURL: String?
-    let fileName: String?
-    let mimeType: String?
-    let fileSize: Int?
     let width: Int?
     let height: Int?
-    let duration: Double?
 }
 
 struct MessageAttachmentInput: Encodable {
@@ -16,8 +11,6 @@ struct MessageAttachmentInput: Encodable {
     let mimeType: String?
     let fileName: String?
     let size: AttachmentSizeInput?
-    let duration: Double?
-    let type: String?
 }
 
 struct AttachmentSizeInput: Encodable {

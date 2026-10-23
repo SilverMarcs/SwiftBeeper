@@ -81,9 +81,10 @@ actor MatrixRuntime {
     func events() throws -> (UInt, AsyncStream<Data>) {
         try start()
         let channel = AsyncStream<Data>.makeStream(bufferingPolicy: .bufferingNewest(256))
-        let connection = RelayCoreRealtimeConnect(handle) { connection, payload in
-            guard let payload else { return }
-            MatrixEventHub.shared.receive(Data(String(cString: payload).utf8), handle: connection)
+        let connection = RelayCoreRealtimeConnect(handle) { connection, payload, length in
+            // The bytes are valid only during this call, so copy them once.
+            guard let payload, length > 0 else { return }
+            MatrixEventHub.shared.receive(Data(bytes: payload, count: length), handle: connection)
         }
         guard connection != 0 else { throw MatrixError.operationFailed }
         MatrixEventHub.shared.register(channel.continuation, handle: connection)

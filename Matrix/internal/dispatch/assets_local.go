@@ -2,48 +2,18 @@ package dispatch
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"maunium.net/go/mautrix/event"
 )
 
 func (s *Dispatcher) MobileAsset(ctx context.Context, source string) (string, error) {
-	return s.resolveServePath(ctx, source)
-}
-
-// The encrypted-file registry is process-local. Reconstruct just the requested
-// descriptor from the durable SDK store after an offline cold launch.
-func (s *Dispatcher) mobileRestoreFileDescriptor(ctx context.Context, mxc string) {
-	if lookupEncryptedFile(mxc) != nil {
-		return
-	}
-	cli := s.rt.Client()
-	if cli == nil || cli.Account == nil {
-		return
-	}
-	var raw []byte
-	err := cli.DB.QueryRow(ctx, `SELECT COALESCE(decrypted,content) FROM event WHERE json_extract(COALESCE(decrypted,content),'$.file.url')=? OR json_extract(COALESCE(decrypted,content),'$.info.thumbnail_file.url')=? LIMIT 1`, mxc, mxc).Scan(&raw)
-	if err != nil {
-		return
-	}
-	var content event.MessageEventContent
-	if json.Unmarshal(raw, &content) != nil {
-		return
-	}
-	if content.File != nil && string(content.File.URL) == mxc {
-		registerEncryptedFile(mxc, content.File)
-	}
-	if content.Info != nil && content.Info.ThumbnailFile != nil && string(content.Info.ThumbnailFile.URL) == mxc {
-		registerEncryptedFile(mxc, content.Info.ThumbnailFile)
-	}
+	return s.resolveAssetURL(ctx, source)
 }
 
 // Stage a Swift-owned temporary file without JSON/base64 copies of its bytes.
+// Both directories share the state directory, so a rename moves it for free.
 func (s *Dispatcher) MobileStageUpload(ctx context.Context, source, name, mime, root string) (any, error) {
 	incoming := filepath.Join(root, "incoming")
 	relative, err := filepath.Rel(incoming, source)
@@ -54,12 +24,7 @@ func (s *Dispatcher) MobileStageUpload(ctx context.Context, source, name, mime, 
 	if name == "." || name == "" {
 		name = "file"
 	}
-	file, err := os.Open(source)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	info, err := file.Stat()
+	info, err := os.Lstat(source)
 	if err != nil || info.Size() > maxUploadSizeBytes || !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("invalid upload")
 	}
@@ -69,17 +34,8 @@ func (s *Dispatcher) MobileStageUpload(ctx context.Context, source, name, mime, 
 		return nil, err
 	}
 	target := filepath.Join(directory, name)
-	output, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
+	if err = os.Rename(source, target); err != nil {
 		return nil, err
-	}
-	_, copyErr := io.Copy(output, file)
-	closeErr := output.Close()
-	if copyErr != nil {
-		return nil, copyErr
-	}
-	if closeErr != nil {
-		return nil, closeErr
 	}
 	if mime == "" {
 		mime = "application/octet-stream"
@@ -89,5 +45,5 @@ func (s *Dispatcher) MobileStageUpload(ctx context.Context, source, name, mime, 
 	if err = s.writeUploadMetadata(meta); err != nil {
 		return nil, err
 	}
-	return uploadAssetResponse{UploadID: uploadID, SrcURL: fileURLFromPath(target), FileName: name, MimeType: mime, FileSize: float64(info.Size()), Width: float64(meta.Width), Height: float64(meta.Height)}, nil
+	return uploadAssetResponse{UploadID: uploadID, Width: float64(meta.Width), Height: float64(meta.Height)}, nil
 }

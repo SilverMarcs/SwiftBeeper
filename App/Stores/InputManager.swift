@@ -72,8 +72,6 @@ final class InputManager {
 
     // MARK: - Derived composer state
 
-    var cannotMessage: Bool { chatStore.selectedChat?.cannotMessage == true }
-
     var isEditing: Bool { chatStore.editingMessage != nil }
 
     var pendingAttachments: [PendingAttachment] {

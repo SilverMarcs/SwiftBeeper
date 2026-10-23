@@ -6,10 +6,11 @@ package main
 
 typedef uintptr_t RelayCoreHandle;
 typedef uintptr_t RelayCoreRealtimeHandle;
-typedef void (*RelayCoreRealtimeCallback)(uintptr_t realtime_handle, const char *payload);
+// The payload is valid only during the call; copy it before returning.
+typedef void (*RelayCoreRealtimeCallback)(uintptr_t realtime_handle, const char *payload, size_t length);
 
-static inline void relay_call_realtime(RelayCoreRealtimeCallback cb, uintptr_t realtime_handle, const char *payload) {
-	cb(realtime_handle, payload);
+static inline void relay_call_realtime(RelayCoreRealtimeCallback cb, uintptr_t realtime_handle, const char *payload, size_t length) {
+	cb(realtime_handle, payload, length);
 }
 */
 import "C"
@@ -18,23 +19,15 @@ import (
 	"context"
 	"encoding/json"
 	"runtime/cgo"
-	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"relay/core/internal/app"
-	"relay/core/internal/dispatch"
 )
 
 type ffiRuntime struct {
-	runtime *app.Runtime
-
-	mu             sync.Mutex
-	nextRealtimeID uintptr
-	realtime       map[uintptr]*ffiRealtime
-}
-
-type ffiRealtime struct {
-	conn *dispatch.RealtimeConnection
+	runtime        *app.Runtime
+	nextRealtimeID atomic.Uint64
 }
 
 func cString(value string) *C.char {
@@ -72,10 +65,7 @@ func RelayCoreCreate(cfgJSON *C.char) C.RelayCoreHandle {
 	if err != nil {
 		return 0
 	}
-	return C.RelayCoreHandle(cgo.NewHandle(&ffiRuntime{
-		runtime:  rt,
-		realtime: make(map[uintptr]*ffiRealtime),
-	}))
+	return C.RelayCoreHandle(cgo.NewHandle(&ffiRuntime{runtime: rt}))
 }
 
 //export RelayCoreStart
@@ -90,57 +80,35 @@ func RelayCoreStart(handle C.RelayCoreHandle) C.int {
 //export RelayCoreDestroy
 func RelayCoreDestroy(handle C.RelayCoreHandle) {
 	h := cgo.Handle(handle)
-	rt := h.Value().(*ffiRuntime)
-	rt.runtime.Stop()
-	rt.mu.Lock()
-	for id, conn := range rt.realtime {
-		if conn != nil && conn.conn != nil {
-			conn.conn.Close()
-		}
-		delete(rt.realtime, id)
-	}
-	rt.mu.Unlock()
+	h.Value().(*ffiRuntime).runtime.Stop()
 	h.Delete()
 }
 
+// RelayCoreRealtimeConnect opens the app's change stream. Opening a new one
+// closes the previous stream.
+//
 //export RelayCoreRealtimeConnect
 func RelayCoreRealtimeConnect(handle C.RelayCoreHandle, callback C.RelayCoreRealtimeCallback) C.RelayCoreRealtimeHandle {
 	rt := runtimeFromHandle(handle)
-	rt.mu.Lock()
-	rt.nextRealtimeID++
-	realtimeID := rt.nextRealtimeID
-	rt.mu.Unlock()
-
-	conn, err := rt.runtime.OpenRealtime(func(payload json.RawMessage) error {
-		payloadCString := cString(string(payload))
-		C.relay_call_realtime(callback, C.uintptr_t(realtimeID), payloadCString)
-		C.free(unsafe.Pointer(payloadCString))
-		return nil
+	realtimeID := rt.nextRealtimeID.Add(1)
+	rt.runtime.OpenRealtime(realtimeID, func(payload []byte) {
+		if len(payload) == 0 {
+			return
+		}
+		// The callback is synchronous and copies the bytes, so Go memory can be
+		// passed without a C copy.
+		C.relay_call_realtime(callback, C.uintptr_t(realtimeID), (*C.char)(unsafe.Pointer(&payload[0])), C.size_t(len(payload)))
 	})
-	if err != nil {
-		return 0
-	}
-
-	rt.mu.Lock()
-	rt.realtime[realtimeID] = &ffiRealtime{conn: conn}
-	rt.mu.Unlock()
 	return C.RelayCoreRealtimeHandle(realtimeID)
 }
 
 //export RelayCoreRealtimeSubscribe
 func RelayCoreRealtimeSubscribe(handle C.RelayCoreHandle, realtimeHandle C.RelayCoreRealtimeHandle, payloadJSON *C.char) *C.char {
-	rt := runtimeFromHandle(handle)
-	rt.mu.Lock()
-	conn := rt.realtime[uintptr(realtimeHandle)]
-	rt.mu.Unlock()
-	if conn == nil || conn.conn == nil {
-		return marshalResult(map[string]any{"error": "realtime connection not found"})
-	}
 	var roomIDs []string
 	if err := json.Unmarshal([]byte(goString(payloadJSON)), &roomIDs); err != nil {
 		return marshalResult(map[string]any{"error": "invalid room subscriptions"})
 	}
-	if err := conn.conn.Subscribe(roomIDs); err != nil {
+	if err := runtimeFromHandle(handle).runtime.SubscribeRealtime(uint64(realtimeHandle), roomIDs); err != nil {
 		return marshalResult(map[string]any{"error": err.Error()})
 	}
 	return nil
@@ -148,14 +116,7 @@ func RelayCoreRealtimeSubscribe(handle C.RelayCoreHandle, realtimeHandle C.Relay
 
 //export RelayCoreRealtimeClose
 func RelayCoreRealtimeClose(handle C.RelayCoreHandle, realtimeHandle C.RelayCoreRealtimeHandle) {
-	rt := runtimeFromHandle(handle)
-	rt.mu.Lock()
-	conn := rt.realtime[uintptr(realtimeHandle)]
-	delete(rt.realtime, uintptr(realtimeHandle))
-	rt.mu.Unlock()
-	if conn != nil && conn.conn != nil {
-		conn.conn.Close()
-	}
+	runtimeFromHandle(handle).runtime.CloseRealtime(uint64(realtimeHandle))
 }
 
 //export RelayCoreFreeCString

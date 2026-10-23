@@ -12,8 +12,9 @@ import (
 )
 
 // Sync can touch many rooms at once. Batch sidebar hydration instead of issuing
-// membership, account-data and preview queries separately for every room.
-func (h *eventHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, duplicates map[string]bool) map[string]*compat.Chat {
+// membership, account-data and preview queries separately for every room. Only
+// rooms in upserted are summarized.
+func (h *eventHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, upserted map[id.RoomID]bool) map[string]*compat.Chat {
 	result := make(map[string]*compat.Chat)
 	ctx := context.Background()
 	lookup, err := h.dispatcher.buildAccountLookup(ctx)
@@ -22,7 +23,7 @@ func (h *eventHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, duplicat
 	}
 	rooms := make([]*database.Room, 0, len(complete.Rooms))
 	for roomID, syncRoom := range complete.Rooms {
-		if syncRoom == nil || duplicates[string(roomID)] || len(h.subscribedTargets(string(roomID), false)) == 0 {
+		if syncRoom == nil || !upserted[roomID] {
 			continue
 		}
 		room := syncRoom.Meta
@@ -43,16 +44,13 @@ func (h *eventHub) hydrateChatSummaries(complete *jsoncmd.SyncComplete, duplicat
 			continue
 		}
 		reads, _ := h.dispatcher.loadLastReadSortKeys(ctx, ids...)
-		summaries, err := h.dispatcher.loadChatSummaries(ctx, chunk, chatPreviewParticipants, lookup, true)
+		summaries, err := h.dispatcher.loadChatSummaries(ctx, chunk, chatPreviewParticipants, lookup)
 		if err != nil {
 			continue
 		}
-		batchCtx := context.WithValue(ctx, chatSummaryKey{}, summaries)
 		for _, room := range chunk {
-			chat, err := h.dispatcher.mapRoomToChat(batchCtx, room, lookup, chatPreviewParticipants, true, states[room.ID], reads[room.ID])
-			if err == nil {
-				result[string(room.ID)] = &chat
-			}
+			chat := h.dispatcher.mapRoomToChat(room, summaries[room.ID], lookup, states[room.ID], reads[room.ID])
+			result[string(room.ID)] = &chat
 		}
 	}
 	return result

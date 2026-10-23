@@ -50,6 +50,10 @@ type Participant struct {
 	Name string `json:"name"`
 }
 
+// One client per extension process, so a reused process keeps its connection
+// to the homeserver instead of a fresh TLS handshake per push.
+var httpClient = &http.Client{Timeout: 8 * time.Second}
+
 func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	if req.RoomID == "" || req.EventID == "" || req.AccessToken == "" || !strings.HasPrefix(req.Homeserver, "https://") {
 		return nil, errors.New("invalid notification context")
@@ -58,9 +62,35 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	if err != nil {
 		return nil, err
 	}
-	cli.Client = &http.Client{Timeout: 8 * time.Second}
-	defer cli.Client.CloseIdleConnections()
+	cli.Client = httpClient
 	ctx = mautrix.WithMaxRetries(ctx, 0)
+
+	// Requests that don't depend on the event run while it downloads. Room
+	// metadata shares one short budget and never reads the member list.
+	metadataCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	var roomName event.RoomNameEventContent
+	var roomAvatar event.RoomAvatarEventContent
+	var roomMetadata sync.WaitGroup
+	roomMetadata.Add(2)
+	go func() {
+		defer roomMetadata.Done()
+		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomName, "", &roomName)
+	}()
+	go func() {
+		defer roomMetadata.Done()
+		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomAvatar, "", &roomAvatar)
+	}()
+	// Most chats are encrypted, so look up the key backup alongside too.
+	var backupVersion *mautrix.RespRoomKeysVersion[backup.MegolmAuthData]
+	var backupErr error
+	var backupLookup sync.WaitGroup
+	backupLookup.Add(1)
+	go func() {
+		defer backupLookup.Done()
+		backupVersion, backupErr = cli.GetKeyBackupLatestVersion(ctx)
+	}()
+
 	evt, err := cli.GetEvent(ctx, req.RoomID, req.EventID)
 	if err != nil {
 		return nil, err
@@ -68,6 +98,23 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	if evt.ID != req.EventID || (evt.RoomID != "" && evt.RoomID != req.RoomID) {
 		return nil, errors.New("event mismatch")
 	}
+	sender := evt.Sender.String()
+	var senderAvatar id.ContentURIString
+	// The sender's profile gets its own budget, since the room reads started earlier.
+	profileCtx, cancelProfile := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelProfile()
+	var senderProfile sync.WaitGroup
+	senderProfile.Add(1)
+	go func() {
+		defer senderProfile.Done()
+		if profile, err := cli.GetProfile(profileCtx, evt.Sender); err == nil {
+			if name := strings.TrimSpace(profile.DisplayName); name != "" {
+				sender = name
+			}
+			senderAvatar = id.ContentURIString(profile.AvatarURL.String())
+		}
+	}()
+
 	content := evt.Content.VeryRaw
 	typ := evt.Type.Type
 	if typ == event.EventEncrypted.Type {
@@ -86,14 +133,14 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 		if err != nil {
 			return nil, err
 		}
-		version, err := cli.GetKeyBackupLatestVersion(ctx)
-		if err != nil {
-			return nil, err
+		backupLookup.Wait()
+		if backupErr != nil {
+			return nil, backupErr
 		}
-		if version.Algorithm != id.KeyBackupAlgorithmMegolmBackupV1 || string(version.AuthData.PublicKey) != base64.RawStdEncoding.EncodeToString(key.PublicKey().Bytes()) {
+		if backupVersion.Algorithm != id.KeyBackupAlgorithmMegolmBackupV1 || string(backupVersion.AuthData.PublicKey) != base64.RawStdEncoding.EncodeToString(key.PublicKey().Bytes()) {
 			return nil, errors.New("backup key mismatch")
 		}
-		data, err := cli.GetKeyBackupForRoomAndSession(ctx, version.Version, req.RoomID, encrypted.SessionID)
+		data, err := cli.GetKeyBackupForRoomAndSession(ctx, backupVersion.Version, req.RoomID, encrypted.SessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -179,34 +226,8 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 			body = "New message"
 		}
 	}
-	// Three fixed metadata reads share one short budget; never download the
-	// room's member list or fetch anything for unrelated conversations.
-	metadataCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	sender := evt.Sender.String()
-	var senderAvatar id.ContentURIString
-	var roomName event.RoomNameEventContent
-	var roomAvatar event.RoomAvatarEventContent
-	var names sync.WaitGroup
-	names.Add(3)
-	go func() {
-		defer names.Done()
-		if profile, err := cli.GetProfile(metadataCtx, evt.Sender); err == nil {
-			if name := strings.TrimSpace(profile.DisplayName); name != "" {
-				sender = name
-			}
-			senderAvatar = id.ContentURIString(profile.AvatarURL.String())
-		}
-	}()
-	go func() {
-		defer names.Done()
-		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomName, "", &roomName)
-	}()
-	go func() {
-		defer names.Done()
-		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomAvatar, "", &roomAvatar)
-	}()
-	names.Wait()
+	roomMetadata.Wait()
+	senderProfile.Wait()
 	title := sender
 	name := strings.TrimSpace(roomName.Name)
 	isGroup := name != "" && name != sender

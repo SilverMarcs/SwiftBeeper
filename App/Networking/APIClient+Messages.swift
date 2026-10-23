@@ -1,9 +1,10 @@
 import Foundation
 
 extension APIClient {
-    static func listMessages(chatID: String, cursor: String? = nil, direction: String? = nil) async throws -> ListMessagesOutput {
-        struct Arguments: Encodable { let chatID: String; let cursor: String?; let direction: String? }
-        return try await execute("list-messages", arguments: Arguments(chatID: chatID, cursor: cursor, direction: direction))
+    /// The newest page of messages, or the page older than `cursor`.
+    static func listMessages(chatID: String, cursor: String? = nil) async throws -> ListMessagesOutput {
+        struct Arguments: Encodable { let chatID: String; let cursor: String? }
+        return try await execute("list-messages", arguments: Arguments(chatID: chatID, cursor: cursor))
     }
 
     static func sendMessage(chatID: String, text: String?, replyToMessageID: String? = nil, attachment: MessageAttachmentInput? = nil) async throws -> SendMessageOutput {

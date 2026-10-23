@@ -6,7 +6,6 @@ struct ChatParticipant: Identifiable, Codable, Equatable, Sendable {
     let fullName: String?
     let imgURL: String?
     let isSelf: Bool?
-    let cannotMessage: Bool?
 
     var displayName: String {
         if let fullName, fullName.isEmpty == false {
@@ -71,7 +70,6 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
     var preview: Message?
     var isMuted: Bool?
     var type: ChatKind?
-    var isPinned: Bool?
     var isArchived: Bool?
     var isMarkedUnread: Bool? = nil
     var accountID: String?
@@ -92,11 +90,6 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
 
     var otherParticipant: ChatParticipant? {
         participants?.items.first(where: { $0.isSelf != true })
-    }
-
-    var cannotMessage: Bool {
-        guard isSingleChat else { return false }
-        return otherParticipant?.cannotMessage == true
     }
 
     func participant(with id: String) -> ChatParticipant? {

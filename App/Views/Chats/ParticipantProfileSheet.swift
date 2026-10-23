@@ -40,10 +40,6 @@ struct ParticipantProfileSheet: View {
                     if participant.isSelf == true {
                         row("Account", value: "You")
                     }
-
-                    if participant.cannotMessage == true {
-                        row("Messaging", value: "Unavailable")
-                    }
                 }
 
                 Section("Identifiers") {

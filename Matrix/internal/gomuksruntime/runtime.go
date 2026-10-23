@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -20,11 +19,9 @@ import (
 // Runtime owns the on-device Matrix client and its SQLite store.
 // The upstream gomuks web application and server are not part of Relay.
 type Runtime struct {
-	dataDir        string
-	client         *hicli.HiClient
-	eventMu        sync.RWMutex
-	listeners      map[uint64]func(any)
-	nextListenerID uint64
+	dataDir string
+	client  *hicli.HiClient
+	onEvent func(any)
 }
 
 func New(stateDir string) (*Runtime, error) {
@@ -36,7 +33,7 @@ func New(stateDir string) (*Runtime, error) {
 		return nil, err
 	}
 	// Preserve the existing profile layout and encryption pickle key.
-	return &Runtime{dataDir: filepath.Join(root, "data"), listeners: make(map[uint64]func(any))}, nil
+	return &Runtime{dataDir: filepath.Join(root, "data")}, nil
 }
 
 func (r *Runtime) Start(ctx context.Context) error {
@@ -56,7 +53,6 @@ func (r *Runtime) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 	hicli.InitialDeviceDisplayName = "Relay"
-	hicli.HTMLSanitizerImgSrcTemplate = "_gomuks/media/%s/%s?encrypted=false"
 	cli := hicli.New(rawDB, nil, log, []byte("meow"), r.emit)
 	if transport, ok := cli.Client.Client.Transport.(*http.Transport); ok {
 		transport.ForceAttemptHTTP2 = false
@@ -88,26 +84,15 @@ func (r *Runtime) Stop() {
 
 func (r *Runtime) Client() *hicli.HiClient { return r.client }
 
-// Sync events go straight to the in-process subscriber. There is no socket,
-// replay buffer, acknowledgement tracking, or web-push producer.
-func (r *Runtime) Subscribe(listener func(any)) func() {
-	r.eventMu.Lock()
-	r.nextListenerID++
-	listenerID := r.nextListenerID
-	r.listeners[listenerID] = listener
-	r.eventMu.Unlock()
-	return func() {
-		r.eventMu.Lock()
-		delete(r.listeners, listenerID)
-		r.eventMu.Unlock()
-	}
+// SetEventHandler routes sync events straight to their one in-process
+// consumer. Set it before Start.
+func (r *Runtime) SetEventHandler(handler func(any)) {
+	r.onEvent = handler
 }
 
 func (r *Runtime) emit(evt any) {
-	r.eventMu.RLock()
-	defer r.eventMu.RUnlock()
-	for _, listener := range r.listeners {
-		listener(evt)
+	if r.onEvent != nil {
+		r.onEvent(evt)
 	}
 }
 

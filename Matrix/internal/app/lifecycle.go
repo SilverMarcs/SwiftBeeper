@@ -85,6 +85,8 @@ func (r *Runtime) setMobileActive(active bool) {
 		state.cancel, state.context, state.roomCancel = nil, nil, nil
 		state.generation++
 		state.mu.Unlock()
+		// Also stops the sync gomuks starts itself right after verification,
+		// which the context above doesn't own.
 		if cli != nil {
 			cli.PauseLocalSync()
 		}

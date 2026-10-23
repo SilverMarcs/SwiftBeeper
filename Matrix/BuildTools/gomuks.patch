@@ -28,13 +28,6 @@
 +	CryptoStore     *crypto.SQLCryptoStore
 +	ClientStore     *database.ClientStateStore
 +	Log             zerolog.Logger
-@@ -60 +61,0 @@
--	LogoutFunc   func(context.Context) error
-@@ -71,2 +71,0 @@
--	jsonRequestsLock sync.Mutex
--	jsonRequests     map[int64]context.CancelCauseFunc
-@@ -106 +104,0 @@
--		jsonRequests:          make(map[int64]context.CancelCauseFunc),
 @@ -175,0 +174,8 @@
 +	return h.startClient(ctx, userID, expectedAccount, false)
 +}
@@ -164,89 +157,6 @@
 +    writeEscapedString(w, block.String())
 +    w.WriteString("</code></pre>")
 +}
---- a/pkg/hicli/json.go
-+++ b/pkg/hicli/json.go
-@@ -9,12 +9 @@
--import (
--	"context"
--	"encoding/json"
--	"errors"
--	"fmt"
--
--	"go.mau.fi/util/exerrors"
--
--	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
--)
--
--type JSONCommand = jsoncmd.Container[json.RawMessage]
-+import "go.mau.fi/gomuks/pkg/hicli/jsoncmd"
-@@ -40,42 +28,0 @@
--func (h *HiClient) SubmitJSONCommand(ctx context.Context, req *JSONCommand) *JSONCommand {
--	log := h.Log.With().Int64("request_id", req.RequestID).Stringer("command", req.Command).Logger()
--	ctx, cancel := context.WithCancelCause(ctx)
--	defer func() {
--		cancel(nil)
--		h.jsonRequestsLock.Lock()
--		delete(h.jsonRequests, req.RequestID)
--		h.jsonRequestsLock.Unlock()
--	}()
--	ctx = log.WithContext(ctx)
--	h.jsonRequestsLock.Lock()
--	h.jsonRequests[req.RequestID] = cancel
--	h.jsonRequestsLock.Unlock()
--	resp, err := h.handleJSONCommand(ctx, req)
--	if err != nil {
--		if errors.Is(err, context.Canceled) {
--			causeErr := context.Cause(ctx)
--			if causeErr != ctx.Err() {
--				err = fmt.Errorf("%w: %w", err, causeErr)
--			}
--		}
--		return &JSONCommand{
--			Command:   jsoncmd.RespError,
--			RequestID: req.RequestID,
--			Data:      exerrors.Must(json.Marshal(err.Error())),
--		}
--	}
--	var respData json.RawMessage
--	respData, err = json.Marshal(resp)
--	if err != nil {
--		return &JSONCommand{
--			Command:   jsoncmd.RespError,
--			RequestID: req.RequestID,
--			Data:      exerrors.Must(json.Marshal(fmt.Sprintf("failed to marshal response json: %v", err))),
--		}
--	}
--	return &JSONCommand{
--		Command:   jsoncmd.RespSuccess,
--		RequestID: req.RequestID,
--		Data:      respData,
--	}
--}
---- a/pkg/hicli/jsoncmd/events.go
-+++ b/pkg/hicli/jsoncmd/events.go
-@@ -11 +10,0 @@
--	"fmt"
-@@ -19,19 +17,0 @@
--
--func EventTypeName(evt any) Name {
--	switch evt.(type) {
--	case *SyncComplete:
--		return EventSyncComplete
--	case *SyncStatus:
--		return EventSyncStatus
--	case *EventsDecrypted:
--		return EventEventsDecrypted
--	case *Typing:
--		return EventTyping
--	case *SendComplete:
--		return EventSendComplete
--	case *ClientState:
--		return EventClientState
--	default:
--		panic(fmt.Errorf("unknown event type %T", evt))
--	}
--}
 --- /dev/null
 +++ b/pkg/hicli/local_sync.go
 @@ -0,0 +1,10 @@
