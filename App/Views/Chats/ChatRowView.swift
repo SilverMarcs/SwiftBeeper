@@ -17,7 +17,7 @@ struct ChatRowView: View {
                 HStack {
                     Text(chat.displayTitle)
                         .font(.body)
-                        .fontWeight(chat.unreadCount > 0 ? .bold : .regular)
+                        // .fontWeight(chat.unreadCount > 0 ? .bold : .regular)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
@@ -33,9 +33,13 @@ struct ChatRowView: View {
                 HStack {
                     if let previewText = chat.previewText {
                         Text(previewText)
+                            #if os(iOS)
+                            .font(.callout)
+                            #else
                             .font(.body)
+                            #endif
                             .foregroundStyle(.secondary)
-                            .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
+                            // .fontWeight(chat.unreadCount > 0 ? .medium : .regular)
                             .lineLimit(2, reservesSpace: true)
                     }
 
@@ -55,6 +59,8 @@ struct ChatRowView: View {
         }
         #if os(macOS)
         .padding(5)
+        #else
+        .padding(-1)
         #endif
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             ChatRowActionsView(

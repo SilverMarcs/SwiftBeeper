@@ -1,6 +1,15 @@
 {
-  "originHash" : "e2a589ee95af1c8a590a91f7a02c0533cb2002f55b7af3f323f019bd6e70ea64",
+  "originHash" : "829ec6d8a27bf8adadc46bbf2405bc20acf91213a9e32893cd4917277456f7e4",
   "pins" : [
+    {
+      "identity" : "chatlayout",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ekazaev/ChatLayout",
+      "state" : {
+        "revision" : "dd4cb5c8f91623331ba023d0ab64d844f8436204",
+        "version" : "2.5.2"
+      }
+    },
     {
       "identity" : "ogg-swift",
       "kind" : "remoteSourceControl",

@@ -42,13 +42,6 @@ final class MessageSendAnimator {
         flights.first { $0.confirmedMessageIDs.contains(id) }
     }
 
-    func isAnimatingTail(_ timelineID: String?) -> Bool {
-        guard let timelineID else { return false }
-        return flights.contains {
-            timelineID == "outgoing-\($0.id.uuidString)" || $0.confirmedMessageIDs.contains(timelineID)
-        }
-    }
-
     func start(_ id: UUID) {
         guard let flight = flights.first(where: { $0.id == id }),
               flight.startedAt == nil else { return }
