@@ -459,6 +459,12 @@ func applyStoredMessageContent(message *compat.Message, evt *database.Event, evt
 	content.RemovePerMessageProfileFallback()
 
 	if attachment, ok := messageAttachment(content, evtType); ok {
+		// One media part is currently mapped per event. Its identity survives
+		// a bridge edit replacing a Reel thumbnail with the actual video.
+		attachment.ID = string(evt.ID)
+		if unresolvedReelContent(evt.GetContent()) != nil {
+			attachment.Type = compat.AttachmentType("reel")
+		}
 		message.Attachments = []compat.Attachment{attachment}
 		// Matrix requires a Body for media and commonly fills it with the
 		// filename. GetCaption returns only actual authored caption text.

@@ -55,6 +55,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.markChatRead(ctx, input)
 	case "list-messages":
 		return s.listMessages(ctx, input)
+	case "resolve-media":
+		return s.resolveMedia(ctx, input)
 	case "send-message":
 		return s.sendMessage(ctx, input)
 	case "edit-message":

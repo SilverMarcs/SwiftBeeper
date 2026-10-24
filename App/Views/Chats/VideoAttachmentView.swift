@@ -1,102 +1,112 @@
-import SwiftMediaViewer
-import SwiftUI
 import AVKit
-
-
+import SwiftUI
 
 struct VideoAttachmentView: View {
     let attachment: Attachment
+    let message: Message
 
+    @Environment(ChatStore.self) private var chatStore
     @AppStorage("autoplay") private var autoplay = true
     @AppStorage("muteOnPlay") private var muteOnPlay = false
-
-    @State private var showVideo = false
+    @State private var playback = AttachmentVideoPlayback()
     @State private var userRequestedPlay = false
-    @State private var playbackURL: URL?
-
-    private let maxWidth: CGFloat = Device.isMacOrPad ? 400 : 275
-    private let maxHeight: CGFloat = 500
+    @State private var hasRequestedResolution = false
+    @State private var isVisible = false
+    @State private var showFullScreen = false
 
     var body: some View {
-        Group {
-            if showVideo, let urlString = playbackURL?.absoluteString {
-                // SMVVideo shows an inline player and zooms to a full-screen
-                // AVPlayer on tap; autoplay it since we only reach here once the
-                // poster has been swapped out (by tap or the autoplay delay).
-                let shouldPlay = autoplay || userRequestedPlay
-                #if os(macOS)
-                MacVideoPlayer(urlString: urlString, autoplay: shouldPlay, muteOnPlay: muteOnPlay)
-                #else
-                SMVVideo(videoURL: urlString, autoplay: shouldPlay, muteOnPlay: muteOnPlay)
-                #endif
-            } else {
-                preview
+        ZStack {
+            if playback.hasPlayer {
+                InlineVideoPlayer(player: playback.player) { showFullScreen = true }
+            }
+            if !playback.isReadyForPlayback {
+                VideoAttachmentPoster(source: attachment.type == .reel ? attachment.resolvedURL : attachment.posterImg)
+                    .overlay {
+                        if chatStore.failedMediaIDs.contains(message.id) {
+                            Button("Retry Reel", systemImage: "arrow.clockwise") {
+                                userRequestedPlay = true
+                                hasRequestedResolution = true
+                                Task { await chatStore.resolveMedia(message, retry: true) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(chatStore.resolvingMediaIDs.count >= 2)
+                        } else if playback.hasFailed {
+                            Button("Retry Video", systemImage: "arrow.clockwise") {
+                                Task { await loadVideo() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else {
+                            VideoPlaybackControl(isLoading: shouldPlay) {
+                                userRequestedPlay = true
+                            }
+                        }
+                    }
             }
         }
         .frame(width: videoSize.width, height: videoSize.height)
         .clipShape(.rect(cornerRadius: 12))
-        .task(id: showVideo) {
-            guard showVideo, let source = attachment.resolvedURL else { return }
-            playbackURL = await MatrixMedia.temporaryFile(for: source, fileExtension: "mp4")
-        }
-    }
-
-    // Poster + play button. With autoplay on, this shows for ~1s then hands off
-    // to SMVVideo — so videos don't all start fetching at once while scrolling.
-    private var preview: some View {
-        Button {
-            userRequestedPlay = true
-            showVideo = true
-        } label: {
-            posterImage
-                .overlay {
-                    if !autoplay {
-                        Image(systemName: "play.fill")
-                            .font(.title2)
-                            .padding()
-                            .background(.black.opacity(0.5), in: .circle)
-                            .foregroundStyle(.white)
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-        .task {
+        .onScrollVisibilityChange(threshold: 0.25) { isVisible = $0 }
+        .task(id: loadRequest) {
+            guard let request = loadRequest else { return }
             do {
-                try await Task.sleep(for: .seconds(1))
-            } catch {
-                return
-            }
-            showVideo = true
+                // A Play tap has already expressed intent. Autoplay waits briefly
+                // so passing a video while scrolling need not download it.
+                if !hasRequestedResolution && !userRequestedPlay {
+                    try await Task.sleep(for: .seconds(1))
+                }
+                try Task.checkCancellation()
+                switch request {
+                case .resolve:
+                    hasRequestedResolution = true
+                    await chatStore.resolveMedia(message)
+                case .play:
+                    await loadVideo()
+                }
+            } catch { }
         }
+        .onDisappear {
+            if !showFullScreen { playback.stop() }
+        }
+        #if !os(macOS)
+        .fullScreenCover(isPresented: $showFullScreen) {
+            FullScreenVideoView(player: playback.player)
+        }
+        #endif
     }
 
-    @ViewBuilder
-    private var posterImage: some View {
-        if let posterURL = MatrixMedia.displayURL(for: attachment.posterImg) {
-            CachedAsyncImage(url: posterURL, targetSize: 450) {
-                Color.clear.subtleBackground()
+    private var shouldPlay: Bool { autoplay || userRequestedPlay }
+
+    private var loadRequest: VideoAttachmentRequest? {
+        guard shouldPlay, isVisible else { return nil }
+        if attachment.type == .reel {
+            guard !chatStore.failedMediaIDs.contains(message.id),
+                  chatStore.resolvingMediaIDs.contains(message.id) || chatStore.resolvingMediaIDs.count < 2 else {
+                return nil
             }
-            .scaledToFill()
-        } else {
-            Color.clear.subtleBackground()
+            return .resolve(message.id)
         }
+        return attachment.resolvedURL.map { .play($0) }
+    }
+
+    private func loadVideo() async {
+        guard let source = attachment.resolvedURL else { return }
+        await playback.load(source: source, muted: muteOnPlay)
     }
 
     private var videoSize: CGSize {
+        let maxWidth: CGFloat = Device.isMacOrPad ? 400 : 275
+        let maxHeight: CGFloat = 500
         guard let w = attachment.size?.width, let h = attachment.size?.height,
               w > 0, h > 0 else {
             return CGSize(width: maxWidth, height: maxWidth)
         }
-
         let aspectRatio = CGFloat(w) / CGFloat(h)
         var width = min(CGFloat(w), maxWidth)
         var height = width / aspectRatio
-
         if height > maxHeight {
             height = maxHeight
             width = height * aspectRatio
         }
-
         return CGSize(width: width, height: height)
     }
 }

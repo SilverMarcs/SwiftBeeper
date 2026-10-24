@@ -1,6 +1,11 @@
 import Foundation
 
 extension APIClient {
+    static func resolveMedia(chatID: String, messageID: String) async throws {
+        struct Arguments: Encodable { let chatID: String; let messageID: String }
+        try await executeRaw("resolve-media", arguments: Arguments(chatID: chatID, messageID: messageID))
+    }
+
     /// The newest page of messages, or the page older than `cursor`.
     static func listMessages(chatID: String, cursor: String? = nil) async throws -> ListMessagesOutput {
         struct Arguments: Encodable { let chatID: String; let cursor: String? }

@@ -6,13 +6,14 @@ struct AttachmentView: View {
     let chat: Chat
 
     var body: some View {
-        if attachment.isImage {
+        switch attachment.type {
+        case .image:
             ImageAttachmentView(attachment: attachment)
-        } else if attachment.isVideo {
-            VideoAttachmentView(attachment: attachment)
-        } else if attachment.isAudio {
+        case .video, .reel:
+            VideoAttachmentView(attachment: attachment, message: message)
+        case .audio:
             AudioAttachmentView(attachment: attachment, message: message, chat: chat)
-        } else {
+        case .unknown, .none:
             FileAttachmentView(attachment: attachment, isOutgoing: message.isSender)
         }
     }

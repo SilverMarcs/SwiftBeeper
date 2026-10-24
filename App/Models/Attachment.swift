@@ -44,6 +44,7 @@ struct AttachmentSize: Codable, Equatable, Sendable {
 enum AttachmentKind: RawRepresentable, Codable, Equatable, Sendable {
     case image
     case video
+    case reel
     case audio
     case unknown(String)
 
@@ -53,6 +54,8 @@ enum AttachmentKind: RawRepresentable, Codable, Equatable, Sendable {
             self = .image
         case "video":
             self = .video
+        case "reel":
+            self = .reel
         case "audio":
             self = .audio
         default:
@@ -66,6 +69,8 @@ enum AttachmentKind: RawRepresentable, Codable, Equatable, Sendable {
             return "img"
         case .video:
             return "video"
+        case .reel:
+            return "reel"
         case .audio:
             return "audio"
         case .unknown(let value):
@@ -105,18 +110,16 @@ struct Attachment: Identifiable, Codable, Equatable, Sendable {
         case isGif, duration, posterImg, size
     }
 
-    var isImage: Bool { type == .image }
-    var isVideo: Bool { type == .video }
-    var isAudio: Bool { type == .audio }
-
     var resolvedURL: String? {
         srcURL ?? _id
     }
 
     var typeLabel: String {
-        if isImage { return "image" }
-        if isVideo { return "video" }
-        if isAudio { return "audio" }
-        return "file"
+        switch type {
+        case .image: "image"
+        case .video, .reel: "video"
+        case .audio: "audio"
+        case .unknown, .none: "file"
+        }
     }
 }

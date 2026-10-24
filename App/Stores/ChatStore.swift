@@ -162,6 +162,8 @@ final class ChatStore {
     private(set) var lastReadByOtherSortKey: String?
     private(set) var isLoadingOlderMessages = false
     private(set) var isLoadingMessages = false
+    private(set) var resolvingMediaIDs: Set<String> = []
+    private(set) var failedMediaIDs: Set<String> = []
     /// New messages use independent optimistic outbox items; edits still use a
     /// blocking request and temporarily lock the composer.
     private(set) var isSavingEdit = false
@@ -281,6 +283,8 @@ final class ChatStore {
     }
 
     private func clearState() {
+        resolvingMediaIDs = []
+        failedMediaIDs = []
         notificationChatTask?.cancel()
         notificationChatTask = nil
         notificationChatRequestID = UUID()
@@ -523,6 +527,42 @@ final class ChatStore {
 
     // MARK: - Message loading (open chat only)
 
+    /// At most two bridge requests at once. Keep attempts outside the row so
+    /// scrolling and view recreation cannot duplicate a request or retry loop.
+    func resolveMedia(_ message: Message, retry: Bool = false) async {
+        guard isSignedIn, message.attachments?.contains(where: { $0.type == .reel }) == true,
+              selectedChatID == message.chatID, !Task.isCancelled,
+              resolvingMediaIDs.count < 2,
+              !resolvingMediaIDs.contains(message.id),
+              retry || !failedMediaIDs.contains(message.id) else { return }
+        let session = session
+        resolvingMediaIDs.insert(message.id)
+        failedMediaIDs.remove(message.id)
+        defer {
+            if self.session == session { resolvingMediaIDs.remove(message.id) }
+        }
+        do {
+            try await APIClient.resolveMedia(chatID: message.chatID, messageID: message.id)
+            // The response acknowledges the bridge edit, not its arrival in
+            // local sync. Keep the spinner until the original bubble updates.
+            // Check local state only; this does not poll the server.
+            for _ in 0..<40 {
+                guard self.session == session, selectedChatID == message.chatID else { return }
+                guard messages.contains(where: {
+                    $0.id == message.id && $0.attachments?.contains(where: { $0.type == .reel }) == true
+                }) else { return }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+            failedMediaIDs.insert(message.id)
+        } catch is CancellationError {
+            // Sync replaced the row, or it left the viewport. Do not turn a
+            // successful resolution into an error on the replacement row.
+        } catch {
+            guard self.session == session else { return }
+            failedMediaIDs.insert(message.id)
+        }
+    }
+
     /// Reloads the open chat's newest page on open, reconnect, or resync.
     /// Steady-state changes arrive as events.
     func loadMessages() async {
@@ -586,6 +626,9 @@ final class ChatStore {
         var byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         for message in incoming {
             byID[message.id] = message
+            if message.attachments?.contains(where: { $0.type == .reel }) != true {
+                failedMediaIDs.remove(message.id)
+            }
         }
         let updated = byID.values.sorted { ($0.numericSortKey, $0.id) < ($1.numericSortKey, $1.id) }
         // Database reloads often equal the event-applied state; skip the no-op write.
@@ -594,6 +637,7 @@ final class ChatStore {
 
     /// Only the open chat keeps a timeline in memory.
     private func resetTimeline() {
+        failedMediaIDs = []
         timelineGeneration = UUID()
         loadMessagesTask?.cancel()
         loadMessagesTask = nil
