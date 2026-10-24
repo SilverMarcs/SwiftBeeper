@@ -19,8 +19,8 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let isUnread: Bool?
     let reactions: [Reaction]?
     let linkedMessageID: String?
-    /// True when the server has redacted this message. Its original content may
-    /// still be present when the server observed it before the redaction.
+    /// True when the homeserver has redacted this message. Its original content
+    /// may still be present when the core saw it before the redaction.
     let isDeleted: Bool?
     /// Local transaction identifier attached to realtime events.
     /// History pages may omit it.
@@ -30,9 +30,7 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     var numericSortKey: Int64 { Int64(sortKey) ?? 0 }
 
     var senderDisplayName: String {
-        if let senderName, senderName.isEmpty == false {
-            return senderName
-        }
+        if let senderName, !senderName.isEmpty { return senderName }
         return senderID
     }
 
@@ -40,11 +38,9 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         if let visibleText {
             return visibleText
         }
-
         if let attachments, let first = attachments.first {
             return "Sent \(attachments.count > 1 ? "\(attachments.count) attachments" : "an \(first.typeLabel)")"
         }
-
         return "Deleted message"
     }
 
@@ -54,7 +50,7 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     }
 
     var hasRetainedDeletedContent: Bool {
-        isDeleted == true && (hasText || (attachments ?? []).isEmpty == false)
+        isDeleted == true && (hasText || !(attachments ?? []).isEmpty)
     }
 
     /// User-visible body text after suppressing Matrix's required media
@@ -67,50 +63,39 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
                 && scalar.properties.generalCategory != .format
         }) else { return nil }
 
-        // The API echoes the attachment filename as message text for media messages.
+        // Media messages carry the attachment filename as their body text.
         // Suppress it so we don't show a redundant text bubble (e.g. "image" or "IMG_2647.jpeg").
-        if let attachments, !attachments.isEmpty {
-            if attachments.contains(where: { attachment in
-                guard let fileName = attachment.fileName?.trimmed, !fileName.isEmpty else { return false }
-                return fileName.localizedStandardCompare(trimmed) == .orderedSame
-            }) {
-                return nil
-            }
-        }
-
-        return trimmed
+        let isFileNameFallback = attachments?.contains { attachment in
+            guard let fileName = attachment.fileName?.trimmed, !fileName.isEmpty else { return false }
+            return fileName.localizedStandardCompare(trimmed) == .orderedSame
+        } ?? false
+        return isFileNameFallback ? nil : trimmed
     }
 
     var hasText: Bool { visibleText != nil }
 
     var timestampText: String {
         let calendar = Calendar.app
-        if calendar.component(.year, from: timestamp) == calendar.component(.year, from: Date()) {
+        if calendar.component(.year, from: timestamp) == calendar.component(.year, from: .now) {
             return timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute())
         }
         return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// Reactions grouped by key, in key order; nil when there are none.
     var groupedReactions: [GroupedReaction]? {
-        guard let reactions, !reactions.isEmpty else {
-            return nil
-        }
-
-        var groups: [String: GroupedReaction] = [:]
-        for reaction in reactions {
-            if var existing = groups[reaction.reactionKey] {
-                existing.count += 1
-                existing.participantIDs.append(reaction.participantID)
-                groups[reaction.reactionKey] = existing
-            } else {
-                groups[reaction.reactionKey] = GroupedReaction(
-                    reactionKey: reaction.reactionKey,
-                    count: 1,
-                    participantIDs: [reaction.participantID]
-                )
+        guard let reactions, !reactions.isEmpty else { return nil }
+        return Dictionary(grouping: reactions, by: \.reactionKey)
+            .map { key, group in
+                GroupedReaction(reactionKey: key, count: group.count, participantIDs: group.map(\.participantID))
             }
-        }
-
-        return groups.values.sorted(by: { $0.reactionKey < $1.reactionKey })
+            .sorted { $0.reactionKey < $1.reactionKey }
     }
+}
+
+struct GroupedReaction: Identifiable {
+    var id: String { reactionKey }
+    let reactionKey: String
+    let count: Int
+    let participantIDs: [String]
 }

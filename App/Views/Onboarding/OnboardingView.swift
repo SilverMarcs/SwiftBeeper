@@ -8,7 +8,7 @@ struct OnboardingView: View {
             .id(needsRecovery)
             .task {
                 if let state = try? await APIClient.manageState() {
-                    needsRecovery = state.clientState?.isLoggedIn == true && state.clientState?.isVerified != true
+                    needsRecovery = state.isLoggedIn && !state.isVerified
                 }
             }
     }

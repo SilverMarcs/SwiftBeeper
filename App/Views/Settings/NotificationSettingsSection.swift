@@ -27,6 +27,11 @@ struct NotificationSettingsSection: View {
                     }
                 case nil:
                     ProgressView().controlSize(.small)
+                #if os(iOS)
+                case .ephemeral:
+                    // Only App Clips get ephemeral authorization.
+                    Button("Retry", action: reconnect)
+                #endif
                 @unknown default:
                     Button("Retry", action: reconnect)
                 }

@@ -5,11 +5,7 @@ struct BeeperSignInView: View {
     @State private var model: BeeperSignInModel
 
     init(startsWithRecoveryKey: Bool) {
-        _model = State(
-            initialValue: BeeperSignInModel(
-                startsWithRecoveryKey: startsWithRecoveryKey
-            )
-        )
+        _model = State(initialValue: BeeperSignInModel(startsWithRecoveryKey: startsWithRecoveryKey))
     }
 
     var body: some View {

@@ -2,7 +2,8 @@ import Foundation
 @preconcurrency import Intents
 @preconcurrency import UserNotifications
 
-/// Restore the native communication presentation used before the Matrix move.
+/// Presents a decrypted push as a communication notification, with the
+/// sender's avatar and the group name, by donating a message intent.
 enum CommunicationNotification {
     nonisolated static func content(from content: UNNotificationContent,
                                     preview: NotificationPreview) async -> UNNotificationContent {
@@ -38,7 +39,7 @@ enum CommunicationNotification {
         do {
             try await interaction.donate()
             guard let updated = try content.updating(from: intent).mutableCopy() as? UNMutableNotificationContent else { return content }
-            // Keep the previous app's group title / sender / message layout.
+            // Keep Relay's title / sender / body layout over the intent's.
             updated.title = preview.title
             updated.subtitle = preview.isGroup ? preview.senderName : ""
             updated.body = preview.body

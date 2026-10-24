@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Starts the Matrix core and reads the sign-in state before showing `RootView`.
 struct AppStartupView: View {
     @Environment(SessionStore.self) private var sessionStore
     @State private var ready = false
@@ -27,7 +28,7 @@ struct AppStartupView: View {
                 errorMessage = nil
                 try await MatrixRuntime.shared.start()
                 let state = try await APIClient.manageState()
-                sessionStore.isSignedIn = state.clientState?.isLoggedIn == true && state.clientState?.isVerified == true
+                sessionStore.isSignedIn = state.isLoggedIn && state.isVerified
                 ready = true
             } catch { errorMessage = error.localizedDescription }
         }

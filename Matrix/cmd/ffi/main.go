@@ -1,3 +1,6 @@
+// Command ffi builds libRelayCore, the C archive the app links to run the
+// Matrix core in process. Commands and results are JSON strings; changes
+// stream to a callback.
 package main
 
 /*
@@ -20,6 +23,7 @@ import (
 	"encoding/json"
 	"runtime/cgo"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"relay/core/internal/app"
@@ -30,10 +34,6 @@ type ffiRuntime struct {
 	nextRealtimeID atomic.Uint64
 }
 
-func cString(value string) *C.char {
-	return C.CString(value)
-}
-
 func goString(value *C.char) string {
 	if value == nil {
 		return ""
@@ -41,18 +41,26 @@ func goString(value *C.char) string {
 	return C.GoString(value)
 }
 
+// marshalResult returns value as a C JSON string the caller frees with
+// RelayCoreFreeCString.
 func marshalResult(value any) *C.char {
 	raw, err := json.Marshal(value)
 	if err != nil {
-		return cString(`{"error":"failed to marshal ffi result"}`)
+		return C.CString(`{"error":"failed to marshal ffi result"}`)
 	}
-	return cString(string(raw))
+	return C.CString(string(raw))
+}
+
+func errorResult(message string) *C.char {
+	return marshalResult(map[string]any{"error": message})
 }
 
 func runtimeFromHandle(handle C.RelayCoreHandle) *ffiRuntime {
 	return cgo.Handle(handle).Value().(*ffiRuntime)
 }
 
+// RelayCoreCreate returns a handle for a new core, or 0 on failure.
+//
 //export RelayCoreCreate
 func RelayCoreCreate(cfgJSON *C.char) C.RelayCoreHandle {
 	var cfg app.Config
@@ -68,10 +76,11 @@ func RelayCoreCreate(cfgJSON *C.char) C.RelayCoreHandle {
 	return C.RelayCoreHandle(cgo.NewHandle(&ffiRuntime{runtime: rt}))
 }
 
+// RelayCoreStart returns 0 on success and 1 on failure.
+//
 //export RelayCoreStart
 func RelayCoreStart(handle C.RelayCoreHandle) C.int {
-	rt := runtimeFromHandle(handle)
-	if err := rt.runtime.Start(context.Background()); err != nil {
+	if err := runtimeFromHandle(handle).runtime.Start(context.Background()); err != nil {
 		return 1
 	}
 	return 0
@@ -82,6 +91,29 @@ func RelayCoreDestroy(handle C.RelayCoreHandle) {
 	h := cgo.Handle(handle)
 	h.Value().(*ffiRuntime).runtime.Stop()
 	h.Delete()
+}
+
+// RelayCoreCommand runs one JSON command and returns its JSON result, or an
+// object with an "error" message.
+//
+//export RelayCoreCommand
+func RelayCoreCommand(handle C.RelayCoreHandle, input *C.char) *C.char {
+	var command app.Command
+	raw := json.RawMessage(goString(input))
+	if json.Unmarshal(raw, &command) != nil {
+		return errorResult("Invalid local command")
+	}
+	timeout := 20 * time.Second
+	if command.Action == "login-custom" || command.Action == "verify" {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	result, err := runtimeFromHandle(handle).runtime.Execute(ctx, command, raw)
+	if err != nil {
+		return errorResult(err.Error())
+	}
+	return marshalResult(result)
 }
 
 // RelayCoreRealtimeConnect opens the app's change stream. Opening a new one
@@ -102,14 +134,17 @@ func RelayCoreRealtimeConnect(handle C.RelayCoreHandle, callback C.RelayCoreReal
 	return C.RelayCoreRealtimeHandle(realtimeID)
 }
 
+// RelayCoreRealtimeSubscribe takes a JSON array of the room IDs to stream
+// message changes for. It returns NULL on success, or an error result.
+//
 //export RelayCoreRealtimeSubscribe
 func RelayCoreRealtimeSubscribe(handle C.RelayCoreHandle, realtimeHandle C.RelayCoreRealtimeHandle, payloadJSON *C.char) *C.char {
 	var roomIDs []string
 	if err := json.Unmarshal([]byte(goString(payloadJSON)), &roomIDs); err != nil {
-		return marshalResult(map[string]any{"error": "invalid room subscriptions"})
+		return errorResult("invalid room subscriptions")
 	}
 	if err := runtimeFromHandle(handle).runtime.SubscribeRealtime(uint64(realtimeHandle), roomIDs); err != nil {
-		return marshalResult(map[string]any{"error": err.Error()})
+		return errorResult(err.Error())
 	}
 	return nil
 }

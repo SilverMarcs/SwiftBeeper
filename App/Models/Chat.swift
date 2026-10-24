@@ -8,12 +8,8 @@ struct ChatParticipant: Identifiable, Codable, Equatable, Sendable {
     let isSelf: Bool?
 
     var displayName: String {
-        if let fullName, fullName.isEmpty == false {
-            return fullName
-        }
-        if let username, username.isEmpty == false {
-            return username
-        }
+        if let fullName, !fullName.isEmpty { return fullName }
+        if let username, !username.isEmpty { return username }
         return id
     }
 }
@@ -24,6 +20,7 @@ struct ChatParticipants: Codable, Equatable, Sendable {
     let total: Int?
 }
 
+/// The core's chat type, keeping values this app doesn't know.
 enum ChatKind: RawRepresentable, Codable, Equatable, Sendable {
     case single
     case group
@@ -31,32 +28,25 @@ enum ChatKind: RawRepresentable, Codable, Equatable, Sendable {
 
     init(rawValue: String) {
         switch rawValue {
-        case "single":
-            self = .single
-        case "group":
-            self = .group
-        default:
-            self = .unknown(rawValue)
+        case "single": self = .single
+        case "group": self = .group
+        default: self = .unknown(rawValue)
         }
     }
 
     var rawValue: String {
         switch self {
-        case .single:
-            return "single"
-        case .group:
-            return "group"
-        case .unknown(let value):
-            return value
+        case .single: "single"
+        case .group: "group"
+        case .unknown(let value): value
         }
     }
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        self = ChatKind(rawValue: try container.decode(String.self))
+    init(from decoder: any Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }
@@ -71,7 +61,7 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
     var isMuted: Bool?
     var type: ChatKind?
     var isArchived: Bool?
-    var isMarkedUnread: Bool? = nil
+    var isMarkedUnread: Bool?
     var accountID: String?
     var lastActivity: Date?
     var lastReadMessageSortKey: String?

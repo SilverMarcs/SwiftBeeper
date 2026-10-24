@@ -1,9 +1,16 @@
+// Package dispatch maps the Swift app's JSON commands to Matrix operations on
+// the local gomuks client, and turns sync results into realtime changes.
 package dispatch
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
+
 	"relay/core/internal/gomuksruntime"
 )
 
@@ -20,31 +27,33 @@ func New(rt *gomuksruntime.Runtime) *Dispatcher {
 	return s
 }
 
+// Execute runs one command. Login commands work without a session; every
+// other command requires one.
 func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawMessage) (any, error) {
 	switch action {
 	case "state":
-		return s.getManageState()
+		return s.clientState()
 	case "beeper-start-login":
-		return s.manageBeeperStartLogin(ctx, input)
+		return s.beeperStartLogin(ctx, input)
 	case "beeper-request-code":
-		return s.manageBeeperRequestCode(ctx, input)
+		return s.beeperRequestCode(ctx, input)
 	case "beeper-submit-code":
-		return s.manageBeeperSubmitCode(ctx, input)
+		return s.beeperSubmitCode(ctx, input)
 	case "login-custom":
-		return s.manageLoginCustom(ctx, input)
+		return s.loginCustom(ctx, input)
 	case "verify":
-		return s.manageVerify(ctx, input)
+		return s.verify(ctx, input)
 	}
 	if err := s.requireLoggedInSession(); err != nil {
 		return nil, err
 	}
 	switch action {
 	case "session":
-		return s.getSession(ctx, input)
+		return s.getSession(ctx)
 	case "list-chats":
-		return s.listChats(ctx, input)
+		return s.listChats(ctx, input, chatPageSize)
 	case "search-chats":
-		return s.searchChats(ctx, input)
+		return s.listChats(ctx, input, searchChatsLimit)
 	case "get-chat":
 		return s.getChat(ctx, input)
 	case "archive-chat":
@@ -70,4 +79,39 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 	default:
 		return nil, fmt.Errorf("unknown Matrix command: %s", action)
 	}
+}
+
+func (s *Dispatcher) requireLoggedInSession() error {
+	cli := s.rt.Client()
+	if cli == nil || cli.Account == nil || cli.Client == nil || cli.Client.HomeserverURL == nil {
+		return errors.New("A logged-in Matrix session is required")
+	}
+	return nil
+}
+
+// decodeJSON reads a command's arguments, which share the JSON object with
+// its action name.
+func decodeJSON(input json.RawMessage, out any) error {
+	if err := json.Unmarshal(input, out); err != nil {
+		return fmt.Errorf("invalid arguments: %w", err)
+	}
+	return nil
+}
+
+// required trims an argument and reports it by name when it is empty.
+func required(value, name string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New(name + " is required")
+	}
+	return value, nil
+}
+
+// sqlSlots returns count comma-separated SQL placeholders.
+func sqlSlots(count int) string { return strings.TrimSuffix(strings.Repeat("?,", count), ",") }
+
+func randomID() string {
+	buf := make([]byte, 16)
+	_, _ = rand.Read(buf)
+	return hex.EncodeToString(buf)
 }

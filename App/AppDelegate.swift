@@ -9,15 +9,16 @@ typealias PlatformApplicationDelegate = UIApplicationDelegate
 typealias PlatformApplication = UIApplication
 #endif
 
+/// Receives APNs tokens and notification actions, and on macOS app activation.
 @MainActor
 final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificationCenterDelegate {
     static weak var notificationService: NotificationService?
     static weak var chatStore: ChatStore?
     static weak var inputManager: InputManager?
+
     #if os(macOS)
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UNUserNotificationCenter.current().delegate = self
-        NotificationService.registerCategories()
+        prepareNotificationCenter()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -29,8 +30,7 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
     }
     #else
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        UNUserNotificationCenter.current().delegate = self
-        NotificationService.registerCategories()
+        prepareNotificationCenter()
         return true
     }
     #endif
@@ -47,10 +47,9 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
         await MainActor.run {
             // Stay quiet for the chat already on screen.
             let content = notification.request.content
-            let chatID = content.userInfo["chatID"] as? String ?? content.threadIdentifier
-            if content.userInfo["replyDraft"] == nil,
+            if content.replyDraft == nil,
                Self.notificationService?.isAppActive == true,
-               !chatID.isEmpty, Self.chatStore?.visibleChatID == chatID {
+               !content.chatID.isEmpty, Self.chatStore?.visibleChatID == content.chatID {
                 return []
             }
             return [.banner, .sound]
@@ -63,22 +62,26 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
             // UIKit updates its snapshot when this completes; finish on the main actor.
             defer { completionHandler() }
             let content = response.notification.request.content
-            let chatID = content.userInfo["chatID"] as? String ?? content.threadIdentifier
+            let chatID = content.chatID
             guard !chatID.isEmpty else { return }
             if let reply = response as? UNTextInputNotificationResponse,
                response.actionIdentifier == NotificationCategory.reply {
-                let text = reply.userText
-                let messageID = content.userInfo["messageID"] as? String
-                await Self.sendReply(text, chatID: chatID, messageID: messageID)
+                await Self.sendReply(reply.userText, chatID: chatID, messageID: content.userInfo["messageID"] as? String)
             } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
-                let draft = content.userInfo["replyDraft"] as? String
-                if let draft { Self.inputManager?.restoreNotificationDraft(draft, for: chatID) }
+                if let draft = content.replyDraft { Self.inputManager?.restoreNotificationDraft(draft, for: chatID) }
                 Self.chatStore?.openNotificationChat(chatID)
             }
         }
     }
 
-    @MainActor private static func sendReply(_ text: String, chatID: String, messageID: String?) async {
+    /// Runs at launch, before any notification or action is delivered.
+    private func prepareNotificationCenter() {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.registerRelayCategories()
+    }
+
+    private static func sendReply(_ text: String, chatID: String, messageID: String?) async {
         #if !os(macOS)
         let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Notification Reply")
         defer {

@@ -1,6 +1,9 @@
 import Foundation
 import Synchronization
 
+/// Routes realtime payloads, which the core delivers on its own threads, to
+/// each connection's stream. Payloads that arrive before the stream registers
+/// are buffered, up to a limit.
 nonisolated final class MatrixEventHub: Sendable {
     static let shared = MatrixEventHub()
     private struct State {

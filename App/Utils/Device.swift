@@ -1,13 +1,7 @@
-//
-//  Device.swift
-//  Relay
-//
-//  Platform / idiom conveniences. Use these instead of scattering
-//  `#if os(...)` and `UIDevice.current.userInterfaceIdiom` checks.
-//
-
 import SwiftUI
 
+/// Platform and idiom checks, in place of scattered `#if os(...)` and
+/// `UIDevice.current.userInterfaceIdiom` checks.
 enum Device {
     static var isIPad: Bool {
         #if os(iOS)

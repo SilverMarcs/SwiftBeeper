@@ -1,20 +1,28 @@
 import Foundation
 import Observation
 
+/// Beeper's email-code sign-in, followed by the recovery key when the
+/// session can't decrypt yet.
 @MainActor
 @Observable
 final class BeeperSignInModel {
-    var step: BeeperSignInStep
-    var domain = "beeper.com"
+    enum Step {
+        case email
+        case code
+        case recoveryKey
+    }
+
+    private(set) var step: Step
     var email = ""
-    var requestID = ""
     var code = ""
     var recoveryKey = ""
-    var isWorking = false
-    var progressMessage = ""
-    var errorMessage: String?
+    private(set) var isWorking = false
+    private(set) var progressMessage = ""
+    private(set) var errorMessage: String?
     /// Set once the account is signed in and verified; the view then opens Relay.
     private(set) var isFinished = false
+    private let domain = "beeper.com"
+    private var requestID = ""
 
     init(startsWithRecoveryKey: Bool) {
         step = startsWithRecoveryKey ? .recoveryKey : .email
@@ -29,37 +37,27 @@ final class BeeperSignInModel {
     }
 
     var canSubmitRecoveryKey: Bool {
-        recoveryKey.trimmingCharacters(in: .whitespacesAndNewlines).count >= 16
-            && !isWorking
+        recoveryKey.trimmed.count >= 16 && !isWorking
     }
 
     func sendCode() async {
         await run("Sending your sign-in code…") {
             requestID = try await APIClient.beeperStartLogin(domain: domain)
-            try await APIClient.beeperRequestCode(
-                domain: domain,
-                request: requestID,
-                email: email
-            )
+            try await APIClient.beeperRequestCode(domain: domain, request: requestID, email: email)
             step = .code
         }
     }
 
     func submitCode() async {
         await run("Checking your code…") {
-            let normalizedCode = code.filter(\.isNumber)
             let jwt = try await APIClient.beeperSubmitCode(
                 domain: domain,
                 request: requestID,
-                code: normalizedCode
+                code: code.filter(\.isNumber)
             )
-            let homeserverURL = "https://matrix.\(domain)"
             progressMessage = "Connecting your account…"
-            let state = try await APIClient.loginCustomJWT(
-                homeserverURL: homeserverURL,
-                jwt: jwt
-            )
-            if state.clientState?.isVerified == true {
+            let state = try await APIClient.loginCustomJWT(homeserverURL: "https://matrix.\(domain)", jwt: jwt)
+            if state.isVerified {
                 isFinished = true
             } else {
                 step = .recoveryKey
@@ -69,8 +67,7 @@ final class BeeperSignInModel {
 
     func submitRecoveryKey() async {
         await run("Restoring your encryption keys…") {
-            let key = recoveryKey
-            _ = try await APIClient.verifyRecoveryKey(key)
+            _ = try await APIClient.verifyRecoveryKey(recoveryKey)
             recoveryKey = ""
             isFinished = true
         }

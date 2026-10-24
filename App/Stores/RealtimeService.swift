@@ -1,16 +1,20 @@
 import Foundation
 
 /// Streams change events from the in-process Matrix core to a single handler.
+/// Chat events always flow; message events only for the subscribed chats.
 @MainActor
 final class RealtimeService {
     var onEvent: (RealtimeEvent) -> Void = { _ in }
 
     private var connectionHandle: UInt?
     private var listenerTask: Task<Void, Never>?
+    /// The last event sequence number seen. The event buffers are bounded,
+    /// so a gap means events were dropped and the UI must resync.
     private var lastSequence = 0
     private var hasConnectedBefore = false
     private var messageChatIDs: Set<String> = []
 
+    /// Starts listening unless a listener is already running.
     func start() {
         guard listenerTask == nil else { return }
         listenerTask = Task { [weak self] in
@@ -28,12 +32,14 @@ final class RealtimeService {
         lastSequence = 0
     }
 
+    /// Stops and forgets the session, so the next connection is not a reconnect.
     func reset() {
         stop()
         hasConnectedBefore = false
         messageChatIDs = []
     }
 
+    /// The chats whose message events the core should deliver.
     func setMessageChats(_ ids: Set<String>) {
         guard ids != messageChatIDs else { return }
         messageChatIDs = ids
@@ -67,7 +73,8 @@ final class RealtimeService {
     }
 
     private func handle(_ data: Data) async {
-        guard let envelope = try? JSONDecoder().decode(EventEnvelope.self, from: data) else { return }
+        let decoder = JSONDecoder.beeper
+        guard let envelope = try? decoder.decode(EventEnvelope.self, from: data) else { return }
 
         switch envelope.type {
         case "ready":
@@ -83,7 +90,7 @@ final class RealtimeService {
             onEvent(.notificationPreferencesChanged)
         case "chat.upserted":
             trackSequence(in: envelope)
-            if let chat = (try? JSONDecoder.beeper.decode(EntriesPayload<Chat>.self, from: data))?.entries?.first {
+            if let chat = (try? decoder.decode(EntriesPayload<Chat>.self, from: data))?.entries?.first {
                 onEvent(.chatUpserted(chat))
             } else {
                 onEvent(.resyncRequired)
@@ -98,7 +105,7 @@ final class RealtimeService {
         case "message.upserted":
             trackSequence(in: envelope)
             // Deletions arrive here too, as messages with an isDeleted marker.
-            let messages = (try? JSONDecoder.beeper.decode(EntriesPayload<Message>.self, from: data))?.entries ?? []
+            let messages = (try? decoder.decode(EntriesPayload<Message>.self, from: data))?.entries ?? []
             if let chatID = envelope.chatID, !messages.isEmpty {
                 onEvent(.messagesUpserted(chatID: chatID, messages: messages))
             } else {

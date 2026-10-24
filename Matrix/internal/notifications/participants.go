@@ -66,3 +66,31 @@ func fetchRecipients(ctx context.Context, cli *mautrix.Client, roomID id.RoomID,
 	}
 	return recipients
 }
+
+// fetchAvatar downloads a small thumbnail of uri for the notification's
+// sender or room picture, or returns nil.
+func fetchAvatar(ctx context.Context, cli *mautrix.Client, uri id.ContentURIString) []byte {
+	parsed, err := uri.Parse()
+	if err != nil || parsed.IsEmpty() {
+		return nil
+	}
+	avatarCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	// Authenticated Matrix media stays on the homeserver. A small thumbnail
+	// bounds both the extension's memory use and its image-decoding work.
+	resp, err := cli.DownloadThumbnail(avatarCtx, parsed, 128, 128,
+		mautrix.DownloadThumbnailExtra{Method: "scale"})
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	const maximumBytes = 256 * 1024
+	if resp.StatusCode != http.StatusOK || resp.ContentLength > maximumBytes {
+		return nil
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maximumBytes+1))
+	if err != nil || len(data) > maximumBytes || !strings.HasPrefix(http.DetectContentType(data), "image/") {
+		return nil
+	}
+	return data
+}

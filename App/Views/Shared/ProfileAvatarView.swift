@@ -1,6 +1,7 @@
 import SwiftMediaViewer
 import SwiftUI
 
+/// A circular photo, or the name's initials while it loads or when there is none.
 struct ProfileAvatarView: View {
     let name: String
     let imageURLString: String?
@@ -8,15 +9,13 @@ struct ProfileAvatarView: View {
     var allowsFullscreen: Bool = false
 
     var body: some View {
+        let displayURL = MatrixMedia.displayURL(for: imageURLString)
         Group {
-            if allowsFullscreen, let displayURL = MatrixMedia.displayURL(for: imageURLString) {
+            if allowsFullscreen, let displayURL {
                 SMVImage(url: displayURL, targetSize: targetSize)
             } else {
-                CachedAsyncImage(
-                    url: MatrixMedia.displayURL(for: imageURLString),
-                    targetSize: targetSize
-                ) {
-                    initialsAvatar
+                CachedAsyncImage(url: displayURL, targetSize: targetSize) {
+                    InitialsAvatarView(name: name)
                 }
             }
         }
@@ -29,32 +28,17 @@ struct ProfileAvatarView: View {
     private var targetSize: Int {
         Int(dimension * 3)
     }
+}
 
-    private var initialsAvatar: some View {
-        Circle()
-            .fill(.quaternary)
-            .overlay {
-                Text(initials)
-                    .font(.caption)
-                    .bold()
-                    .foregroundStyle(.primary)
-            }
-    }
-
-    private var initials: String {
-        let words = name
-            .trimmed
-            .split(separator: " ")
-
-        let pickedCharacters = words.prefix(2).compactMap { word in
-            word.first.map(String.init)
-        }
-
-        if pickedCharacters.isEmpty {
-            return "?"
-        }
-
-        return pickedCharacters.joined()
+extension ProfileAvatarView {
+    /// A participant's photo, or their initials. A missing participant shows "?".
+    init(participant: ChatParticipant?, dimension: CGFloat, allowsFullscreen: Bool = false) {
+        self.init(
+            name: participant?.displayName ?? "?",
+            imageURLString: participant?.imgURL,
+            dimension: dimension,
+            allowsFullscreen: allowsFullscreen
+        )
     }
 }
 

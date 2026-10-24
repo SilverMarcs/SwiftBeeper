@@ -4,10 +4,8 @@ package notifications
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,11 +13,11 @@ import (
 
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/backup"
-	"maunium.net/go/mautrix/crypto/goolm/session"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 )
 
+// Credentials are the parts of the app's session the extension needs.
 type Credentials struct {
 	Homeserver  string      `json:"homeserver"`
 	UserID      id.UserID   `json:"userID"`
@@ -54,6 +52,7 @@ type Participant struct {
 // to the homeserver instead of a fresh TLS handshake per push.
 var httpClient = &http.Client{Timeout: 8 * time.Second}
 
+// Fetch builds the preview for one notified event.
 func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	if req.RoomID == "" || req.EventID == "" || req.AccessToken == "" || !strings.HasPrefix(req.Homeserver, "https://") {
 		return nil, errors.New("invalid notification context")
@@ -118,114 +117,19 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	content := evt.Content.VeryRaw
 	typ := evt.Type.Type
 	if typ == event.EventEncrypted.Type {
-		var encrypted event.EncryptedEventContent
-		if err = json.Unmarshal(content, &encrypted); err != nil {
-			return nil, err
-		}
-		if encrypted.Algorithm != id.AlgorithmMegolmV1 {
-			return nil, errors.New("unsupported encryption")
-		}
-		keyBytes, err := base64.StdEncoding.DecodeString(req.BackupKey)
+		typ, content, err = decryptWithBackup(ctx, cli, req, content, func() (*mautrix.RespRoomKeysVersion[backup.MegolmAuthData], error) {
+			backupLookup.Wait()
+			return backupVersion, backupErr
+		})
 		if err != nil {
 			return nil, err
-		}
-		key, err := backup.MegolmBackupKeyFromBytes(keyBytes)
-		if err != nil {
-			return nil, err
-		}
-		backupLookup.Wait()
-		if backupErr != nil {
-			return nil, backupErr
-		}
-		if backupVersion.Algorithm != id.KeyBackupAlgorithmMegolmBackupV1 || string(backupVersion.AuthData.PublicKey) != base64.RawStdEncoding.EncodeToString(key.PublicKey().Bytes()) {
-			return nil, errors.New("backup key mismatch")
-		}
-		data, err := cli.GetKeyBackupForRoomAndSession(ctx, backupVersion.Version, req.RoomID, encrypted.SessionID)
-		if err != nil {
-			return nil, err
-		}
-		roomKey, err := data.SessionData.Decrypt(key)
-		if err != nil {
-			return nil, err
-		}
-		if roomKey.Algorithm != id.AlgorithmMegolmV1 || (encrypted.SenderKey != "" && roomKey.SenderKey != encrypted.SenderKey) {
-			return nil, errors.New("session mismatch")
-		}
-		inbound, err := session.NewMegolmInboundSessionFromExport([]byte(roomKey.SessionKey))
-		if err != nil {
-			return nil, err
-		}
-		if inbound.ID() != encrypted.SessionID {
-			return nil, errors.New("session ID mismatch")
-		}
-		plain, _, err := inbound.Decrypt(encrypted.MegolmCiphertext)
-		if err != nil {
-			return nil, err
-		}
-		var decrypted struct {
-			RoomID  id.RoomID       `json:"room_id"`
-			Type    string          `json:"type"`
-			Content json.RawMessage `json:"content"`
-		}
-		if err = json.Unmarshal(plain, &decrypted); err != nil {
-			return nil, err
-		}
-		if decrypted.RoomID != req.RoomID {
-			return nil, errors.New("decrypted room mismatch")
-		}
-		typ, content = decrypted.Type, decrypted.Content
-	}
-	var body string
-	var targetEventID id.EventID
-	if typ == event.EventReaction.Type {
-		var reaction event.ReactionEventContent
-		if err = json.Unmarshal(content, &reaction); err != nil {
-			return nil, err
-		}
-		if evt.Sender == req.UserID || reaction.RelatesTo.Type != event.RelAnnotation ||
-			reaction.RelatesTo.EventID == "" || strings.TrimSpace(reaction.RelatesTo.Key) == "" {
-			return nil, errors.New("invalid reaction notification")
-		}
-		target, err := cli.GetEvent(ctx, req.RoomID, reaction.RelatesTo.EventID)
-		if err != nil {
-			return nil, err
-		}
-		if target.ID != reaction.RelatesTo.EventID || target.Sender != req.UserID ||
-			(target.RoomID != "" && target.RoomID != req.RoomID) ||
-			(target.Type != event.EventMessage && target.Type != event.EventEncrypted && target.Type != event.EventSticker) {
-			return nil, errors.New("reaction is not to your message")
-		}
-		body = "Reacted " + reaction.RelatesTo.Key + " to your message"
-		targetEventID = target.ID
-	} else if typ != event.EventMessage.Type && typ != event.EventSticker.Type {
-		return nil, errors.New("not a message")
-	} else {
-		var message event.MessageEventContent
-		if err = json.Unmarshal(content, &message); err != nil {
-			return nil, err
-		}
-		if message.NewContent != nil {
-			message = *message.NewContent
-		}
-		message.RemoveReplyFallback()
-		body = message.Body
-		switch message.MsgType {
-		case event.MsgImage:
-			body = "Photo"
-		case event.MsgVideo:
-			body = "Video"
-		case event.MsgAudio:
-			body = "Audio message"
-		case event.MsgFile:
-			body = "File: " + body
-		}
-		if typ == event.EventSticker.Type {
-			body = "Sticker"
-		}
-		if strings.TrimSpace(body) == "" {
-			body = "New message"
 		}
 	}
+	body, targetEventID, err := notificationBody(ctx, cli, req, evt.Sender, typ, content)
+	if err != nil {
+		return nil, err
+	}
+
 	roomMetadata.Wait()
 	senderProfile.Wait()
 	title := sender
@@ -262,30 +166,58 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	return preview, nil
 }
 
-func fetchAvatar(ctx context.Context, cli *mautrix.Client, uri id.ContentURIString) []byte {
-	parsed, err := uri.Parse()
-	if err != nil || parsed.IsEmpty() {
-		return nil
+// notificationBody describes a message, or a reaction to one of the user's
+// messages, in which case it also returns the reacted-to event.
+func notificationBody(ctx context.Context, cli *mautrix.Client, req Request, sender id.UserID, typ string, content json.RawMessage) (string, id.EventID, error) {
+	if typ == event.EventReaction.Type {
+		var reaction event.ReactionEventContent
+		if err := json.Unmarshal(content, &reaction); err != nil {
+			return "", "", err
+		}
+		if sender == req.UserID || reaction.RelatesTo.Type != event.RelAnnotation ||
+			reaction.RelatesTo.EventID == "" || strings.TrimSpace(reaction.RelatesTo.Key) == "" {
+			return "", "", errors.New("invalid reaction notification")
+		}
+		target, err := cli.GetEvent(ctx, req.RoomID, reaction.RelatesTo.EventID)
+		if err != nil {
+			return "", "", err
+		}
+		if target.ID != reaction.RelatesTo.EventID || target.Sender != req.UserID ||
+			(target.RoomID != "" && target.RoomID != req.RoomID) ||
+			(target.Type != event.EventMessage && target.Type != event.EventEncrypted && target.Type != event.EventSticker) {
+			return "", "", errors.New("reaction is not to your message")
+		}
+		return "Reacted " + reaction.RelatesTo.Key + " to your message", target.ID, nil
 	}
-	avatarCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	// Authenticated Matrix media stays on the homeserver. A small thumbnail
-	// bounds both the extension's memory use and its image-decoding work.
-	resp, err := cli.DownloadThumbnail(avatarCtx, parsed, 128, 128,
-		mautrix.DownloadThumbnailExtra{Method: "scale"})
-	if err != nil {
-		return nil
+	if typ != event.EventMessage.Type && typ != event.EventSticker.Type {
+		return "", "", errors.New("not a message")
 	}
-	defer resp.Body.Close()
-	const maximumBytes = 256 * 1024
-	if resp.StatusCode != http.StatusOK || resp.ContentLength > maximumBytes {
-		return nil
+	var message event.MessageEventContent
+	if err := json.Unmarshal(content, &message); err != nil {
+		return "", "", err
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maximumBytes+1))
-	if err != nil || len(data) > maximumBytes || !strings.HasPrefix(http.DetectContentType(data), "image/") {
-		return nil
+	if message.NewContent != nil {
+		message = *message.NewContent
 	}
-	return data
+	message.RemoveReplyFallback()
+	body := message.Body
+	switch message.MsgType {
+	case event.MsgImage:
+		body = "Photo"
+	case event.MsgVideo:
+		body = "Video"
+	case event.MsgAudio:
+		body = "Audio message"
+	case event.MsgFile:
+		body = "File: " + body
+	}
+	if typ == event.EventSticker.Type {
+		body = "Sticker"
+	}
+	if strings.TrimSpace(body) == "" {
+		body = "New message"
+	}
+	return body, "", nil
 }
 
 func truncate(s string, limit int) string {

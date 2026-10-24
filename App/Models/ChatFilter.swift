@@ -1,28 +1,27 @@
 import Foundation
 
-enum ChatFilter: Hashable, Equatable, Identifiable {
+enum ChatFilter: Hashable, Identifiable {
     case inbox(InboxFilter)
     case service(serviceID: String, name: String)
 
     var id: String {
         switch self {
-        case .inbox(let inbox): return "inbox_\(inbox.rawValue)"
-        case .service(let id, _): return "service_\(id)"
+        case .inbox(let inbox): "inbox_\(inbox.rawValue)"
+        case .service(let id, _): "service_\(id)"
         }
     }
 
     var label: String {
         switch self {
-        case .inbox(let inbox): return inbox.label
-        case .service(_, let name): return name
+        case .inbox(let inbox): inbox.label
+        case .service(_, let name): name
         }
     }
 
     var systemImage: String {
         switch self {
-        case .inbox(let inbox): return inbox.systemImage
-        case .service(let serviceID, _):
-            return Self.systemImage(for: serviceID)
+        case .inbox(let inbox): inbox.systemImage
+        case .service(let serviceID, _): Self.systemImage(for: serviceID)
         }
     }
 
@@ -41,9 +40,32 @@ enum ChatFilter: Hashable, Equatable, Identifiable {
         if id.contains("instagram") { return "camera.fill" }
         if id.contains("facebook") || id.contains("messenger") { return "bubble.left.and.bubble.right.fill" }
         if id.contains("linkedin") { return "person.text.rectangle.fill" }
+        // Before the X check, which any ID containing an "x" (such as "matrix") matches.
+        if id.contains("hungryserv") || id.contains("matrix") { return "circle.grid.hex.fill" }
         if id.contains("twitter") || id.contains("x") { return "x.squareroot" }
         if id.contains("gmessages") || id.contains("google messages") { return "message.fill" }
-        if id.contains("hungryserv") || id.contains("matrix") { return "circle.grid.hex.fill" }
         return "bubble.left.and.bubble.right"
+    }
+}
+
+enum InboxFilter: String, CaseIterable {
+    case primary
+    case archive
+    case unread
+
+    var label: String {
+        switch self {
+        case .primary: "Primary"
+        case .archive: "Archive"
+        case .unread: "Unread"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .primary: "tray.full"
+        case .archive: "archivebox"
+        case .unread: "envelope.badge"
+        }
     }
 }

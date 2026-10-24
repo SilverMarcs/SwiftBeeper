@@ -2,31 +2,37 @@ package app
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/url"
+
+	"maunium.net/go/mautrix/id"
+
+	"relay/core/internal/notifications"
+	"relay/core/internal/wire"
 )
 
-// The SDK owns the authenticated Matrix session. Swift supplies only the
-// notification gateway registration, never a Matrix access token.
+// updatePusher registers or removes this device's Matrix pusher. The SDK owns
+// the authenticated Matrix session; Swift supplies only the notification
+// gateway registration, never a Matrix access token.
 func (r *Runtime) updatePusher(ctx context.Context, command Command) (any, error) {
 	cli := r.rt.Client()
 	if cli == nil || cli.Account == nil || cli.Client == nil || cli.Client.AccessToken == "" {
-		return nil, fmt.Errorf("a logged-in Matrix session is required")
+		return nil, errors.New("a logged-in Matrix session is required")
 	}
 	if len(command.Pushkey) != 64 || command.AppID == "" || len(command.AppID) > 64 {
-		return nil, fmt.Errorf("invalid pusher registration")
+		return nil, errors.New("invalid pusher registration")
 	}
 	request := map[string]any{
 		"pushkey": command.Pushkey,
 		"app_id":  command.AppID,
-		"kind":    nil,
+		"kind":    nil, // A null kind removes the pusher.
 	}
 	if command.Action == "set-pusher" {
 		gateway, err := url.Parse(command.GatewayURL)
 		if err != nil || gateway.Scheme != "https" || gateway.Host == "" || gateway.User != nil ||
 			gateway.Path != "/_matrix/push/v1/notify" || gateway.RawQuery != "" || gateway.Fragment != "" {
-			return nil, fmt.Errorf("invalid push gateway URL")
+			return nil, errors.New("invalid push gateway URL")
 		}
 		request["kind"] = "http"
 		request["app_display_name"] = "Relay"
@@ -36,6 +42,28 @@ func (r *Runtime) updatePusher(ctx context.Context, command Command) (any, error
 		request["append"] = true
 		request["data"] = map[string]string{"url": gateway.String(), "format": "event_id_only"}
 	}
-	_, err := cli.Client.MakeRequest(ctx, http.MethodPost, cli.Client.BuildClientURL("v3", "pushers", "set"), request, nil)
-	return map[string]any{"success": err == nil}, err
+	if _, err := cli.Client.MakeRequest(ctx, http.MethodPost, cli.Client.BuildClientURL("v3", "pushers", "set"), request, nil); err != nil {
+		return nil, err
+	}
+	return wire.Success, nil
+}
+
+// notificationCredentials hands the notification extension what it needs to
+// fetch and decrypt one event on its own: the session and the backup key.
+func (r *Runtime) notificationCredentials(ctx context.Context) (any, error) {
+	cli := r.rt.Client()
+	if cli == nil || cli.Account == nil {
+		return nil, errors.New("session required")
+	}
+	key, err := cli.CryptoStore.GetSecret(ctx, id.SecretMegolmBackupV1)
+	if err != nil {
+		return nil, errors.New("backup key unavailable")
+	}
+	return notifications.Credentials{
+		Homeserver:  cli.Account.HomeserverURL,
+		UserID:      cli.Account.UserID,
+		DeviceID:    cli.Account.DeviceID,
+		AccessToken: cli.Account.AccessToken,
+		BackupKey:   key,
+	}, nil
 }

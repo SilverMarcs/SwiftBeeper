@@ -1,3 +1,4 @@
+// Package gomuksruntime owns the on-device gomuks client and its SQLite store.
 package gomuksruntime
 
 import (
@@ -26,7 +27,7 @@ type Runtime struct {
 
 func New(stateDir string) (*Runtime, error) {
 	if stateDir == "" {
-		return nil, fmt.Errorf("Matrix profile directory is required")
+		return nil, errors.New("Matrix profile directory is required")
 	}
 	root, err := filepath.Abs(stateDir)
 	if err != nil {
@@ -36,11 +37,13 @@ func New(stateDir string) (*Runtime, error) {
 	return &Runtime{dataDir: filepath.Join(root, "data")}, nil
 }
 
+// Start opens the database and resumes the stored session, if any. It does
+// nothing when the client is already running.
 func (r *Runtime) Start(ctx context.Context) error {
 	if r.client != nil {
 		return nil
 	}
-	if err := os.MkdirAll(r.dataDir, 0700); err != nil {
+	if err := os.MkdirAll(r.dataDir, 0o700); err != nil {
 		return err
 	}
 	log := zerolog.Nop()
@@ -96,7 +99,12 @@ func (r *Runtime) emit(evt any) {
 	}
 }
 
+// Logout ends the server session, deletes the local profile and starts a
+// fresh client with no account.
 func (r *Runtime) Logout(ctx context.Context) error {
+	if r.client == nil {
+		return errors.New("Matrix client is not running")
+	}
 	_, err := r.client.Client.Logout(ctx)
 	if err != nil && !errors.Is(err, mautrix.MUnknownToken) {
 		return err
@@ -109,14 +117,10 @@ func (r *Runtime) Logout(ctx context.Context) error {
 	if err = os.RemoveAll(filepath.Join(filepath.Dir(r.dataDir), "cache")); err != nil {
 		return err
 	}
-	if err = r.Start(context.Background()); err != nil {
-		return err
-	}
-	r.emit(r.client.State())
-	r.emit(r.client.SyncStatus.Load())
-	return nil
+	return r.Start(context.Background())
 }
 
-func (r *Runtime) StateDir() string {
+// DataDir is the profile directory holding the database and media caches.
+func (r *Runtime) DataDir() string {
 	return r.dataDir
 }

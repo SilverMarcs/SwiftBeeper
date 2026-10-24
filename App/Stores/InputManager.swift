@@ -60,14 +60,12 @@ final class InputManager {
 
     var trimmedDraft: String { draft.trimmed }
 
+    /// Appends a reply that failed to send from a notification to that chat's
+    /// draft, so it is ready to resend when the chat opens.
     func restoreNotificationDraft(_ text: String, for chatID: String) {
         let existing = draftsByChatID[chatID] ?? ""
         draftsByChatID[chatID] = existing.isEmpty ? text : existing + "\n" + text
         pendingFocus = true
-    }
-
-    private func clearDraft(for chatID: String) {
-        draftsByChatID[chatID] = nil
     }
 
     // MARK: - Derived composer state
@@ -89,14 +87,6 @@ final class InputManager {
         if chatStore.selectedChat == nil { return true }
         if isEditing && chatStore.isSavingEdit { return true }
         return trimmedDraft.isEmpty && pendingAttachments.isEmpty
-    }
-
-    /// Scans the timeline, so only the Edit Last shortcut calls it, not a view body.
-    private var mostRecentEditableOutgoingMessage: Message? {
-        guard let selectedChat = chatStore.selectedChat else { return nil }
-        return chatStore.timelineMessages.last { message in
-            chatStore.canEdit(message, in: selectedChat)
-        }
     }
 
     // MARK: - Editing / reply lifecycle
@@ -121,9 +111,11 @@ final class InputManager {
         pendingFocus = true
     }
 
+    /// The Edit Last shortcut. Scans the timeline, so keep it out of view bodies.
     func editMostRecentOutgoingMessage() {
-        guard let message = mostRecentEditableOutgoingMessage,
-              let chat = chatStore.selectedChat else { return }
+        guard let chat = chatStore.selectedChat,
+              let message = chatStore.timelineMessages.last(where: { chatStore.canEdit($0, in: chat) })
+        else { return }
         startEditing(message, in: chat)
     }
 
@@ -132,7 +124,7 @@ final class InputManager {
             let editingChatID = chatStore.editingMessage?.chatID
             chatStore.cancelComposerAction()
             if let editingChatID {
-                clearDraft(for: editingChatID)
+                draftsByChatID[editingChatID] = nil
                 editingDraftChatID = nil
             }
         }
@@ -157,8 +149,8 @@ final class InputManager {
         #if os(iOS)
         let animationSource = sourceFrame ?? sendAnimator.sourceFrame?()
         #endif
-        clearDraft(for: chatID)
-        clearPendingAttachments(for: chatID)
+        draftsByChatID[chatID] = nil
+        pendingAttachmentsByChatID[chatID] = nil
 
         #if os(iOS)
         if let outgoing = chatStore.sendMessage(text: text, attachments: attachments, to: chatID) {
@@ -174,7 +166,7 @@ final class InputManager {
         let editingChatID = chatStore.editingMessage?.chatID
         let previousDraft = draft
         if let editingChatID {
-            clearDraft(for: editingChatID)
+            draftsByChatID[editingChatID] = nil
         }
         // The draft is already clear, so the edit ending must not clear
         // anything typed while the save runs.
@@ -204,10 +196,6 @@ final class InputManager {
             fileName: fileName,
             mimeType: mimeType
         ))
-    }
-
-    private func clearPendingAttachments(for chatID: String) {
-        pendingAttachmentsByChatID[chatID] = nil
     }
 
     func handleFileImport(_ result: Result<URL, Error>, for chatID: String) {

@@ -4,25 +4,13 @@ import SwiftMediaViewer
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SessionStore.self) private var sessionStore
-    @Environment(ChatStore.self) private var chatStore
-    @Environment(NotificationService.self) private var notificationService
     @AppStorage("autoplay") private var autoplay = true
     @AppStorage("muteOnPlay") private var muteOnPlay = false
-    @State private var signOutError: String?
 
     var body: some View {
         NavigationStack {
             Form {
-
-                Section {
-                    if !sessionStore.isSignedIn {
-                        Text("Not signed in.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        profileRow
-                    }
-                    if let signOutError { Text(signOutError).foregroundStyle(.red) }
-                }
+                AccountSection()
 
                 if sessionStore.isSignedIn {
                     NotificationSettingsSection()
@@ -38,13 +26,13 @@ struct SettingsView: View {
                 }
 
                 Section("Cache") {
-                   Button {
-                       MatrixMedia.clearTemporaryFiles()
-                   } label: {
-                       Label("Delete File Cache", systemImage: "trash")
-                   }
-                   CacheManagerView()
-               }
+                    Button {
+                        MatrixMedia.clearTemporaryFiles()
+                    } label: {
+                        Label("Delete File Cache", systemImage: "trash")
+                    }
+                    CacheManagerView()
+                }
             }
             .navigationTitle("Settings")
             .toolbarTitleDisplayMode(.inline)
@@ -54,49 +42,12 @@ struct SettingsView: View {
             .frame(width: 520)
             #else
             .toolbar {
-               ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .primaryAction) {
                     Button(role: .close) { dismiss() }
                 }
             }
             #endif
         }
-    }
-
-    private var profileRow: some View {
-        HStack(spacing: 12) {
-            let profile = chatStore.currentUserProfile
-            ProfileAvatarView(participant: profile, dimension: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(profile?.displayName ?? "Account")
-                    .bold()
-                if let username = profile?.username, !username.isEmpty,
-                   username != profile?.displayName {
-                    Text(username)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-                Task {
-                    do {
-                        try await notificationService.prepareForSignOut()
-                        _ = try await MatrixRuntime.shared.command(Data("{\"action\":\"logout\"}".utf8))
-                    } catch {
-                        signOutError = error.localizedDescription
-                        await notificationService.configure(signedIn: sessionStore.isSignedIn)
-                        return
-                    }
-                    sessionStore.isSignedIn = false
-                }
-            }
-            .buttonStyle(.plain)
-            .labelStyle(.iconOnly)
-            .foregroundStyle(.red)
-        }
-        .padding(.vertical, 4)
     }
 }
 

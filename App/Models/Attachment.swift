@@ -1,11 +1,5 @@
 import Foundation
 
-struct UploadAssetOutput: Decodable {
-    let uploadID: String
-    let width: Int?
-    let height: Int?
-}
-
 struct MessageAttachmentInput: Encodable {
     let uploadID: String
     let mimeType: String?
@@ -18,6 +12,7 @@ struct AttachmentSizeInput: Encodable {
     let height: Int
 }
 
+/// A file picked or pasted into the composer, not yet uploaded.
 struct PendingAttachment: Identifiable, Equatable, Sendable {
     let id: UUID
     let fileData: Data
@@ -41,6 +36,7 @@ struct AttachmentSize: Codable, Equatable, Sendable {
     let height: Int?
 }
 
+/// The core's attachment type, keeping values this app doesn't know.
 enum AttachmentKind: RawRepresentable, Codable, Equatable, Sendable {
     case image
     case video
@@ -50,40 +46,29 @@ enum AttachmentKind: RawRepresentable, Codable, Equatable, Sendable {
 
     init(rawValue: String) {
         switch rawValue {
-        case "img":
-            self = .image
-        case "video":
-            self = .video
-        case "reel":
-            self = .reel
-        case "audio":
-            self = .audio
-        default:
-            self = .unknown(rawValue)
+        case "img": self = .image
+        case "video": self = .video
+        case "reel": self = .reel
+        case "audio": self = .audio
+        default: self = .unknown(rawValue)
         }
     }
 
     var rawValue: String {
         switch self {
-        case .image:
-            return "img"
-        case .video:
-            return "video"
-        case .reel:
-            return "reel"
-        case .audio:
-            return "audio"
-        case .unknown(let value):
-            return value
+        case .image: "img"
+        case .video: "video"
+        case .reel: "reel"
+        case .audio: "audio"
+        case .unknown(let value): value
         }
     }
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        self = AttachmentKind(rawValue: try container.decode(String.self))
+    init(from decoder: any Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }

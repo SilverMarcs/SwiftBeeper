@@ -1,5 +1,7 @@
 import { deliver, notification } from "./apns.js";
 
+const MATRIX_GATEWAY_PATH = "/_matrix/push/v1/notify";
+
 class HTTPError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -8,6 +10,7 @@ function json(value, status = 200) {
   return Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+// Reads a JSON object body of at most `maximum` bytes.
 async function readJSON(request, maximum = 65536) {
   const reader = request.body?.getReader();
   if (!reader) throw new HTTPError(400, "JSON body required");
@@ -30,6 +33,8 @@ async function readJSON(request, maximum = 65536) {
   } catch { throw new HTTPError(400, "Invalid JSON body"); }
 }
 
+// Checks the shared registration secret. Hashing both sides first keeps the
+// comparison constant-time regardless of length.
 async function authorize(request, env) {
   if (typeof env.PUSH_SECRET !== "string" || env.PUSH_SECRET.trim().length < 32) throw new HTTPError(503, "Registration secret is not configured");
   const encoder = new TextEncoder();
@@ -38,15 +43,17 @@ async function authorize(request, env) {
   if (!crypto.subtle.timingSafeEqual(actual, expected)) throw new HTTPError(401, "Unauthorized");
 }
 
-function string(value, maximum) { return typeof value === "string" && value.length <= maximum; }
+function isBoundedString(value, maximum) { return typeof value === "string" && value.length <= maximum; }
+function optionalBoundedString(value, maximum) { return value === undefined || isBoundedString(value, maximum); }
 function randomKey() { return [...crypto.getRandomValues(new Uint8Array(32))].map(value => value.toString(16).padStart(2, "0")).join(""); }
 
+// PUT /notification-preferences replaces the whole suppression list.
 async function updateNotificationPreferences(request, env) {
   const input = await readJSON(request, 1048576);
   if (!Array.isArray(input.rooms) || input.rooms.length > 10000) throw new HTTPError(400, "Invalid notification preferences");
   const rooms = new Map();
   for (const room of input.rooms) {
-    if (!room || !string(room.roomID, 256) || !room.roomID.startsWith("!") ||
+    if (!room || !isBoundedString(room.roomID, 256) || !room.roomID.startsWith("!") ||
         !Number.isSafeInteger(room.blockedUntil) || room.blockedUntil === 0) throw new HTTPError(400, "Invalid blocked room");
     rooms.set(room.roomID, room.blockedUntil);
   }
@@ -62,35 +69,43 @@ async function updateNotificationPreferences(request, env) {
   return json({ ok: true });
 }
 
+// A negative expiry blocks forever; a positive one is Unix milliseconds.
 async function isBlocked(env, roomID) {
   if (!roomID) return false;
   return !!await env.DEVICES.prepare("SELECT 1 FROM notification_blocks WHERE room_id = ? AND (blocked_until < 0 OR blocked_until > ?) LIMIT 1")
     .bind(roomID, Date.now()).first();
 }
 
+// PUT /devices/{id} stores the APNs token, keeping an existing pushkey.
 async function register(request, env, id) {
   const input = await readJSON(request);
-  if (!string(input.token, 256) || !/^[0-9a-f]{32,256}$/i.test(input.token) || input.token.length % 2) throw new HTTPError(400, "Invalid APNs token");
+  if (!isBoundedString(input.token, 256) || !/^[0-9a-f]{32,256}$/i.test(input.token) || input.token.length % 2) throw new HTTPError(400, "Invalid APNs token");
   const device = await env.DEVICES.prepare(`
     INSERT INTO devices (id, pushkey, token) VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET token = excluded.token RETURNING pushkey
   `).bind(id, randomKey(), input.token.toLowerCase()).first();
-  return json({ pushkey: device.pushkey, app_id: env.APNS_TOPIC, gatewayPath: "/_matrix/push/v1/notify" });
+  return json({ pushkey: device.pushkey, app_id: env.APNS_TOPIC, gatewayPath: MATRIX_GATEWAY_PATH });
 }
 
+async function unregister(env, id) {
+  await env.DEVICES.prepare("DELETE FROM devices WHERE id = ?").bind(id).run();
+  return json({ ok: true });
+}
+
+// The Matrix push gateway callback. The homeserver sends event_id_only
+// notifications; the pushkey alone authorizes forwarding.
 async function matrixPush(request, env) {
   const { notification: incoming } = await readJSON(request);
   if (!incoming || !Array.isArray(incoming.devices) || incoming.devices.length > 100 ||
-      (incoming.event_id !== undefined && !string(incoming.event_id, 256)) ||
-      (incoming.room_id !== undefined && !string(incoming.room_id, 256))) throw new HTTPError(400, "Invalid Matrix notification");
+      !optionalBoundedString(incoming.event_id, 256) || !optionalBoundedString(incoming.room_id, 256)) throw new HTTPError(400, "Invalid Matrix notification");
   const rejected = [];
   let failed = false;
-  const delivered = new Set();
+  const seen = new Set();
   const blocked = await isBlocked(env, incoming.room_id);
   for (const requested of incoming.devices) {
-    if (!requested || !string(requested.pushkey, 512)) throw new HTTPError(400, "Invalid pushkey");
-    if (delivered.has(requested.pushkey)) continue;
-    delivered.add(requested.pushkey);
+    if (!requested || !isBoundedString(requested.pushkey, 512)) throw new HTTPError(400, "Invalid pushkey");
+    if (seen.has(requested.pushkey)) continue;
+    seen.add(requested.pushkey);
     const device = requested.app_id === env.APNS_TOPIC && /^[0-9a-f]{64}$/.test(requested.pushkey)
       ? await env.DEVICES.prepare("SELECT id, token FROM devices WHERE pushkey = ?").bind(requested.pushkey).first() : null;
     if (!device) { rejected.push(requested.pushkey); continue; }
@@ -104,12 +119,12 @@ async function matrixPush(request, env) {
   return json({ rejected });
 }
 
+// POST /notify sends caller-provided text to one or all registered devices.
 async function directPush(request, env) {
   const input = await readJSON(request);
-  if (!string(input.title, 200) || !input.title || !string(input.body, 2000) || !input.body ||
-      (input.chatID !== undefined && !string(input.chatID, 256)) ||
-      (input.messageID !== undefined && !string(input.messageID, 256)) ||
-      (input.deviceID !== undefined && !string(input.deviceID, 128))) throw new HTTPError(400, "Invalid notification");
+  if (!isBoundedString(input.title, 200) || !input.title || !isBoundedString(input.body, 2000) || !input.body ||
+      !optionalBoundedString(input.chatID, 256) || !optionalBoundedString(input.messageID, 256) ||
+      !optionalBoundedString(input.deviceID, 128)) throw new HTTPError(400, "Invalid notification");
   const payload = notification(input.title, input.body, input.chatID, input.messageID);
   if (new TextEncoder().encode(JSON.stringify(payload)).length > 4096) throw new HTTPError(400, "Notification exceeds APNs limit");
   if (await isBlocked(env, input.chatID)) return json({ sent: 0, failed: 0, suppressed: true });
@@ -125,22 +140,31 @@ async function directPush(request, env) {
   return json({ sent, failed }, failed ? 502 : 200);
 }
 
+async function route(request, env) {
+  const { method } = request;
+  const path = new URL(request.url).pathname;
+  if (method === "GET" && path === "/health") return json({ ok: true });
+  if (method === "POST" && path === MATRIX_GATEWAY_PATH) return matrixPush(request, env);
+  if (method === "PUT" && path === "/notification-preferences") {
+    await authorize(request, env);
+    return updateNotificationPreferences(request, env);
+  }
+  if (method === "POST" && path === "/notify") {
+    await authorize(request, env);
+    return directPush(request, env);
+  }
+  const device = /^\/devices\/([A-Za-z0-9_-]{1,128})$/.exec(path);
+  if (device && (method === "PUT" || method === "DELETE")) {
+    await authorize(request, env);
+    return method === "PUT" ? register(request, env, device[1]) : unregister(env, device[1]);
+  }
+  return json({ error: "Not found" }, 404);
+}
+
 export default {
   async fetch(request, env) {
     try {
-      const path = new URL(request.url).pathname;
-      if (request.method === "GET" && path === "/health") return json({ ok: true });
-      if (request.method === "PUT" && path === "/notification-preferences") { await authorize(request, env); return await updateNotificationPreferences(request, env); }
-      if (request.method === "POST" && path === "/_matrix/push/v1/notify") return await matrixPush(request, env);
-      const match = /^\/devices\/([A-Za-z0-9_-]{1,128})$/.exec(path);
-      if (match && (request.method === "PUT" || request.method === "DELETE")) {
-        await authorize(request, env);
-        if (request.method === "PUT") return await register(request, env, match[1]);
-        await env.DEVICES.prepare("DELETE FROM devices WHERE id = ?").bind(match[1]).run();
-        return json({ ok: true });
-      }
-      if (request.method === "POST" && path === "/notify") { await authorize(request, env); return await directPush(request, env); }
-      return json({ error: "Not found" }, 404);
+      return await route(request, env);
     } catch (error) {
       if (error instanceof HTTPError) return json({ error: error.message }, error.status);
       console.error("Push request failed", error.name);

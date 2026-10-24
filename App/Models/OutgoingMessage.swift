@@ -15,11 +15,11 @@ struct OutgoingMessage: Identifiable, Equatable {
     let attachments: [PendingAttachment]
     let replyToMessageID: String?
     let createdAt: Date
-    var state: OutgoingMessageState
-    var uploadFileNameByAttachmentID: [PendingAttachment.ID: String]
-    var uploadMimeTypeByAttachmentID: [PendingAttachment.ID: String]
-    var pendingMessageIDs: Set<String>
-    var confirmedMessageIDs: Set<String>
+    var state: OutgoingMessageState = .sending
+    var uploadFileNameByAttachmentID: [PendingAttachment.ID: String] = [:]
+    var uploadMimeTypeByAttachmentID: [PendingAttachment.ID: String] = [:]
+    var pendingMessageIDs: Set<String> = []
+    var confirmedMessageIDs: Set<String> = []
 
     init(
         id: UUID = UUID(),
@@ -27,7 +27,7 @@ struct OutgoingMessage: Identifiable, Equatable {
         text: String,
         attachments: [PendingAttachment],
         replyToMessageID: String?,
-        createdAt: Date = Date()
+        createdAt: Date = .now
     ) {
         self.id = id
         self.chatID = chatID
@@ -35,21 +35,17 @@ struct OutgoingMessage: Identifiable, Equatable {
         self.attachments = attachments
         self.replyToMessageID = replyToMessageID
         self.createdAt = createdAt
-        self.state = .sending
-        self.uploadFileNameByAttachmentID = [:]
-        self.uploadMimeTypeByAttachmentID = [:]
-        self.pendingMessageIDs = []
-        self.confirmedMessageIDs = []
     }
 
     var timelineKey: String { "outgoing-\(id.uuidString)" }
 
+    /// One confirmed message per attachment, or one for a text-only send.
     var expectedConfirmationCount: Int {
         max(attachments.count, 1)
     }
 
-    /// Whether a canonical message is the server-confirmed form of this row.
-    /// Matching remains active after a transport failure because the server may
+    /// Whether a canonical message is the homeserver-confirmed form of this row.
+    /// Matching remains active after a send failure because the homeserver may
     /// have committed the send before its acknowledgement was lost.
     func matchesConfirmedMessage(_ message: Message) -> Bool {
         guard message.chatID == chatID,

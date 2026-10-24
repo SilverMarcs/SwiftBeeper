@@ -3,16 +3,27 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"go.mau.fi/gomuks/pkg/hicli/database"
+	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
-	"relay/core/internal/compat"
+
+	"relay/core/internal/wire"
 )
 
 // One past the page size, to tell whether more rooms follow.
 const roomPageSize = chatPageSize + 1
+
+const roomSelectBaseQuery = `
+	SELECT room_id, creation_content, tombstone_content, name, name_quality,
+	       avatar, explicit_avatar, dm_user_id, topic, canonical_alias,
+	       lazy_load_summary, encryption_event, has_member_list, preview_event_rowid, sorting_timestamp,
+	       unread_highlights, unread_notifications, unread_messages, marked_unread, prev_batch
+	FROM room
+`
 
 // roomPosition is a room's place in the sidebar order.
 type roomPosition struct {
@@ -21,18 +32,44 @@ type roomPosition struct {
 }
 
 type chatSummary struct {
-	members        []compat.User
-	accountMembers []compat.User
+	members []wire.User
+	// The shown members plus the first bridge ghost, for account inference.
+	accountMembers []wire.User
 	total          int
 	preview        *database.Event
 	names          map[string]string
 }
 
-func sqlSlots(count int) string { return strings.TrimSuffix(strings.Repeat("?,", count), ",") }
+// loadRoomPage returns the next rooms in sidebar order after position.
+func (s *Dispatcher) loadRoomPage(ctx context.Context, position *roomPosition) ([]*database.Room, error) {
+	query := roomSelectBaseQuery + `WHERE sorting_timestamp>0 AND room_type<>'m.space'`
+	var args []any
+	if position != nil {
+		query += ` AND (sorting_timestamp<? OR (sorting_timestamp=? AND room_id>?))`
+		args = append(args, position.ts, position.ts, position.roomID)
+	}
+	query += ` ORDER BY sorting_timestamp DESC,room_id ASC LIMIT ?`
+	args = append(args, roomPageSize)
+	rows, err := s.rt.Client().DB.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var rooms []*database.Room
+	for rows.Next() {
+		room := &database.Room{}
+		if _, err = room.Scan(rows); err != nil {
+			return nil, err
+		}
+		rooms = append(rooms, room)
+	}
+	return rooms, rows.Err()
+}
 
-// One bounded member projection and one event batch for a page of rooms. Counts
-// stay in SQLite; large groups do not materialize their whole membership in Go.
-// It also records each room's account in lookup.roomAccounts.
+// loadChatSummaries runs one bounded member projection and one event batch for
+// a page of rooms. Counts stay in SQLite; large groups do not materialize
+// their whole membership in Go. It also records each room's account in
+// lookup.roomAccounts.
 func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Room, limit int, lookup *accountLookup) (map[id.RoomID]*chatSummary, error) {
 	result := make(map[id.RoomID]*chatSummary, len(rooms))
 	if len(rooms) == 0 {
@@ -40,12 +77,12 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 	}
 	roomArgs := make([]any, 0, len(rooms))
 	for _, room := range rooms {
-		result[room.ID] = &chatSummary{members: []compat.User{}, names: make(map[string]string)}
+		result[room.ID] = &chatSummary{members: []wire.User{}, names: make(map[string]string)}
 		roomArgs = append(roomArgs, room.ID)
 	}
 	ghostClauses := []string{"0"}
 	var ghostArgs []any
-	for bridge := range lookup.ByBridge {
+	for bridge := range lookup.byBridge {
 		ghostClauses = append(ghostClauses, "cs.state_key GLOB ?")
 		ghostArgs = append(ghostArgs, "@"+bridge+"_*:*")
 	}
@@ -101,16 +138,16 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 	for _, room := range rooms {
 		lookup.roomAccounts[room.ID] = inferAccountForRoom(room.ID, result[room.ID].accountMembers, lookup)
 	}
-	var ids []database.EventRowID
+	var previewRowIDs []database.EventRowID
 	for _, room := range rooms {
 		if room.PreviewEventRowID > 0 {
-			ids = append(ids, room.PreviewEventRowID)
+			previewRowIDs = append(previewRowIDs, room.PreviewEventRowID)
 		}
 	}
-	if len(ids) == 0 {
+	if len(previewRowIDs) == 0 {
 		return result, nil
 	}
-	events, err := s.rt.Client().DB.Event.GetByRowIDs(ctx, ids...)
+	events, err := s.rt.Client().DB.Event.GetByRowIDs(ctx, previewRowIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +158,13 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 		return nil, err
 	}
 	names := s.loadNamesForEvents(ctx, events)
-	byID := make(map[database.EventRowID]*database.Event, len(events))
+	byRowID := make(map[database.EventRowID]*database.Event, len(events))
 	for _, evt := range events {
-		byID[evt.RowID] = evt
+		byRowID[evt.RowID] = evt
 	}
 	for _, room := range rooms {
 		summary := result[room.ID]
-		summary.preview = byID[room.PreviewEventRowID]
+		summary.preview = byRowID[room.PreviewEventRowID]
 		if summary.preview != nil {
 			for key, name := range names[room.ID] {
 				summary.names[key] = name
@@ -137,116 +174,44 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 	return result, nil
 }
 
-func roomMatchesInbox(room *database.Room, state roomAccountDataState, inbox string) bool {
-	switch inbox {
-	case "primary":
-		return !state.InArchive()
-	case "archive":
-		return state.InArchive()
-	case "unread":
-		return room.UnreadMessages > 0 || state.IsMarkedUnread
-	default:
-		return true
-	}
-}
-
-// loadRoomPage returns the next rooms in sidebar order after position.
-func (s *Dispatcher) loadRoomPage(ctx context.Context, position *roomPosition) ([]*database.Room, error) {
-	query := roomSelectBaseQuery + `WHERE sorting_timestamp>0 AND room_type<>'m.space'`
-	var args []any
-	if position != nil {
-		query += ` AND (sorting_timestamp<? OR (sorting_timestamp=? AND room_id>?))`
-		args = append(args, position.ts, position.ts, position.roomID)
-	}
-	query += ` ORDER BY sorting_timestamp DESC,room_id ASC LIMIT ?`
-	args = append(args, roomPageSize)
-	rows, err := s.rt.Client().DB.Query(ctx, query, args...)
+// syncedChatSummaries maps the rooms in upserted to sidebar chats. Sync can
+// touch many rooms at once, so membership, account data and previews load in
+// batches instead of per room.
+func (s *Dispatcher) syncedChatSummaries(complete *jsoncmd.SyncComplete, upserted map[id.RoomID]bool) map[string]*wire.Chat {
+	result := make(map[string]*wire.Chat)
+	ctx := context.Background()
+	lookup, err := s.buildAccountLookup(ctx)
 	if err != nil {
-		return nil, err
+		return result
 	}
-	defer rows.Close()
-	var rooms []*database.Room
-	for rows.Next() {
-		room := &database.Room{}
-		if _, err = room.Scan(rows); err != nil {
-			return nil, err
-		}
-		rooms = append(rooms, room)
-	}
-	return rooms, rows.Err()
-}
-
-func (s *Dispatcher) populateTimelinePositions(ctx context.Context, events []*database.Event) error {
-	if len(events) == 0 {
-		return nil
-	}
-	args := make([]any, len(events))
-	byID := make(map[database.EventRowID]*database.Event, len(events))
-	for i, evt := range events {
-		args[i] = evt.RowID
-		byID[evt.RowID] = evt
-		evt.TimelineRowID = 0
-	}
-	rows, err := s.rt.Client().DB.Query(ctx, `SELECT event_rowid,rowid FROM timeline WHERE event_rowid IN (`+sqlSlots(len(args))+`)`, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var rowID database.EventRowID
-		var timelineID database.TimelineRowID
-		if err = rows.Scan(&rowID, &timelineID); err != nil {
-			return err
-		}
-		if evt := byID[rowID]; evt != nil {
-			evt.TimelineRowID = timelineID
-		}
-	}
-	return rows.Err()
-}
-
-// Resolve only senders represented by this page/event batch, not every member
-// of their rooms. Member events also need the affected user's display name.
-func (s *Dispatcher) loadNamesForEvents(ctx context.Context, events []*database.Event) map[id.RoomID]map[string]string {
-	keys := make([]database.RoomStateGUID, 0, len(events))
-	seen := make(map[database.RoomStateGUID]bool)
-	for _, evt := range events {
-		users := []string{string(evt.Sender)}
-		if evt.StateKey != nil {
-			users = append(users, *evt.StateKey)
-		}
-		for _, user := range users {
-			key := database.RoomStateGUID{RoomID: evt.RoomID, Type: event.StateMember, StateKey: user}
-			if user != "" && !seen[key] {
-				seen[key] = true
-				keys = append(keys, key)
-			}
-		}
-	}
-	names := make(map[id.RoomID]map[string]string)
-	if len(keys) == 0 {
-		return names
-	}
-	members, err := s.rt.Client().DB.CurrentState.GetMany(ctx, keys)
-	if err != nil {
-		return names
-	}
-	for _, member := range members {
-		if member.StateKey == nil {
+	rooms := make([]*database.Room, 0, len(complete.Rooms))
+	for roomID, syncRoom := range complete.Rooms {
+		if syncRoom == nil || !upserted[roomID] {
 			continue
 		}
-		var content event.MemberEventContent
-		if json.Unmarshal(member.GetContent(), &content) != nil {
+		room := syncRoom.Meta
+		if room == nil {
+			room, _ = s.rt.Client().DB.Room.Get(ctx, roomID)
+		}
+		if room != nil {
+			rooms = append(rooms, room)
+		}
+	}
+	for chunk := range slices.Chunk(rooms, 64) {
+		ids := roomIDs(chunk)
+		states, err := s.loadRoomAccountDataStates(ctx, ids...)
+		if err != nil {
 			continue
 		}
-		name := strings.TrimSpace(content.Displayname)
-		if name == "" {
-			name = *member.StateKey
+		reads, _ := s.loadLastReadSortKeys(ctx, ids...)
+		summaries, err := s.loadChatSummaries(ctx, chunk, chatPreviewParticipants, lookup)
+		if err != nil {
+			continue
 		}
-		if names[member.RoomID] == nil {
-			names[member.RoomID] = make(map[string]string)
+		for _, room := range chunk {
+			chat := s.mapRoomToChat(room, summaries[room.ID], lookup, states[room.ID], reads[room.ID])
+			result[string(room.ID)] = &chat
 		}
-		names[member.RoomID][*member.StateKey] = name
 	}
-	return names
+	return result
 }

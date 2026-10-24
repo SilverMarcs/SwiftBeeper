@@ -1,13 +1,13 @@
 import Foundation
 import Synchronization
 
-/// Loads Matrix media from local files for the image library. The reserved
-/// host is an identifier only; no socket or DNS request is made for it.
+/// Serves `MatrixMedia.displayURL` requests from the core's media cache, so
+/// the image library loads Matrix media without any network request.
 nonisolated final class MatrixURLProtocol: URLProtocol, @unchecked Sendable {
     private let loadingTask = Mutex<Task<Void, Never>?>(nil)
 
     override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == MatrixFiles.host
+        request.url?.host == MatrixMedia.host
     }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
