@@ -94,7 +94,7 @@ struct SearchFieldComposer: ViewModifier {
                 textField.reloadInputViews()
             }
         }
-        hideSearchIcon(in: textField, referenceView: referenceView)
+        styleComposerFields(in: textField, referenceView: referenceView)
         let animator = inputManager.sendAnimator
         animator.sourceFrame = { [weak animator, weak textField, weak referenceView] in
             guard let animator, let textField, let referenceView,
@@ -122,21 +122,21 @@ struct SearchFieldComposer: ViewModifier {
         }
     }
 
-    /// Removes the magnifying glass, since this field composes messages. A
-    /// zero-size leading view replaces the glyph so its slot takes no width;
-    /// merely hiding the glyph keeps the slot.
+    /// Uses regular body text and removes the magnifying glass, since this field
+    /// composes messages. A zero-size leading view replaces the glyph so its slot
+    /// takes no width; merely hiding the glyph keeps the slot.
     ///
     /// The bottom-bar field UIKit draws is a clone of `textField` that doesn't
     /// follow the original's icon, so every field showing this composer's
     /// prompt is updated directly. The chat list's "Search chats" field never
     /// shares that prompt.
-    private func hideSearchIcon(in textField: UISearchTextField, referenceView: UIView) {
+    private func styleComposerFields(in textField: UISearchTextField, referenceView: UIView) {
         guard let prompt = textField.placeholder, let window = referenceView.window else { return }
-        // The system glyph is an image view; a field already given the empty
-        // view is skipped.
         for field in [textField] + searchTextFields(in: window)
-        where field.placeholder == prompt && field.leftView is UIImageView {
-            field.leftView = UIView(frame: .zero)
+        where field.placeholder == prompt {
+            if !(field.leftView is ComposerSearchFieldStyle) {
+                field.leftView = ComposerSearchFieldStyle(textField: field)
+            }
         }
     }
 

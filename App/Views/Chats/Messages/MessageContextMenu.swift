@@ -32,6 +32,7 @@ struct MessageContextMenu: View {
         }
         #if !os(macOS)
         .pickerStyle(.palette)
+        .menuActionDismissBehavior(.enabled)
         #endif
 
         Section {
