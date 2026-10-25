@@ -20,8 +20,6 @@ struct ChatDetailView: View {
             #else
             // Keep the header outside the viewport identity used for initial scrolling.
             .toolbarTitleDisplayMode(.inline)
-            // Replying to or editing a message gives the timeline the full height.
-            .toolbarVisibility(chatStore.activeComposerMessage != nil ? .hidden : .visible, for: .navigationBar)
             #endif
             .toolbar {
                 if let selectedChat {

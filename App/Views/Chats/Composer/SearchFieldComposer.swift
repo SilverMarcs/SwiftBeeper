@@ -10,6 +10,7 @@ struct SearchFieldComposer: ViewModifier {
     @FocusState private var isFocused: Bool
     @State private var isPresented = false
     @State private var delegateProxy: TextFieldDelegateProxy?
+    @State private var composerActionFocusTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
@@ -39,6 +40,7 @@ struct SearchFieldComposer: ViewModifier {
             // Leaving the chat can tear the field down while it still has
             // focus; the next chat's first focus must register as a change.
             .onDisappear {
+                composerActionFocusTask?.cancel()
                 inputManager.isComposerFocused = false
             }
             .onChange(of: chatStore.isSavingEdit) { oldValue, newValue in
@@ -47,9 +49,19 @@ struct SearchFieldComposer: ViewModifier {
                 }
             }
             .onChange(of: chatStore.activeComposerMessage?.id) { _, newValue in
-                // Entering reply/edit state.
+                composerActionFocusTask?.cancel()
+                // Entering reply/edit state. Focus after the context menu has
+                // dismissed, or its keyboard restore resigns the field while
+                // the search stays presented.
                 guard newValue != nil else { return }
-                isFocused = true
+                composerActionFocusTask = Task {
+                    do {
+                        try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
+                    } catch {
+                        return
+                    }
+                    isFocused = true
+                }
             }
             .onChange(of: isPresented) { _, presented in
                 // Reply/edit and search are entered together, so Cancel leaves
@@ -82,6 +94,7 @@ struct SearchFieldComposer: ViewModifier {
                 textField.reloadInputViews()
             }
         }
+        hideSearchIcon(in: textField, referenceView: referenceView)
         let animator = inputManager.sendAnimator
         animator.sourceFrame = { [weak animator, weak textField, weak referenceView] in
             guard let animator, let textField, let referenceView,
@@ -107,6 +120,31 @@ struct SearchFieldComposer: ViewModifier {
             inputManager.handleSubmit(sourceFrame: sourceFrame)
             return false
         }
+    }
+
+    /// Removes the magnifying glass, since this field composes messages. A
+    /// zero-size leading view replaces the glyph so its slot takes no width;
+    /// merely hiding the glyph keeps the slot.
+    ///
+    /// The bottom-bar field UIKit draws is a clone of `textField` that doesn't
+    /// follow the original's icon, so every field showing this composer's
+    /// prompt is updated directly. The chat list's "Search chats" field never
+    /// shares that prompt.
+    private func hideSearchIcon(in textField: UISearchTextField, referenceView: UIView) {
+        guard let prompt = textField.placeholder, let window = referenceView.window else { return }
+        // The system glyph is an image view; a field already given the empty
+        // view is skipped.
+        for field in [textField] + searchTextFields(in: window)
+        where field.placeholder == prompt && field.leftView is UIImageView {
+            field.leftView = UIView(frame: .zero)
+        }
+    }
+
+    private func searchTextFields(in view: UIView) -> [UISearchTextField] {
+        if let field = view as? UISearchTextField {
+            return [field]
+        }
+        return view.subviews.flatMap(searchTextFields(in:))
     }
 }
 

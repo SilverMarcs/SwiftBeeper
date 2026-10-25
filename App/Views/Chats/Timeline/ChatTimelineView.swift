@@ -51,29 +51,26 @@ struct ChatTimelineView: View {
                             .accessibilityHidden(true)
                     }
                 }
+                .scrollDisabled(activeComposerMessageID != nil)
                 .environment(\.scrollToMessage, ScrollToMessageAction { messageID in
                     withAnimation(.easeInOut(duration: 0.3)) {
                         proxy.scrollTo(messageID, anchor: .center)
                     }
                 })
                 .savesAttachments()
-                // Recreate only the viewport when a chat opens or its first
-                // database page arrives. Its first layout starts at the bottom.
+                // Recreate only the viewport when a chat opens or its first database page arrives
                 .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline)")
-                // Initial layout and short conversations align to the bottom.
-                // Content growth must preserve the starting offset so the
-                // explicit send scroll can animate to its new destination.
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.bottom, for: .alignment)
-                // Insets belong to the scroll view. Explicit scrolling targets
-                // the end marker rather than a persistent content-edge offset.
                 .contentMargins(.horizontal, 10, for: .scrollContent)
                 .contentMargins(.bottom, 24, for: .scrollContent)
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
                 .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
-                .scrollsToLatestOnFocus(chatID: selectedChat.id) {
+                .scrollsOnComposerFocus(chatID: selectedChat.id) {
                     scrollToLatest(with: proxy)
+                } scrollToComposerMessage: { messageID in
+                    scrollAboveKeyboard(messageID, with: proxy)
                 }
                 #endif
                 .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -110,9 +107,18 @@ struct ChatTimelineView: View {
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
                     guard let newValue else { return }
+                    #if os(iOS)
+                    // With the keyboard already up no focus change follows, so
+                    // place the target now. Otherwise ScrollOnComposerFocus
+                    // places it once the keyboard rises, leaving it untouched
+                    // while the context menu dismisses.
+                    guard inputManager.isComposerFocused else { return }
+                    scrollAboveKeyboard(newValue, with: proxy)
+                    #else
                     withAnimation(.easeInOut(duration: 0.2)) {
                         proxy.scrollTo(newValue, anchor: .center)
                     }
+                    #endif
                 }
                 .animation(.default, value: activeComposerMessageID)
                 .overlay {
@@ -163,6 +169,16 @@ struct ChatTimelineView: View {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
     }
+
+    #if os(iOS)
+    /// Aligns the reply/edit target's bottom edge with the composer above the
+    /// keyboard. A message taller than the viewport keeps its end visible.
+    private func scrollAboveKeyboard(_ messageID: Message.ID, with proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.25)) {
+            proxy.scrollTo(messageID, anchor: .bottom)
+        }
+    }
+    #endif
 }
 
 /// The newest row and the row count, which together tell a new message from

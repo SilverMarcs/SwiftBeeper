@@ -112,7 +112,15 @@ struct MessageInputView: View {
                 focusMessageField()
             }
         }
-        .onChange(of: chatStore.activeComposerMessage?.id) { _, _ in
+        .onChange(of: chatStore.activeComposerMessage?.id) { _, newValue in
+            #if os(iOS)
+            // Entering reply/edit from a context menu: focusing before the
+            // menu has dismissed is undone by its keyboard restore.
+            if newValue != nil {
+                focusMessageField(after: InputManager.contextMenuDismissalDelay)
+                return
+            }
+            #endif
             focusMessageField()
         }
         .onChange(of: input.pendingFocus) { _, newValue in
@@ -146,10 +154,14 @@ struct MessageInputView: View {
         #endif
     }
 
-    private func focusMessageField() {
-        // Wait a turn so focus lands after the current view update.
+    private func focusMessageField(after delay: Duration = .zero) {
+        // Wait at least a turn so focus lands after the current view update.
         Task {
-            await Task.yield()
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            } else {
+                await Task.yield()
+            }
             isMessageFieldFocused = true
         }
     }

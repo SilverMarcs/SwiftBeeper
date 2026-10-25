@@ -35,6 +35,14 @@ struct MessageContextMenu: View {
         #endif
 
         Section {
+            if chatStore.canEdit(message, in: chat) {
+                Button("Edit", systemImage: "pencil") {
+                    withAnimation {
+                        chatStore.startEditing(message, in: chat)
+                    }
+                }
+            }
+            
             Button("Reply", systemImage: "arrowshape.turn.up.left") {
                 withAnimation {
                     chatStore.setReplyTo(message)
@@ -43,14 +51,6 @@ struct MessageContextMenu: View {
 
             if message.hasText || message.isDeletedMessage {
                 Button("Copy", systemImage: "doc.on.doc", action: copyMessageText)
-            }
-
-            if chatStore.canEdit(message, in: chat) {
-                Button("Edit", systemImage: "pencil") {
-                    withAnimation {
-                        chatStore.startEditing(message, in: chat)
-                    }
-                }
             }
         } header: {
             #if !os(macOS)

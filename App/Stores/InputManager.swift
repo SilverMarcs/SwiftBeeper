@@ -31,8 +31,17 @@ final class InputManager {
 
     /// Mirrors the composer's `FocusState` (set by `MessageInputView` and
     /// `SearchFieldComposer`) so the timeline, which owns the scroll proxy, can
-    /// scroll to the bottom when the keyboard comes up.
+    /// scroll to the newest message, or the reply/edit target, when the
+    /// keyboard comes up.
     var isComposerFocused = false
+
+    #if os(iOS)
+    /// How long the composers wait before focusing for Reply or Edit. Both come
+    /// from a message's context menu, whose actions run while it is still
+    /// dismissing. When dismissal finishes, UIKit restores the keyboard state
+    /// from before the menu opened, which resigns a field focused any earlier.
+    static let contextMenuDismissalDelay: Duration = .milliseconds(200)
+    #endif
 
     init(chatStore: ChatStore) {
         self.chatStore = chatStore
