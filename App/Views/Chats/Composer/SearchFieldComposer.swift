@@ -7,9 +7,7 @@ struct SearchFieldComposer: ViewModifier {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
 
-    /// Owned by the timeline, which also scrolls to the latest message on focus.
-    let isFocused: FocusState<Bool>.Binding
-
+    @FocusState private var isFocused: Bool
     @State private var isPresented = false
     @State private var delegateProxy: TextFieldDelegateProxy?
 
@@ -19,7 +17,7 @@ struct SearchFieldComposer: ViewModifier {
                 inputManager.editingMessageDidChange()
             }
             .searchable(text: Bindable(inputManager).draft, isPresented: $isPresented, prompt: Text(inputManager.messageFieldPrompt))
-            .searchFocused(isFocused)
+            .searchFocused($isFocused)
             .searchPresentationToolbarBehavior(.avoidHidingContent)
             .background(
                 SearchIntrospector { configure($0, referenceView: $1) }
@@ -31,17 +29,27 @@ struct SearchFieldComposer: ViewModifier {
             )
             .onSubmit(of: .search) {
                 inputManager.handleSubmit()
-                isFocused.wrappedValue = true
+                isFocused = true
+            }
+            // Mirror focus into InputManager, where the timeline observes it to
+            // scroll to the latest message (FocusState is view-local).
+            .onChange(of: isFocused) { _, focused in
+                inputManager.isComposerFocused = focused
+            }
+            // Leaving the chat can tear the field down while it still has
+            // focus; the next chat's first focus must register as a change.
+            .onDisappear {
+                inputManager.isComposerFocused = false
             }
             .onChange(of: chatStore.isSavingEdit) { oldValue, newValue in
                 if oldValue && !newValue {
-                    isFocused.wrappedValue = true
+                    isFocused = true
                 }
             }
             .onChange(of: chatStore.activeComposerMessage?.id) { _, newValue in
                 // Entering reply/edit state.
                 guard newValue != nil else { return }
-                isFocused.wrappedValue = true
+                isFocused = true
             }
             .onChange(of: isPresented) { _, presented in
                 // Reply/edit and search are entered together, so Cancel leaves
@@ -104,8 +112,8 @@ struct SearchFieldComposer: ViewModifier {
 
 extension View {
     /// Turns the navigation search field into the message composer (iPhone).
-    func searchFieldComposer(isFocused: FocusState<Bool>.Binding) -> some View {
-        modifier(SearchFieldComposer(isFocused: isFocused))
+    func searchFieldComposer() -> some View {
+        modifier(SearchFieldComposer())
     }
 }
 

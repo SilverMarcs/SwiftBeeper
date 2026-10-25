@@ -5,11 +5,6 @@ import UniformTypeIdentifiers
 struct ChatTimelineView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
-    #if os(iOS)
-    /// The iPhone search-field composer's focus.
-    @FocusState private var isSearchFocused: Bool
-    @State private var keyboardScrollTask: Task<Void, Never>?
-    #endif
     @State private var firstUnreadID: String?
     private let bottomAnchorID = "timeline-bottom"
 
@@ -77,26 +72,8 @@ struct ChatTimelineView: View {
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
                 .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
-                .onChange(of: isSearchFocused || inputManager.isComposerFocused) { _, focused in
-                    keyboardScrollTask?.cancel()
-                    guard focused,
-                          chatStore.activeComposerMessage == nil else { return }
-                    // Focus changes keep arriving after the viewport is recreated
-                    // for another chat. Schedule from that event, not .task(id:).
-                    keyboardScrollTask = Task { @MainActor in
-                        do {
-                            try await Task.sleep(for: .milliseconds(1))
-                        } catch {
-                            return
-                        }
-                        guard !Task.isCancelled,
-                              chatStore.selectedChatID == selectedChat.id,
-                              chatStore.activeComposerMessage == nil else { return }
-                        scrollToLatest(with: proxy)
-                    }
-                }
-                .onDisappear {
-                    keyboardScrollTask?.cancel()
+                .scrollsToLatestOnFocus(chatID: selectedChat.id) {
+                    scrollToLatest(with: proxy)
                 }
                 #endif
                 .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -157,7 +134,7 @@ struct ChatTimelineView: View {
                 }
                 #if os(iOS)
                 .if(isIPhone) {
-                    $0.searchFieldComposer(isFocused: $isSearchFocused)
+                    $0.searchFieldComposer()
                 }
                 #endif
                 .if(isMacOrPad) {
