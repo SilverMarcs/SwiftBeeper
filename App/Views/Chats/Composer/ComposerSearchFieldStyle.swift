@@ -1,11 +1,13 @@
 #if os(iOS)
 import SwiftUI
 
-/// Replaces the search icon, hides the clear button, and keeps body text.
+/// Replaces the search icon, hides the clear button, and keeps body text and
+/// typing suggestions suitable for composing messages.
 /// UIKit refreshes the search field during toolbar and focus transitions, so
 /// enforce its styling synchronously instead of waiting for a SwiftUI update.
 final class ComposerSearchFieldStyle: UIView {
     private weak var textField: UISearchTextField?
+    private let trailingSpacer = UIView(frame: .zero)
     private var observations: [NSKeyValueObservation] = []
     private var isApplyingStyle = false
 
@@ -13,6 +15,7 @@ final class ComposerSearchFieldStyle: UIView {
         self.textField = textField
         super.init(frame: .zero)
         isUserInteractionEnabled = false
+        trailingSpacer.isUserInteractionEnabled = false
         textField.adjustsFontForContentSizeCategory = true
         let updateStyle: @Sendable () -> Void = { [weak self] in
             MainActor.assumeIsolated {
@@ -24,7 +27,10 @@ final class ComposerSearchFieldStyle: UIView {
             textField.observe(\.defaultTextAttributes) { _, _ in updateStyle() },
             textField.observe(\.attributedText) { _, _ in updateStyle() },
             textField.observe(\.attributedPlaceholder) { _, _ in updateStyle() },
-            textField.observe(\.clearButtonMode) { _, _ in updateStyle() }
+            textField.observe(\.clearButtonMode) { _, _ in updateStyle() },
+            textField.observe(\.rightView) { _, _ in updateStyle() },
+            textField.observe(\.rightViewMode) { _, _ in updateStyle() },
+            textField.observe(\.autocorrectionType) { _, _ in updateStyle() }
         ]
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self, UITraitLegibilityWeight.self]) {
             (view: ComposerSearchFieldStyle, _: UITraitCollection) in
@@ -44,6 +50,23 @@ final class ComposerSearchFieldStyle: UIView {
         defer { isApplyingStyle = false }
         if textField.clearButtonMode != .never {
             textField.clearButtonMode = .never
+        }
+        // Without a trailing view, UISearchTextField extends its editing rect
+        // to the edge when the clear button is hidden. An empty overlay keeps
+        // UIKit's native trailing inset for both the text and the caret.
+        if textField.rightView !== trailingSpacer {
+            textField.rightView = trailingSpacer
+        }
+        if textField.rightViewMode != .always {
+            textField.rightViewMode = .always
+        }
+        // SwiftUI's toolbar search field is a separate clone and can restore
+        // the search default of `.no` after the environment is applied.
+        if textField.autocorrectionType != .yes {
+            textField.autocorrectionType = .yes
+            if textField.isFirstResponder {
+                textField.reloadInputViews()
+            }
         }
         if textField.font != font {
             textField.font = font

@@ -50,6 +50,11 @@ struct ChatTimelineView: View {
                             .id(bottomAnchorID)
                             .accessibilityHidden(true)
                     }
+                    #if os(iOS)
+                    .if(isIPhone) {
+                        $0.followsComposerOnKeyboard()
+                    }
+                    #endif
                 }
                 .scrollDisabled(activeComposerMessageID != nil)
                 .environment(\.scrollToMessage, ScrollToMessageAction { messageID in

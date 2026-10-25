@@ -18,6 +18,8 @@ struct SearchFieldComposer: ViewModifier {
                 inputManager.editingMessageDidChange()
             }
             .searchable(text: Bindable(inputManager).draft, isPresented: $isPresented, prompt: Text(inputManager.messageFieldPrompt))
+            .autocorrectionDisabled(false)
+            .textInputAutocapitalization(.sentences)
             .searchFocused($isFocused)
             .searchPresentationToolbarBehavior(.avoidHidingContent)
             .background(
