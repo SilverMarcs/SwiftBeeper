@@ -33,6 +33,9 @@ struct SearchFieldComposer: ViewModifier {
             )
             .task(id: inputManager.dictationFocusRequestID) {
                 guard inputManager.dictationFocusRequestID != nil else { return }
+                // A toolbar interaction can resign the native search field while
+                // SwiftUI's focus binding stays true. Reassert focus on iPhone.
+                isFocused = false
                 isPresented = true
                 await Task.yield()
                 guard !Task.isCancelled else { return }
