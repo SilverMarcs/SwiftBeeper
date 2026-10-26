@@ -2,7 +2,8 @@
 import SwiftUI
 
 /// iPhone's composer: the navigation search field, with Return sending,
-/// attachments in the bottom bar, and reply/edit state tied to the search session.
+/// Close keeping the draft, attachments in the bottom bar, and reply/edit
+/// state tied to the search session.
 struct SearchFieldComposer: ViewModifier {
     @Environment(DictationSettings.self) private var dictationSettings
     @Environment(ChatStore.self) private var chatStore
@@ -11,6 +12,8 @@ struct SearchFieldComposer: ViewModifier {
     @FocusState private var isFocused: Bool
     @State private var isPresented = false
     @State private var delegateProxy: TextFieldDelegateProxy?
+    @State private var searchBarDelegateProxy: SearchBarDelegateProxy?
+    @State private var searchField = ComposerSearchFieldReference()
     @State private var composerActionFocusTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
@@ -24,7 +27,7 @@ struct SearchFieldComposer: ViewModifier {
             .searchFocused($isFocused)
             .searchPresentationToolbarBehavior(.avoidHidingContent)
             .background(
-                SearchIntrospector { configure($0, referenceView: $1) }
+                SearchIntrospector { configure($0, searchBar: $1, referenceView: $2) }
                     .onGeometryChange(for: CGRect.self) { geometry in
                         geometry.frame(in: .global)
                     } action: { frame in
@@ -33,13 +36,7 @@ struct SearchFieldComposer: ViewModifier {
             )
             .task(id: inputManager.dictationFocusRequestID) {
                 guard inputManager.dictationFocusRequestID != nil else { return }
-                // A toolbar interaction can resign the native search field while
-                // SwiftUI's focus binding stays true. Reassert focus on iPhone.
-                isFocused = false
-                isPresented = true
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                isFocused = true
+                await focusAfterDictation()
             }
             .onSubmit(of: .search) {
                 inputManager.handleSubmit()
@@ -96,7 +93,6 @@ struct SearchFieldComposer: ViewModifier {
                 ToolbarSpacer(.fixed, placement: .bottomBar)
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 if dictationSettings.isEnabled {
-                    ToolbarSpacer(.fixed, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
                         ComposerDictationButton()
                     }
@@ -104,9 +100,54 @@ struct SearchFieldComposer: ViewModifier {
             }
     }
 
-    /// Makes Return send, gives the send animation its source frame, and
-    /// intercepts Return through a delegate proxy.
-    private func configure(_ textField: UISearchTextField, referenceView: UIView) {
+    /// Opens the composer with its keyboard once a transcript lands in the
+    /// draft. A field already being typed in is left undisturbed.
+    private func focusAfterDictation() async {
+        guard !isComposerFieldEditing else { return }
+        if isFocused {
+            // Tapping a toolbar button resigns the native field while the
+            // focus binding stays true, so writing true again changes nothing.
+            // Clear it, and let SwiftUI apply that before refocusing.
+            isFocused = false
+            do {
+                try await Task.sleep(for: .milliseconds(1))
+            } catch {
+                return
+            }
+        }
+        isPresented = true
+        // Let the search field open before requesting its keyboard.
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        isFocused = true
+    }
+
+    /// Whether any field showing this composer has the keyboard.
+    private var isComposerFieldEditing: Bool {
+        guard let textField = searchField.textField, let referenceView = searchField.referenceView else { return false }
+        return composerFields(matching: textField, referenceView: referenceView).contains(where: \.isFirstResponder)
+    }
+
+    /// Closes the composer and its keyboard, keeping the draft for later.
+    ///
+    /// SwiftUI's own Close handling empties the search text, so this stands in
+    /// for it. UIKit still empties the field as the search deactivates, and
+    /// SwiftUI only pushes the draft into it when the draft changes, so the
+    /// draft is put back once UIKit is done.
+    private func close(_ textField: UISearchTextField, referenceView: UIView) {
+        withAnimation {
+            isPresented = false
+        }
+        Task {
+            restoreDraft(in: textField, referenceView: referenceView)
+        }
+    }
+
+    /// Makes Return send and Close keep the draft, by intercepting them
+    /// through delegate proxies, and gives the send animation its source frame.
+    private func configure(_ textField: UISearchTextField, searchBar: UISearchBar?, referenceView: UIView) {
+        searchField.textField = textField
+        searchField.referenceView = referenceView
         if textField.returnKeyType != .send {
             textField.returnKeyType = .send
             if textField.isFirstResponder {
@@ -139,6 +180,27 @@ struct SearchFieldComposer: ViewModifier {
             inputManager.handleSubmit(sourceFrame: sourceFrame)
             return false
         }
+        if let searchBar {
+            if searchBarDelegateProxy == nil || searchBar.delegate !== searchBarDelegateProxy {
+                let proxy = SearchBarDelegateProxy(originalDelegate: searchBar.delegate)
+                searchBar.delegate = proxy
+                searchBarDelegateProxy = proxy
+            }
+            searchBarDelegateProxy?.cancelButtonClicked = { [weak textField, weak referenceView] _ in
+                guard let textField, let referenceView else { return }
+                close(textField, referenceView: referenceView)
+            }
+        }
+        restoreDraft(in: textField, referenceView: referenceView)
+    }
+
+    /// Shows the draft in composer fields UIKit emptied while closing. Fields
+    /// being edited are left alone, as they already hold what was typed.
+    private func restoreDraft(in textField: UISearchTextField, referenceView: UIView) {
+        for field in composerFields(matching: textField, referenceView: referenceView)
+        where !field.isFirstResponder && field.text != inputManager.draft {
+            field.text = inputManager.draft
+        }
     }
 
     /// Uses regular body text and removes the magnifying glass, since this field
@@ -150,13 +212,17 @@ struct SearchFieldComposer: ViewModifier {
     /// prompt is updated directly. The chat list's "Search chats" field never
     /// shares that prompt.
     private func styleComposerFields(in textField: UISearchTextField, referenceView: UIView) {
-        guard let prompt = textField.placeholder, let window = referenceView.window else { return }
-        for field in [textField] + searchTextFields(in: window)
-        where field.placeholder == prompt {
-            if !(field.leftView is ComposerSearchFieldStyle) {
-                field.leftView = ComposerSearchFieldStyle(textField: field)
-            }
+        for field in composerFields(matching: textField, referenceView: referenceView)
+        where !(field.leftView is ComposerSearchFieldStyle) {
+            field.leftView = ComposerSearchFieldStyle(textField: field)
         }
+    }
+
+    /// `textField` and every clone of it UIKit shows, told apart by this
+    /// composer's prompt.
+    private func composerFields(matching textField: UISearchTextField, referenceView: UIView) -> [UISearchTextField] {
+        guard let prompt = textField.placeholder, let window = referenceView.window else { return [] }
+        return ([textField] + searchTextFields(in: window)).filter { $0.placeholder == prompt }
     }
 
     private func searchTextFields(in view: UIView) -> [UISearchTextField] {
@@ -171,35 +237,6 @@ extension View {
     /// Turns the navigation search field into the message composer (iPhone).
     func searchFieldComposer() -> some View {
         modifier(SearchFieldComposer())
-    }
-}
-
-/// Answers Return itself and forwards every other delegate call to the field's
-/// original (SwiftUI-owned) delegate.
-private final class TextFieldDelegateProxy: NSObject, UITextFieldDelegate {
-    weak var originalDelegate: UITextFieldDelegate?
-    var shouldReturn: ((UITextField) -> Bool)?
-
-    init(originalDelegate: UITextFieldDelegate?) {
-        self.originalDelegate = originalDelegate
-    }
-
-    override func responds(to aSelector: Selector!) -> Bool {
-        if aSelector == #selector(textFieldShouldReturn(_:)) {
-            return true
-        }
-        return originalDelegate?.responds(to: aSelector) ?? super.responds(to: aSelector)
-    }
-
-    override func forwardingTarget(for aSelector: Selector!) -> Any? {
-        originalDelegate
-    }
-
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        if let shouldReturn {
-            return shouldReturn(textField)
-        }
-        return originalDelegate?.textFieldShouldReturn?(textField) ?? true
     }
 }
 #endif

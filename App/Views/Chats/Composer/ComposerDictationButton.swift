@@ -6,9 +6,13 @@ struct ComposerDictationButton: View {
     @Environment(DictationSettings.self) private var settings
     @Environment(InputManager.self) private var input
 
-    /// The bottom-bar button matches the toolbar buttons beside it, while the
-    /// inline one stays muted inside its input field.
-    private var idleColor: Color { isInline ? .secondary : .primary }
+    private var idleColor: Color {
+        #if os(iOS)
+        .secondary
+        #else
+        isInline ? .secondary : .primary
+        #endif
+    }
 
     var body: some View {
         if settings.isEnabled {
