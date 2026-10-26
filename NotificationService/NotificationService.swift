@@ -25,6 +25,7 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         input["roomID"] = roomID
         input["eventID"] = eventID
+        input["cacheDirectory"] = URL.cachesDirectory.path
         guard let data = try? JSONSerialization.data(withJSONObject: input) else {
             delivery.finish()
             return

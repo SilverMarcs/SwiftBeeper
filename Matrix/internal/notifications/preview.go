@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"maunium.net/go/mautrix"
@@ -30,6 +31,8 @@ type Request struct {
 	Credentials
 	RoomID  id.RoomID  `json:"roomID"`
 	EventID id.EventID `json:"eventID"`
+	// CacheDirectory holds names and avatars from earlier pushes; optional.
+	CacheDirectory string `json:"cacheDirectory"`
 }
 
 type Preview struct {
@@ -48,9 +51,16 @@ type Participant struct {
 	Name string `json:"name"`
 }
 
-// One client per extension process, so a reused process keeps its connection
+// One client per extension process, so a burst of pushes shares its connection
 // to the homeserver instead of a fresh TLS handshake per push.
 var httpClient = &http.Client{Timeout: 8 * time.Second}
+
+// When the last push started, in Unix nanoseconds. iOS freezes the extension
+// between pushes, so a connection idle longer than idleConnectionLimit is
+// likely dead and requests on it would hang until they time out.
+var lastFetch atomic.Int64
+
+const idleConnectionLimit = 10 * time.Second
 
 // Fetch builds the preview for one notified event.
 func Fetch(ctx context.Context, req Request) (*Preview, error) {
@@ -61,12 +71,17 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	if err != nil {
 		return nil, err
 	}
+	if now := time.Now(); now.Sub(time.Unix(0, lastFetch.Swap(now.UnixNano()))) > idleConnectionLimit {
+		httpClient.CloseIdleConnections()
+	}
 	cli.Client = httpClient
 	ctx = mautrix.WithMaxRetries(ctx, 0)
+	store := newCache(req.CacheDirectory, string(req.UserID))
 
 	// Requests that don't depend on the event run while it downloads. Room
-	// metadata shares one short budget and never reads the member list.
-	metadataCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// metadata shares one short budget, counted once the event has arrived so
+	// that connecting doesn't use it up, and never reads the member list.
+	metadataCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var roomName event.RoomNameEventContent
 	var roomAvatar event.RoomAvatarEventContent
@@ -74,11 +89,13 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	roomMetadata.Add(2)
 	go func() {
 		defer roomMetadata.Done()
-		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomName, "", &roomName)
+		err := cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomName, "", &roomName)
+		store.remember("room-names", req.RoomID.String(), &roomName, err)
 	}()
 	go func() {
 		defer roomMetadata.Done()
-		_ = cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomAvatar, "", &roomAvatar)
+		err := cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomAvatar, "", &roomAvatar)
+		store.remember("room-avatars", req.RoomID.String(), &roomAvatar, err)
 	}()
 	// Most chats are encrypted, so look up the key backup alongside too.
 	var backupVersion *mautrix.RespRoomKeysVersion[backup.MegolmAuthData]
@@ -97,6 +114,7 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	if evt.ID != req.EventID || (evt.RoomID != "" && evt.RoomID != req.RoomID) {
 		return nil, errors.New("event mismatch")
 	}
+	time.AfterFunc(2*time.Second, cancel)
 	sender := evt.Sender.String()
 	var senderAvatar id.ContentURIString
 	// The sender's profile gets its own budget, since the room reads started earlier.
@@ -106,10 +124,16 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	senderProfile.Add(1)
 	go func() {
 		defer senderProfile.Done()
-		if profile, err := cli.GetProfile(profileCtx, evt.Sender); err == nil {
-			if name := strings.TrimSpace(profile.DisplayName); name != "" {
-				sender = name
-			}
+		var profile mautrix.RespUserProfile
+		fetched, err := cli.GetProfile(profileCtx, evt.Sender)
+		if err == nil {
+			profile = *fetched
+		}
+		store.remember("profiles", evt.Sender.String(), &profile, err)
+		if name := strings.TrimSpace(profile.DisplayName); name != "" {
+			sender = name
+		}
+		if !profile.AvatarURL.IsEmpty() {
 			senderAvatar = id.ContentURIString(profile.AvatarURL.String())
 		}
 	}()
@@ -153,7 +177,7 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	extras.Add(1)
 	go func() {
 		defer extras.Done()
-		preview.Avatar = fetchAvatar(ctx, cli, avatarURL)
+		preview.Avatar = fetchAvatar(ctx, cli, store, avatarURL)
 	}()
 	if isGroup {
 		extras.Add(1)

@@ -68,11 +68,15 @@ func fetchRecipients(ctx context.Context, cli *mautrix.Client, roomID id.RoomID,
 }
 
 // fetchAvatar downloads a small thumbnail of uri for the notification's
-// sender or room picture, or returns nil.
-func fetchAvatar(ctx context.Context, cli *mautrix.Client, uri id.ContentURIString) []byte {
+// sender or room picture, or returns nil. Media at an mxc URI never changes,
+// so a cached thumbnail is always current.
+func fetchAvatar(ctx context.Context, cli *mautrix.Client, store cache, uri id.ContentURIString) []byte {
 	parsed, err := uri.Parse()
 	if err != nil || parsed.IsEmpty() {
 		return nil
+	}
+	if data := store.read("avatars", string(uri)); data != nil {
+		return data
 	}
 	avatarCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -92,5 +96,6 @@ func fetchAvatar(ctx context.Context, cli *mautrix.Client, uri id.ContentURIStri
 	if err != nil || len(data) > maximumBytes || !strings.HasPrefix(http.DetectContentType(data), "image/") {
 		return nil
 	}
+	store.write("avatars", string(uri), data)
 	return data
 }
