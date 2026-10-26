@@ -6,6 +6,10 @@ struct ComposerDictationButton: View {
     @Environment(DictationSettings.self) private var settings
     @Environment(InputManager.self) private var input
 
+    /// The bottom-bar button matches the toolbar buttons beside it, while the
+    /// inline one stays muted inside its input field.
+    private var idleColor: Color { isInline ? .secondary : .primary }
+
     var body: some View {
         if settings.isEnabled {
             Button {
@@ -22,12 +26,12 @@ struct ComposerDictationButton: View {
                     }
                 }
                 .frame(width: symbolSize, height: symbolSize)
-                .foregroundStyle(input.dictation.isRecording ? Color.accentColor : Color.secondary)
+                .foregroundStyle(input.dictation.isRecording ? Color.accentColor : idleColor)
                 .frame(width: isInline ? 44 : nil)
                 .padding(.vertical, isInline ? 8 : 0)
                 .contentShape(.rect)
             }
-            .tint(input.dictation.isRecording ? Color.accentColor : Color.secondary)
+            .tint(input.dictation.isRecording ? Color.accentColor : idleColor)
             .disabled(input.dictation.isBusy || input.isSubmittingDictation)
             .accessibilityLabel(input.dictation.isBusy ? "Transcribing" : input.dictation.isRecording ? "Finish Dictation" : "Dictate")
             .accessibilityValue(input.dictation.isRecording ? "Recording" : input.dictation.isBusy ? "Processing" : "Ready")
