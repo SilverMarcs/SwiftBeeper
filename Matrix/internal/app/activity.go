@@ -73,25 +73,37 @@ func (r *Runtime) setActive(active bool) {
 	state.cancel, state.context = cancel, ctx
 	checked := state.versionsChecked
 	state.mu.Unlock()
+	// Connections pooled before suspension are often dead without the
+	// transport knowing, and the first request would wait out the HTTP/2
+	// health check. Start the active period on fresh connections.
+	cli.Client.Client.CloseIdleConnections()
 	// Retry the server version check with backoff, then start sync.
 	go func() {
 		delay := time.Second
 		for ctx.Err() == nil {
 			attempt, stop := context.WithTimeout(ctx, 15*time.Second)
-			var err error
-			if !checked {
-				err = cli.CheckServerVersions(attempt)
-			}
-			if err == nil {
-				checked = true
-				state.mu.Lock()
-				state.versionsChecked = true
-				state.mu.Unlock()
+			// The key backup version doesn't depend on the version check, so
+			// both requests run at once. Sync still waits for it: the SDK's key
+			// request queue reads it, and checks backup only once per session.
+			backupFetched := make(chan struct{})
+			go func() {
+				defer close(backupFetched)
 				if cli.KeyBackupVersion == "" {
 					if latest, backupErr := cli.Client.GetKeyBackupLatestVersion(attempt); backupErr == nil {
 						cli.KeyBackupVersion = latest.Version
 					}
 				}
+			}()
+			var err error
+			if !checked {
+				err = cli.CheckServerVersions(attempt)
+			}
+			<-backupFetched
+			if err == nil {
+				checked = true
+				state.mu.Lock()
+				state.versionsChecked = true
+				state.mu.Unlock()
 				if ctx.Err() == nil {
 					go cli.SyncLocalContext(ctx)
 					r.startOpenRoomWork()
