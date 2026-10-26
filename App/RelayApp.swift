@@ -11,6 +11,7 @@ struct RelayApp: App {
     @State private var chatStore: ChatStore
     @State private var inputManager: InputManager
     @State private var notificationService: NotificationService
+    @State private var dictationSettings = DictationSettings()
     @State private var audioPlayerService = AudioPlayerService()
 
     init() {
@@ -53,5 +54,6 @@ struct RelayApp: App {
             .environment(inputManager)
             .environment(notificationService)
             .environment(audioPlayerService)
+            .environment(dictationSettings)
     }
 }

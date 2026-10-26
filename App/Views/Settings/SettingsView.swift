@@ -25,6 +25,8 @@ struct SettingsView: View {
                     }
                 }
 
+                DictationSettingsSection()
+
                 Section("Cache") {
                     Button {
                         MatrixMedia.clearTemporaryFiles()
@@ -53,6 +55,7 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
+        .environment(DictationSettings())
         .environment(SessionStore())
         .environment(ChatStore())
         .environment(NotificationService())

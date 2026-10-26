@@ -3,6 +3,6 @@
 <plist version="1.0"><dict>
     <key>RelayNotificationKeychainGroup</key><string>$(AppIdentifierPrefix)com.SilverMarcs.RelayEmbedded</string>
     <key>NSCameraUsageDescription</key><string>Take photos and videos to attach to messages.</string>
-    <key>NSMicrophoneUsageDescription</key><string>Record audio with videos attached to messages.</string>
+    <key>NSMicrophoneUsageDescription</key><string>Record your voice to transcribe messages with OpenAI, or record audio with attached videos.</string>
     <key>NSUserActivityTypes</key><array><string>INSendMessageIntent</string></array>
 </dict></plist>

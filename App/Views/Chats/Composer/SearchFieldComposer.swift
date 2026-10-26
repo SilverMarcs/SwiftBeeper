@@ -4,6 +4,7 @@ import SwiftUI
 /// iPhone's composer: the navigation search field, with Return sending,
 /// attachments in the bottom bar, and reply/edit state tied to the search session.
 struct SearchFieldComposer: ViewModifier {
+    @Environment(DictationSettings.self) private var dictationSettings
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
 
@@ -30,6 +31,13 @@ struct SearchFieldComposer: ViewModifier {
                         inputManager.sendAnimator.searchReferenceFrame = frame
                     }
             )
+            .task(id: inputManager.dictationFocusRequestID) {
+                guard inputManager.dictationFocusRequestID != nil else { return }
+                isPresented = true
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                isFocused = true
+            }
             .onSubmit(of: .search) {
                 inputManager.handleSubmit()
                 isFocused = true
@@ -84,6 +92,12 @@ struct SearchFieldComposer: ViewModifier {
                 }
                 ToolbarSpacer(.fixed, placement: .bottomBar)
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                if dictationSettings.isEnabled {
+                    ToolbarSpacer(.fixed, placement: .bottomBar)
+                    ToolbarItem(placement: .bottomBar) {
+                        ComposerDictationButton()
+                    }
+                }
             }
     }
 

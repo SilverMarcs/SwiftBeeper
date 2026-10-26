@@ -10,6 +10,9 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class InputManager {
+    let dictation = ComposerDictation()
+    private(set) var isSubmittingDictation = false
+    private(set) var dictationFocusRequestID: UUID?
     private let chatStore: ChatStore
     #if os(iOS)
     let sendAnimator = MessageSendAnimator()
@@ -69,6 +72,17 @@ final class InputManager {
 
     var trimmedDraft: String { draft.trimmed }
 
+    func toggleDictation(using settings: DictationSettings) {
+        guard !isSubmittingDictation, settings.isEnabled, let chatID = selectedChatID else { return }
+        let editingID = chatStore.editingMessage?.id
+        dictation.toggle(provider: OpenAITranscriber(apiKey: settings.apiKey)) { [weak self] text in
+            guard let self, selectedChatID == chatID,
+                  chatStore.editingMessage?.id == editingID else { return }
+            draft += (draft.isEmpty || draft.last?.isWhitespace == true ? "" : " ") + text
+            dictationFocusRequestID = UUID()
+        }
+    }
+
     /// Appends a reply that failed to send from a notification to that chat's
     /// draft, so it is ready to resend when the chat opens.
     func restoreNotificationDraft(_ text: String, for chatID: String) {
@@ -93,9 +107,9 @@ final class InputManager {
     }
 
     var sendButtonDisabled: Bool {
-        if chatStore.selectedChat == nil { return true }
+        if chatStore.selectedChat == nil || isSubmittingDictation { return true }
         if isEditing && chatStore.isSavingEdit { return true }
-        return trimmedDraft.isEmpty && pendingAttachments.isEmpty
+        return trimmedDraft.isEmpty && pendingAttachments.isEmpty && !dictation.isActive
     }
 
     // MARK: - Editing / reply lifecycle
@@ -142,6 +156,24 @@ final class InputManager {
     // MARK: - Submit
 
     func handleSubmit(sourceFrame: CGRect? = nil) {
+        guard !isSubmittingDictation else { return }
+        if dictation.isActive {
+            let session = dictation.sessionID
+            let chatID = selectedChatID
+            let composerMessageID = chatStore.activeComposerMessage?.id
+            isSubmittingDictation = true
+            Task {
+                defer { isSubmittingDictation = false }
+                guard await dictation.finish(session: session), selectedChatID == chatID,
+                      chatStore.activeComposerMessage?.id == composerMessageID else { return }
+                submitDraft(sourceFrame: sourceFrame)
+            }
+            return
+        }
+        submitDraft(sourceFrame: sourceFrame)
+    }
+
+    private func submitDraft(sourceFrame: CGRect?) {
         if isEditing {
             saveEdit()
         } else {

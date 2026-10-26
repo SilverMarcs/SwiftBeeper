@@ -52,25 +52,30 @@ struct MessageInputView: View {
                         .scaleEffect(0.9)
                     }
 
-                    TextField(
-                        input.messageFieldPrompt,
-                        text: Bindable(input).draft,
-                        axis: .vertical
-                    )
-                        .textFieldStyle(.plain)
-                        .focused($isMessageFieldFocused)
-                        .lineLimit(1 ... 7)
-                        .padding(.horizontal, 4)
-                        .padding(8)
-                        .glassEffect(in: .rect(cornerRadius: 20))
-                        #if os(iOS)
-                        .onGeometryChange(for: CGRect.self) { geometry in
-                            geometry.frame(in: .global)
-                        } action: { frame in
-                            input.sendAnimator.sourceFrame = { frame }
-                        }
-                        #endif
-                        .onSubmit(submit)
+                    HStack(alignment: .bottom, spacing: 0) {
+                        TextField(
+                            input.messageFieldPrompt,
+                            text: Bindable(input).draft,
+                            axis: .vertical
+                        )
+                            .textFieldStyle(.plain)
+                            .focused($isMessageFieldFocused)
+                            .lineLimit(1 ... 7)
+                            .padding(.horizontal, 4)
+                            .padding(8)
+                            #if os(iOS)
+                            .onGeometryChange(for: CGRect.self) { geometry in
+                                geometry.frame(in: .global)
+                            } action: { frame in
+                                input.sendAnimator.sourceFrame = { frame }
+                            }
+                            #endif
+                            .onSubmit(submit)
+
+                        ComposerDictationButton(isInline: true)
+                            .buttonStyle(.plain)
+                    }
+                    .glassEffect(in: .rect(cornerRadius: 20))
 
                     ComposerSendButton(submit: submit)
                 }
@@ -123,6 +128,15 @@ struct MessageInputView: View {
             #endif
             focusMessageField()
         }
+        #if os(macOS)
+        .task(id: input.dictationFocusRequestID) {
+            guard input.dictationFocusRequestID != nil, !isMessageFieldFocused else { return }
+            // Leave an already focused field and its keyboard undisturbed.
+            await Task.yield()
+            guard !Task.isCancelled, !isMessageFieldFocused else { return }
+            isMessageFieldFocused = true
+        }
+        #endif
         .onChange(of: input.pendingFocus) { _, newValue in
             if newValue {
                 input.pendingFocus = false

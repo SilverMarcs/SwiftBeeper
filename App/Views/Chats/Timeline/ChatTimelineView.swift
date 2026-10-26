@@ -155,6 +155,7 @@ struct ChatTimelineView: View {
                     }
                 }
             }
+            .modifier(ComposerDictationLifecycle())
         } else {
             ContentUnavailableView(
                 "Pick a Chat",
