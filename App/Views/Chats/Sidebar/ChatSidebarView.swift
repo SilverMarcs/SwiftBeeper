@@ -47,6 +47,13 @@ struct ChatSidebarView: View {
                         Button("Settings", systemImage: "gear") { showingSettings = true }
                     }
                     ToolbarSpacer()
+                    if chatStore.isLoadingChats {
+                        ToolbarItem(placement: .primaryAction) {
+                            ProgressView()
+                                .accessibilityLabel("Loading chats")
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         ChatFilterMenu()
                     }
