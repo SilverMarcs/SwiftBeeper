@@ -12,7 +12,7 @@ extension ChatStore {
             return [
                 .service(serviceID: "whatsapp", name: "WhatsApp"),
                 .service(serviceID: "telegram", name: "Telegram"),
-                .service(serviceID: "facebookgo", name: "Messenger"),
+                .service(serviceID: "facebookgo", name: "Facebook"),
                 .service(serviceID: "instagramgo", name: "Instagram"),
                 .service(serviceID: "signal", name: "Signal"),
                 .service(serviceID: "discordgo", name: "Discord"),

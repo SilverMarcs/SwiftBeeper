@@ -121,7 +121,7 @@ func (s *Dispatcher) loadAccounts(ctx context.Context) ([]wire.Account, error) {
 
 	accounts := []wire.Account{{
 		AccountID: matrixAccountID,
-		Network:   "Beeper (Matrix)",
+		Network:   "Beeper",
 		User:      newUser(string(cli.Account.UserID), "", "", "", true),
 	}}
 
@@ -214,7 +214,7 @@ func networkFromBridgeID(bridgeID string) string {
 	case "slackgo", "slack":
 		return "Slack"
 	case "facebookgo", "facebook":
-		return "Facebook/Messenger"
+		return "Facebook"
 	case "gmessages":
 		return "Google Messages"
 	case "gvoice":
