@@ -1,3 +1,4 @@
+import SwiftMediaViewer
 import SwiftUI
 
 /// An inline, looping video bubble. Videos load once they're on screen and
@@ -10,19 +11,29 @@ struct VideoAttachmentView: View {
     @Environment(ChatStore.self) private var chatStore
     @AppStorage("autoplay") private var autoplay = true
     @AppStorage("muteOnPlay") private var muteOnPlay = false
+    #if os(macOS)
     @State private var playback = AttachmentVideoPlayback()
+    #else
+    @State private var playbackURL: URL?
+    @State private var downloadFailed = false
+    #endif
     @State private var userRequestedPlay = false
     @State private var hasRequestedResolution = false
     @State private var isVisible = false
-    @State private var showFullScreen = false
 
     var body: some View {
         let size = MediaBubbleSize.fitting(attachment.size)
         ZStack {
+            #if os(macOS)
             if playback.hasPlayer {
-                InlineVideoPlayer(player: playback.player) { showFullScreen = true }
+                MacVideoPlayer(player: playback.player)
             }
-            if !playback.isReadyForPlayback {
+            #else
+            if let playbackURL {
+                SMVVideo(videoURL: playbackURL.absoluteString, autoplay: true, muteOnPlay: muteOnPlay)
+            }
+            #endif
+            if !isReadyForPlayback {
                 VideoAttachmentPoster(source: attachment.type == .reel ? attachment.resolvedURL : attachment.posterImg)
                     .overlay {
                         if chatStore.failedMediaIDs.contains(message.id) {
@@ -33,7 +44,7 @@ struct VideoAttachmentView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(chatStore.resolvingMediaIDs.count >= ChatStore.maxConcurrentMediaResolves)
-                        } else if playback.hasFailed {
+                        } else if hasFailed {
                             Button("Retry Video", systemImage: "arrow.clockwise") {
                                 Task { await loadVideo() }
                             }
@@ -65,13 +76,24 @@ struct VideoAttachmentView: View {
                 await loadVideo()
             }
         }
-        .onDisappear {
-            if !showFullScreen { playback.stop() }
-        }
-        #if !os(macOS)
-        .fullScreenCover(isPresented: $showFullScreen) {
-            FullScreenVideoView(player: playback.player)
-        }
+        #if os(macOS)
+        .onDisappear { playback.stop() }
+        #endif
+    }
+
+    private var isReadyForPlayback: Bool {
+        #if os(macOS)
+        playback.isReadyForPlayback
+        #else
+        playbackURL != nil
+        #endif
+    }
+
+    private var hasFailed: Bool {
+        #if os(macOS)
+        playback.hasFailed
+        #else
+        downloadFailed
         #endif
     }
 
@@ -91,7 +113,15 @@ struct VideoAttachmentView: View {
 
     private func loadVideo() async {
         guard let source = attachment.resolvedURL else { return }
+        #if os(macOS)
         await playback.load(source: source, muted: muteOnPlay)
+        #else
+        downloadFailed = false
+        let url = await MatrixMedia.temporaryFile(for: source, fileExtension: "mp4")
+        guard !Task.isCancelled else { return }
+        playbackURL = url
+        downloadFailed = url == nil
+        #endif
     }
 }
 
