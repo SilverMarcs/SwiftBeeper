@@ -3,9 +3,7 @@ import SwiftUI
 /// Owns navigation independently of the timeline viewport and tracks the visible chat.
 struct ChatDetailView: View {
     @Environment(ChatStore.self) private var chatStore
-    #if os(iOS)
     @Environment(InputManager.self) private var input
-    #endif
     @State private var isVisible = false
     @State private var showingChatInfo = false
     @State private var profileSheetParticipant: ChatParticipant?
@@ -82,15 +80,11 @@ struct ChatDetailView: View {
             }
             .onDisappear {
                 isVisible = false
-                #if os(iOS)
                 input.sendAnimator.cancelAll()
-                #endif
                 if chatStore.visibleChatID == chatID { chatStore.visibleChatID = nil }
             }
             .onChange(of: chatID) { _, newValue in
-                #if os(iOS)
                 input.sendAnimator.cancelAll()
-                #endif
                 if isVisible { chatStore.visibleChatID = newValue }
             }
     }

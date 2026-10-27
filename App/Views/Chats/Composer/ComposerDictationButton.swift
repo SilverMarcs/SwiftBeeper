@@ -19,17 +19,24 @@ struct ComposerDictationButton: View {
             Button {
                 input.toggleDictation(using: settings)
             } label: {
-                Group {
-                    if input.dictation.isBusy {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                    } else {
-                        Label(input.dictation.isRecording ? "Finish Dictation" : "Dictate", systemImage: "waveform")
-                            .labelStyle(.iconOnly)
-                            .imageScale(.small)
+                // Use the field's natural line height so this control cannot
+                // make the single-line composer taller, including while busy.
+                Text("M")
+                    .hidden()
+                    .accessibilityHidden(true)
+                    .overlay {
+                        Group {
+                            if input.dictation.isBusy {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                            } else {
+                                Label(input.dictation.isRecording ? "Finish Dictation" : "Dictate", systemImage: "waveform")
+                                    .labelStyle(.iconOnly)
+                                    .imageScale(.small)
+                            }
+                        }
                     }
-                }
-                .frame(width: symbolSize, height: symbolSize)
+                    .frame(width: symbolSize, height: isInline ? nil : symbolSize)
                 .foregroundStyle(input.dictation.isRecording ? Color.accentColor : idleColor)
                 .frame(width: isInline ? 44 : nil)
                 .padding(.vertical, isInline ? 8 : 0)

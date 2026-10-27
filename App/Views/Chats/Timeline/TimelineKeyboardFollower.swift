@@ -39,6 +39,9 @@ final class TimelineKeyboardFollower {
         /// The safe area the timeline ends with.
         var endSafeAreaBottom: CGFloat
         let startTime: CFTimeInterval
+        /// The timeline's safe area in the last pass, and when it last changed.
+        var safeAreaBottom: CGFloat
+        var safeAreaChangedAt: CFTimeInterval
         var progress: CGFloat = 0
         /// The additive offset drawn in the last commit.
         var additive: CGFloat = 0
@@ -53,6 +56,10 @@ final class TimelineKeyboardFollower {
     private static let animationKey = "relay.keyboardFollow"
     /// Ends a follow whose composer or timeline never settles.
     private static let maximumDuration: CFTimeInterval = 1
+    /// How long the safe area must hold still to count as settled. Passes can
+    /// run several times within one frame, so the safe area matching the
+    /// previous pass doesn't mean SwiftUI has finished animating it.
+    private static let safeAreaSettleDuration: CFTimeInterval = 0.05
 
     private weak var scrollView: UIScrollView?
     /// Whether the timeline should end at its newest message when the
@@ -71,7 +78,13 @@ final class TimelineKeyboardFollower {
     private var lastComposerY: CGFloat?
     private var lastSafeAreaBottom: CGFloat?
     private var lastOffset: CGFloat?
+    /// The newest message's offset in the previous pass. Sending adds a row in
+    /// the same turn the keyboard starts hiding, so the current content size
+    /// can't tell whether the timeline was pinned before.
+    private var lastMaximumOffset: CGFloat?
     private var follow: Follow?
+    /// Ends a follow whose passes stopped before it did.
+    private var timeout: Task<Void, Never>?
     private var isKeyboardVisible = false
     /// UIKit announced that the keyboard is hiding. Until then, a shrinking
     /// safe area can also be the keyboard changing height.
@@ -206,6 +219,7 @@ final class TimelineKeyboardFollower {
         lastComposerY = nil
         lastSafeAreaBottom = nil
         lastOffset = nil
+        lastMaximumOffset = nil
     }
 
     private func beforeCommit() {
@@ -238,6 +252,7 @@ final class TimelineKeyboardFollower {
         lastComposerY = y
         lastSafeAreaBottom = scrollView.safeAreaInsets.bottom
         lastOffset = scrollView.contentOffset.y
+        lastMaximumOffset = maximumOffset(of: scrollView, safeAreaBottom: scrollView.safeAreaInsets.bottom)
     }
 
     // MARK: - Following
@@ -252,10 +267,12 @@ final class TimelineKeyboardFollower {
               let restingSafeAreaBottom,
               maximumOffset(of: scrollView, safeAreaBottom: restingSafeAreaBottom) - scrollView.contentOffset.y < scrollView.bounds.height else { return }
         // The safe area may already have grown for the keyboard.
+        let now = CACurrentMediaTime()
         startFollow(Follow(isShowing: true, startY: restY, startSafeAreaBottom: restingSafeAreaBottom,
                            startOffset: scrollView.contentOffset.y,
                            endSafeAreaBottom: max(scrollView.safeAreaInsets.bottom, restingSafeAreaBottom),
-                           startTime: CACurrentMediaTime()), in: scrollView)
+                           startTime: now, safeAreaBottom: scrollView.safeAreaInsets.bottom,
+                           safeAreaChangedAt: now), in: scrollView)
     }
 
     /// Starts following as the keyboard hides, under a timeline that was
@@ -263,7 +280,8 @@ final class TimelineKeyboardFollower {
     /// resting place. Uses the previous pass, from before anything moved.
     private func beginHideFollowIfNeeded(in scrollView: UIScrollView, composerY y: CGFloat) {
         guard let startY = lastComposerY, let startSafeAreaBottom = lastSafeAreaBottom,
-              let startOffset = lastOffset, let restY = restingComposerY,
+              let startOffset = lastOffset, let startMaximumOffset = lastMaximumOffset,
+              let restY = restingComposerY,
               restY - startY > 1 else { return }
         // The composer's way down is the safe area's.
         let endSafeAreaBottom = startSafeAreaBottom - (restY - startY)
@@ -274,11 +292,13 @@ final class TimelineKeyboardFollower {
         let isHiding = isHideAnnounced || abs(safeAreaBottom - endSafeAreaBottom) < 2
         guard isHiding, safeAreaBottom < startSafeAreaBottom - 0.5 || isHideAnnounced else { return }
         guard !scrollView.isTracking, !scrollView.isDragging, !scrollView.isDecelerating,
-              abs(startOffset - maximumOffset(of: scrollView, safeAreaBottom: startSafeAreaBottom)) < 2 else { return }
+              abs(startOffset - startMaximumOffset) < 2 else { return }
         hasFollowedThisDismissal = true
+        let now = CACurrentMediaTime()
         startFollow(Follow(isShowing: false, startY: startY, startSafeAreaBottom: startSafeAreaBottom,
                            startOffset: startOffset, endSafeAreaBottom: endSafeAreaBottom,
-                           startTime: CACurrentMediaTime()), in: scrollView)
+                           startTime: now, safeAreaBottom: safeAreaBottom,
+                           safeAreaChangedAt: now), in: scrollView)
     }
 
     private func startFollow(_ follow: Follow, in scrollView: UIScrollView) {
@@ -288,6 +308,16 @@ final class TimelineKeyboardFollower {
             MainActor.assumeIsolated { self?.applyFollow(to: scrollView) }
         }
         applyFollow(to: scrollView)
+        // Passes only run when the main run loop wakes. After a send, nothing may
+        // wake it until the message is confirmed, which would leave the timeline
+        // drawn at the held offset: away from where the lazy rows are built, so
+        // it shows blank until a touch ends the follow.
+        timeout?.cancel()
+        timeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.maximumDuration))
+            guard !Task.isCancelled else { return }
+            self?.endFollow(settling: true)
+        }
     }
 
     private func updateFollow(in scrollView: UIScrollView, composerY y: CGFloat) {
@@ -298,9 +328,23 @@ final class TimelineKeyboardFollower {
         }
         let travel = follow.endY - follow.startY
         follow.progress = abs(travel) < 1 ? 0 : min(max((y - follow.startY) / travel, 0), 1)
+        // The field UIKit rests the composer in after a send sits up to a point
+        // off the one it rested in before, so arriving within two points counts.
+        // Otherwise the follow only ends when it times out.
+        if abs(y - follow.endY) < 2 {
+            follow.progress = 1
+        }
         // Once the composer has arrived, end where SwiftUI's safe area does,
-        // in case the estimate was a point or two out.
-        let isSafeAreaSettled = safeAreaBottom == lastSafeAreaBottom
+        // in case the estimate was a point or two out. The safe area can still
+        // be animating well after the composer arrives; ending then would
+        // drop the timeline back to SwiftUI's offset, above where it settles,
+        // and it would bounce up before following the safe area down.
+        let now = CACurrentMediaTime()
+        if safeAreaBottom != follow.safeAreaBottom {
+            follow.safeAreaBottom = safeAreaBottom
+            follow.safeAreaChangedAt = now
+        }
+        let isSafeAreaSettled = now - follow.safeAreaChangedAt >= Self.safeAreaSettleDuration
         if follow.progress >= 1, isSafeAreaSettled {
             follow.endSafeAreaBottom = safeAreaBottom
         }
@@ -311,7 +355,7 @@ final class TimelineKeyboardFollower {
         if follow.progress >= 1, isSafeAreaSettled, abs(scrollView.contentOffset.y - endOffset) < 0.5 {
             endFollow(settling: true)
         } else if scrollView.isTracking
-            || CACurrentMediaTime() - follow.startTime > Self.maximumDuration {
+            || now - follow.startTime > Self.maximumDuration {
             // A new touch, or a move that never settled, hands the rest to an animation.
             endFollow(settling: true)
         }
@@ -365,6 +409,8 @@ final class TimelineKeyboardFollower {
         guard let follow else { return }
         self.follow = nil
         offsetObservation = nil
+        timeout?.cancel()
+        timeout = nil
         guard let scrollView else { return }
         let layers = [(scrollView.layer, Self.systemAnimationKey)]
             + pinnedSubviews(of: scrollView).map { ($0.layer, "position") }

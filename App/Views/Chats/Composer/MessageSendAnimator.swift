@@ -1,7 +1,6 @@
-#if os(iOS)
 import SwiftUI
 
-/// Flies just-sent bubbles in from the composer on iOS. Owns only
+/// Flies just-sent bubbles in from the composer. Owns only
 /// short-lived presentation state; sending never waits for animation.
 @MainActor
 @Observable
@@ -97,4 +96,3 @@ final class MessageSendFlight: Identifiable {
         return spring.value(target: CGFloat(1), time: max(0, seconds))
     }
 }
-#endif

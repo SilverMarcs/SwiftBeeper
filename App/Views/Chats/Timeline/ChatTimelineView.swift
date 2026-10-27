@@ -69,9 +69,9 @@ struct ChatTimelineView: View {
                 .defaultScrollAnchor(.bottom, for: .alignment)
                 .contentMargins(.horizontal, 10, for: .scrollContent)
                 .contentMargins(.bottom, 24, for: .scrollContent)
+                .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
-                .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
                 .scrollsOnComposerFocus(chatID: selectedChat.id) {
                     scrollToLatest(with: proxy)
                 } scrollToComposerMessage: { messageID in

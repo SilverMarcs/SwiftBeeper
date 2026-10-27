@@ -1,17 +1,17 @@
 import SwiftUI
 
-#if os(iOS)
 /// Animate the actual bubble relative to its current layout, never a copied
 /// destination rectangle. Only render transforms change on animation frames.
 struct MessageSendEffect: ViewModifier {
     @Environment(InputManager.self) private var input
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Finds this bubble's flight, if it was just sent.
     let flight: (MessageSendAnimator) -> MessageSendFlight?
 
     func body(content: Content) -> some View {
         let animator = input.sendAnimator
-        if let flight = flight(animator) {
+        if !reduceMotion, let flight = flight(animator) {
             let source = flight.sourceFrame
             let startedAt = flight.startedAt
             TimelineView(.animation) { _ in
@@ -34,25 +34,16 @@ struct MessageSendEffect: ViewModifier {
         }
     }
 }
-#endif
 
 extension View {
-    /// Flies a just-sent bubble in from the composer (iOS only).
+    /// Flies a just-sent bubble in from the composer.
     func sendEffect(forOutgoing id: OutgoingMessage.ID) -> some View {
-        #if os(iOS)
         modifier(MessageSendEffect { $0.flight(forOutgoing: id) })
-        #else
-        self
-        #endif
     }
 
     /// Continues the flight on the server echo that replaced the outgoing row.
     /// Pass nil for incoming messages so they never observe flights.
     func sendEffect(forConfirmed id: Message.ID?) -> some View {
-        #if os(iOS)
         modifier(MessageSendEffect { animator in id.flatMap { animator.flight(forConfirmed: $0) } })
-        #else
-        self
-        #endif
     }
 }

@@ -14,9 +14,7 @@ final class InputManager {
     private(set) var isSubmittingDictation = false
     private(set) var dictationFocusRequestID: UUID?
     private let chatStore: ChatStore
-    #if os(iOS)
     let sendAnimator = MessageSendAnimator()
-    #endif
 
     /// Per-chat draft text, keyed by chat ID, so switching chats keeps drafts.
     private var draftsByChatID: [String: String] = [:]
@@ -48,11 +46,9 @@ final class InputManager {
 
     init(chatStore: ChatStore) {
         self.chatStore = chatStore
-        #if os(iOS)
         chatStore.onOutgoingMessageConfirmed = { [sendAnimator] outgoingID, message in
             sendAnimator.confirm(outgoingID, as: message)
         }
-        #endif
     }
 
     // MARK: - Draft text
@@ -187,19 +183,13 @@ final class InputManager {
         let attachments = pendingAttachments
 
         guard !text.isEmpty || !attachments.isEmpty else { return }
-        #if os(iOS)
         let animationSource = sourceFrame ?? sendAnimator.sourceFrame?()
-        #endif
         draftsByChatID[chatID] = nil
         pendingAttachmentsByChatID[chatID] = nil
 
-        #if os(iOS)
         if let outgoing = chatStore.sendMessage(text: text, attachments: attachments, to: chatID) {
             sendAnimator.begin(outgoing, from: animationSource)
         }
-        #else
-        chatStore.sendMessage(text: text, attachments: attachments, to: chatID)
-        #endif
     }
 
     private func saveEdit() {

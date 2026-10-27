@@ -121,10 +121,8 @@ final class ChatStore {
         didSet { updateMessageSubscriptions() }
     }
     @ObservationIgnored var outgoingSendTasks: [OutgoingMessage.ID: Task<Void, Never>] = [:]
-    #if os(iOS)
     /// Carries exact outbox identity across the local-to-canonical handoff.
     @ObservationIgnored var onOutgoingMessageConfirmed: ((OutgoingMessage.ID, Message) -> Void)?
-    #endif
 
     @ObservationIgnored private var resyncTask: Task<Void, Never>?
 

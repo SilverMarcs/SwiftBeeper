@@ -63,13 +63,11 @@ struct MessageInputView: View {
                             .lineLimit(1 ... 7)
                             .padding(.horizontal, 4)
                             .padding(8)
-                            #if os(iOS)
                             .onGeometryChange(for: CGRect.self) { geometry in
                                 geometry.frame(in: .global)
                             } action: { frame in
                                 input.sendAnimator.sourceFrame = { frame }
                             }
-                            #endif
                             .onSubmit(submit)
 
                         ComposerDictationButton(isInline: true)

@@ -15,6 +15,7 @@ struct SearchFieldComposer: ViewModifier {
     @State private var searchBarDelegateProxy: SearchBarDelegateProxy?
     @State private var searchField = ComposerSearchFieldReference()
     @State private var composerActionFocusTask: Task<Void, Never>?
+    @State private var dictationFocusTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
@@ -34,9 +35,15 @@ struct SearchFieldComposer: ViewModifier {
                         inputManager.sendAnimator.searchReferenceFrame = frame
                     }
             )
-            .task(id: inputManager.dictationFocusRequestID) {
-                guard inputManager.dictationFocusRequestID != nil else { return }
-                await focusAfterDictation()
+            // A change, not the current value: the request is shared by every
+            // chat, and the composer of a chat opened later must not replay it.
+            .onChange(of: inputManager.dictationFocusRequestID) {
+                dictationFocusTask?.cancel()
+                // Not cancelled on disappear: the detail view can disappear and
+                // reappear while it settles, which would drop the request.
+                dictationFocusTask = Task {
+                    await focusAfterDictation()
+                }
             }
             .onSubmit(of: .search) {
                 inputManager.handleSubmit()
