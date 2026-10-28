@@ -16,6 +16,7 @@ struct SearchFieldComposer: ViewModifier {
     @State private var searchField = ComposerSearchFieldReference()
     @State private var composerActionFocusTask: Task<Void, Never>?
     @State private var dictationFocusTask: Task<Void, Never>?
+    @State private var attachmentFocusTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
@@ -45,6 +46,27 @@ struct SearchFieldComposer: ViewModifier {
                     await focusAfterDictation()
                 }
             }
+            // Return is the Send key; keep it lit while attachments are pending.
+            .onChange(of: inputManager.pendingAttachments.isEmpty, initial: true) { _, isEmpty in
+                SendableSearchTextField.hasPendingAttachments = !isEmpty
+                refreshReturnKey()
+            }
+            // Adding an attachment returns to the composer, so a caption can be
+            // typed. Removing one leaves focus alone.
+            .onChange(of: inputManager.pendingAttachments.count) { oldCount, newCount in
+                guard newCount > oldCount else { return }
+                attachmentFocusTask?.cancel()
+                attachmentFocusTask = Task {
+                    // Let the picker or camera finish dismissing first, or it
+                    // takes the keyboard back.
+                    do {
+                        try await Task.sleep(for: .milliseconds(400))
+                    } catch {
+                        return
+                    }
+                    await focusAfterDictation()
+                }
+            }
             .onSubmit(of: .search) {
                 inputManager.handleSubmit()
                 isFocused = true
@@ -58,6 +80,7 @@ struct SearchFieldComposer: ViewModifier {
             // focus; the next chat's first focus must register as a change.
             .onDisappear {
                 composerActionFocusTask?.cancel()
+                attachmentFocusTask?.cancel()
                 inputManager.isComposerFocused = false
             }
             .onChange(of: chatStore.isSavingEdit) { oldValue, newValue in
@@ -129,6 +152,15 @@ struct SearchFieldComposer: ViewModifier {
         isFocused = true
     }
 
+    /// Makes the keyboard re-read whether Return is enabled.
+    private func refreshReturnKey() {
+        guard let textField = searchField.textField, let referenceView = searchField.referenceView else { return }
+        for field in [textField] + composerFields(matching: textField, referenceView: referenceView)
+        where field.isFirstResponder {
+            field.reloadInputViews()
+        }
+    }
+
     /// Whether any field showing this composer has the keyboard.
     private var isComposerFieldEditing: Bool {
         guard let textField = searchField.textField, let referenceView = searchField.referenceView else { return false }
@@ -162,6 +194,9 @@ struct SearchFieldComposer: ViewModifier {
             }
         }
         styleComposerFields(in: textField, referenceView: referenceView)
+        for field in [textField] + composerFields(matching: textField, referenceView: referenceView) {
+            SendableSearchTextField.install(on: field)
+        }
         let animator = inputManager.sendAnimator
         animator.sourceFrame = { [weak animator, weak textField, weak referenceView] in
             guard let animator, let textField, let referenceView,
