@@ -64,6 +64,7 @@ struct ChatDetailView: View {
                             ChatRowActionsView(chat: selectedChat, placement: .contextMenu)
                         }
                         .menuOrder(.fixed)
+                        .menuIndicator(.hidden)
                     }
                 }
             }
