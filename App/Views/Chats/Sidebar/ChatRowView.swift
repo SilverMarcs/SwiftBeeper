@@ -59,6 +59,11 @@ struct ChatRowView: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(isMuted ? Color.secondary.opacity(0.25) : .accentColor, in: .capsule)
+                    } else if chat.isMarkedUnread == true {
+                        Image(systemName: "circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(chat.isMuted == true ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+                            .accessibilityLabel("Unread")
                     }
                 }
             }

@@ -64,6 +64,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.pinChat(ctx, input)
 	case "mark-chat-read":
 		return s.markChatRead(ctx, input)
+	case "mark-chat-unread":
+		return s.markChatUnread(ctx, input)
 	case "list-messages":
 		return s.listMessages(ctx, input)
 	case "resolve-media":

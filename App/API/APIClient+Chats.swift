@@ -42,6 +42,11 @@ extension APIClient {
         struct Arguments: Encodable { let chatID: String }
         try await executeRaw("mark-chat-read", arguments: Arguments(chatID: chatID))
     }
+
+    static func markChatAsUnread(chatID: String) async throws -> Chat {
+        struct Arguments: Encodable { let chatID: String }
+        return try await execute("mark-chat-unread", arguments: Arguments(chatID: chatID))
+    }
 }
 
 /// Shared by listing and search; a page cursor is the last chat's activity and ID.

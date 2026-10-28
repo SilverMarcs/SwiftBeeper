@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,20 +29,40 @@ func (s *Dispatcher) markChatRead(ctx context.Context, input json.RawMessage) (a
 	cli := s.rt.Client()
 	roomID := id.RoomID(chatID)
 	var latestEventID id.EventID
-	// A failed lookup means the room has no timeline yet.
-	_ = cli.DB.QueryRow(ctx, `SELECT event.event_id FROM timeline
+	err = cli.DB.QueryRow(ctx, `SELECT event.event_id FROM timeline
 		JOIN event ON event.rowid = timeline.event_rowid
 		WHERE timeline.room_id = ? ORDER BY timeline.rowid DESC LIMIT 1`, roomID).Scan(&latestEventID)
-	if latestEventID == "" {
-		return nil, errors.New("No messages in this chat")
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to find latest message: %w", err)
 	}
-	if err = cli.Client.MarkRead(ctx, roomID, latestEventID); err != nil {
-		return nil, fmt.Errorf("failed to send read receipt: %w", err)
+	if latestEventID != "" {
+		if err = cli.Client.MarkRead(ctx, roomID, latestEventID); err != nil {
+			return nil, fmt.Errorf("failed to send read receipt: %w", err)
+		}
+		// Best effort: the read receipt is the important part.
+		_ = cli.Client.SetRoomAccountData(ctx, roomID, "m.fully_read", map[string]any{"event_id": latestEventID})
 	}
-	// Also move the m.fully_read marker. Best effort: the read receipt is the
-	// important part.
-	_ = cli.Client.SetRoomAccountData(ctx, roomID, "m.fully_read", map[string]any{"event_id": latestEventID})
+	if err = s.setChatMarkedUnread(ctx, roomID, false); err != nil {
+		return nil, err
+	}
 	return wire.Success, nil
+}
+
+func (s *Dispatcher) markChatUnread(ctx context.Context, input json.RawMessage) (any, error) {
+	var req struct {
+		ChatID string `json:"chatID"`
+	}
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
+	}
+	chatID, err := required(req.ChatID, "chatID")
+	if err != nil {
+		return nil, err
+	}
+	if err = s.setChatMarkedUnread(ctx, id.RoomID(chatID), true); err != nil {
+		return nil, err
+	}
+	return s.getChat(ctx, input)
 }
 
 // loadLastReadSortKeys returns the timeline position of the user's own read

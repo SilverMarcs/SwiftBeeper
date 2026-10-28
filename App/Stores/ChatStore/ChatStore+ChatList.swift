@@ -258,14 +258,31 @@ extension ChatStore {
     }
 
     func markChatAsRead(_ chatID: String) async {
+        let session = session
         notificationService.clearDeliveredNotifications(for: chatID)
         let previous = chat(byID: chatID)
-        updateChat(chatID) { $0.unreadCount = 0 }
+        updateChat(chatID) {
+            $0.unreadCount = 0
+            $0.isMarkedUnread = false
+        }
 
         do {
             try await APIClient.markChatAsRead(chatID: chatID)
         } catch {
+            guard self.session == session else { return }
             if let previous { updateChat(chatID) { $0 = previous } }
+            chatsError = error.localizedDescription
+        }
+    }
+
+    func markChatAsUnread(_ chatID: String) async {
+        let session = session
+        do {
+            let updated = try await APIClient.markChatAsUnread(chatID: chatID)
+            guard self.session == session else { return }
+            applyChatUpsert(updated)
+        } catch {
+            guard self.session == session else { return }
             chatsError = error.localizedDescription
         }
     }

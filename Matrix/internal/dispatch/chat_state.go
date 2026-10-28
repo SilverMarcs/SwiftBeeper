@@ -205,6 +205,26 @@ func (s *Dispatcher) archiveChat(ctx context.Context, input json.RawMessage) (an
 	return wire.Success, nil
 }
 
+// Marked unread is synced account data, independent of message counts and
+// read receipts. Beeper's timestamp also moves archived chats into the inbox.
+func (s *Dispatcher) setChatMarkedUnread(ctx context.Context, roomID id.RoomID, unread bool) error {
+	states, err := s.loadRoomAccountDataStates(ctx, roomID)
+	if err != nil {
+		return err
+	}
+	content := markedUnreadContent{Unread: unread, TS: states[roomID].MarkedUnreadUpdatedAt}
+	if unread {
+		content.TS = time.Now().UnixMilli()
+	}
+	// Keep the timestamp when clearing the flag so reading a chat does not
+	// restore an archive state that marking it unread already superseded.
+	if err = s.rt.Client().Client.SetRoomAccountData(ctx, roomID, accountDataMarkedUnread.Type, content); err != nil {
+		return fmt.Errorf("failed to set unread state: %w", err)
+	}
+	s.cacheRoomAccountData(ctx, roomID, accountDataMarkedUnread, content)
+	return nil
+}
+
 // cacheRoomAccountData stores account data the homeserver accepted ahead of
 // its sync echo. Failure only delays the local view until that echo.
 func (s *Dispatcher) cacheRoomAccountData(ctx context.Context, roomID id.RoomID, eventType event.Type, content any) {

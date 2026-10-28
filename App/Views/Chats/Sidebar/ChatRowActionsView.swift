@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Read, pin, archive, and mute actions for a chat row.
+/// Shared read, pin, archive, and mute actions for chat rows and the detail menu.
 struct ChatRowActionsView: View {
-    /// Leading swipes mark read, trailing swipes archive or mute, and the
+    /// Leading swipes toggle read state or pin, trailing swipes archive or mute, and the
     /// context menu offers everything.
     enum Placement {
         case leadingSwipe
@@ -19,9 +19,19 @@ struct ChatRowActionsView: View {
         let isArchived = chat.isArchived == true
         let isMuted = chat.isMuted == true
 
-        if placement != .trailingSwipe, chat.unreadCount > 0 {
-            Button("Mark Read", systemImage: "envelope.open") {
-                Task { await chatStore.markChatAsRead(chat.id) }
+        if placement != .trailingSwipe {
+            let isUnread = chat.unreadCount > 0 || chat.isMarkedUnread == true
+            Button(
+                isUnread ? "Mark as Read" : "Mark as Unread",
+                systemImage: isUnread ? "envelope.open" : "envelope.badge"
+            ) {
+                Task {
+                    if isUnread {
+                        await chatStore.markChatAsRead(chat.id)
+                    } else {
+                        await chatStore.markChatAsUnread(chat.id)
+                    }
+                }
             }
             .tint(.blue)
         }
