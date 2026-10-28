@@ -43,6 +43,7 @@ struct MessageRowView: View {
 
                 if message.linkedMessageID?.isEmpty == false {
                     ReplyPreviewView(linkedMessage: entry.linkedMessage, isOutgoing: isOutgoing)
+                        .modifier(TypingBubbleContentReveal())
                 }
 
                 MessageContentView(message: message, chat: chat)

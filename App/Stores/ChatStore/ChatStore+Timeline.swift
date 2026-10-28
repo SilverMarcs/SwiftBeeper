@@ -70,6 +70,7 @@ extension ChatStore {
     /// Inserts or replaces messages by ID. Every copy the core sends is
     /// complete, so the newest one wins outright.
     func upsertMessages(_ incoming: [Message]) {
+        handoffTyping(to: incoming)
         var byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         for message in incoming {
             byID[message.id] = message
@@ -82,6 +83,8 @@ extension ChatStore {
 
     /// Clears the timeline and composer state for a newly opened chat.
     func resetTimeline() {
+        clearTyping()
+        typingMessageRowIDs = [:]
         failedMediaIDs = []
         timelineGeneration = UUID()
         loadMessagesTask?.cancel()

@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Bubble metrics and fills shared by message, reply, reaction, and attachment views.
 enum ChatVisualStyle {
+    /// Duration of the incoming bubble's expansion.
+    static let typingBubbleExpansionDuration = 0.35
+
     #if os(macOS)
     static let bubbleHorizontalPadding: CGFloat = 12
     static let bubbleVerticalPadding: CGFloat = 8
@@ -55,9 +58,6 @@ extension View {
     /// Padding + background + clip shape for a text message bubble.
     /// iOS matches LynkChat's bubble chrome; macOS keeps the tighter style.
     func messageBubbleChrome(isOutgoing: Bool) -> some View {
-        padding(.horizontal, ChatVisualStyle.bubbleHorizontalPadding)
-            .padding(.vertical, ChatVisualStyle.bubbleVerticalPadding)
-            .bubbleBackground(isOutgoing: isOutgoing)
-            .clipShape(.rect(cornerRadius: ChatVisualStyle.bubbleCornerRadius))
+        modifier(MessageBubbleChrome(isOutgoing: isOutgoing))
     }
 }

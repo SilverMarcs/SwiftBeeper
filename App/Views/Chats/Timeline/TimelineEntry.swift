@@ -29,7 +29,8 @@ struct TimelineEntry: Identifiable, Equatable {
     static func entries(
         for messages: [Message],
         firstUnreadID: String?,
-        lastReadByOtherSortKey: String?
+        lastReadByOtherSortKey: String?,
+        followingTypingSenderID: String? = nil
     ) -> [TimelineEntry] {
         let messagesByID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let readIndicatorID = readIndicatorMessageID(in: messages, lastReadByOtherSortKey: lastReadByOtherSortKey)
@@ -48,7 +49,8 @@ struct TimelineEntry: Identifiable, Equatable {
                 message: message,
                 showsTimestamp: showsTimestamp,
                 isFirstInGroup: previous?.senderID != message.senderID || showsTimestamp || message.id == firstUnreadID,
-                isLastInGroup: next?.senderID != message.senderID || nextShowsTimestamp || next?.id == firstUnreadID,
+                isLastInGroup: (next?.senderID ?? followingTypingSenderID) != message.senderID
+                    || nextShowsTimestamp || (next.map { $0.id == firstUnreadID } ?? false),
                 showsReadIndicator: message.id == readIndicatorID,
                 linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] }
             )

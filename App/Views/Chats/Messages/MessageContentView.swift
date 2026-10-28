@@ -5,6 +5,7 @@ import SwiftUI
 struct MessageContentView: View {
     let message: Message
     let chat: Chat
+    @Environment(\.typingBubbleNamespace) private var typingBubbleNamespace
 
     private enum Bubble: Equatable {
         case attachment(String?)
@@ -35,8 +36,9 @@ struct MessageContentView: View {
                     ReactionsBarView(message: message, chat: chat)
                 }
             } else {
-                ForEach(message.attachments ?? []) { attachment in
+                ForEach((message.attachments ?? []).enumerated(), id: \.element.id) { index, attachment in
                     AttachmentView(attachment: attachment, message: message, chat: chat)
+                        .modifier(TypingBubbleGeometry(isEnabled: index == 0))
                         .overlay(alignment: reactionsAlignment) {
                             if lastBubble == .attachment(attachment.id) {
                                 ReactionsBarView(message: message, chat: chat)
@@ -47,6 +49,9 @@ struct MessageContentView: View {
                 if let visibleText = message.visibleText {
                     MessageTextView(text: visibleText, isOutgoing: isOutgoing)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
+                        // Media takes over the typing bubble when present; its
+                        // caption has a separate background and must not match too.
+                        .environment(\.typingBubbleNamespace, message.attachments?.isEmpty != false ? typingBubbleNamespace : nil)
                         .sendEffect(forConfirmed: isOutgoing ? message.id : nil)
                         .overlay(alignment: reactionsAlignment) {
                             ReactionsBarView(message: message, chat: chat)

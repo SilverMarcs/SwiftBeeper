@@ -5,6 +5,7 @@ enum RealtimeEvent {
     /// The stream (re)connected. After the first connection, events may have
     /// been missed, so the UI reloads from the local database.
     case connected(requiresResync: Bool)
+    case disconnected
     /// A sequence gap or an event without its payload means at least one change
     /// could not be applied, so the UI reloads from the local database.
     case resyncRequired
@@ -13,6 +14,7 @@ enum RealtimeEvent {
     case chatDeleted(chatID: String)
     case messagesUpserted(chatID: String, messages: [Message])
     case receiptUpdated(chatID: String, lastReadByOtherSortKey: String)
+    case typingUpdated(chatID: String, participants: [ChatParticipant])
     case failed(String)
 }
 

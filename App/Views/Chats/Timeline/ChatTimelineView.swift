@@ -5,7 +5,9 @@ import UniformTypeIdentifiers
 struct ChatTimelineView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var firstUnreadID: String?
+    @State private var isNearBottom = true
     private let bottomAnchorID = "timeline-bottom"
 
     var body: some View {
@@ -15,9 +17,16 @@ struct ChatTimelineView: View {
             let timelineEntries = TimelineEntry.entries(
                 for: messages,
                 firstUnreadID: firstUnreadID,
-                lastReadByOtherSortKey: chatStore.lastReadByOtherSortKey
+                lastReadByOtherSortKey: chatStore.lastReadByOtherSortKey,
+                followingTypingSenderID: outgoingMessages.isEmpty ? chatStore.typingBubble?.participant.id : nil
             )
             let outgoingTimelineEntries = OutgoingTimelineEntry.entries(for: outgoingMessages, following: messages)
+            let timelineItems = TimelineItem.items(
+                messages: timelineEntries,
+                outgoing: outgoingTimelineEntries,
+                typing: chatStore.hasLoadedTimeline ? chatStore.typingBubble : nil,
+                messageRowIDs: chatStore.typingMessageRowIDs
+            )
             let activeComposerMessageID = chatStore.activeComposerMessage?.id
 
             ScrollViewReader { proxy in
@@ -29,21 +38,20 @@ struct ChatTimelineView: View {
                                     .frame(maxWidth: .infinity)
                             }
 
-                            ForEach(timelineEntries) { entry in
-                                TimelineEntryRow(
-                                    entry: entry,
+                            ForEach(timelineItems) { item in
+                                TimelineItemRow(
+                                    item: item,
                                     chat: selectedChat,
-                                    showsUnreadDivider: entry.message.id == firstUnreadID && outgoingMessages.isEmpty,
+                                    firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
                                     activeComposerMessageID: activeComposerMessageID
                                 )
-                                .id(entry.id)
-                            }
-
-                            ForEach(outgoingTimelineEntries) { entry in
-                                OutgoingTimelineEntryRow(entry: entry, activeComposerMessageID: activeComposerMessageID)
-                                    .id(entry.id)
+                                .transition(.opacity)
                             }
                         }
+                        .animation(
+                            reduceMotion ? nil : .easeInOut(duration: ChatVisualStyle.typingBubbleExpansionDuration),
+                            value: chatStore.typingBubble?.id
+                        )
                         // Keep the scroll target available independently of lazy rows.
                         Color.clear
                             .frame(height: 1)
@@ -84,8 +92,18 @@ struct ChatTimelineView: View {
                     guard nearTop, !messages.isEmpty else { return }
                     Task { await chatStore.loadOlderMessages() }
                 }
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.visibleRect.maxY >= geometry.contentSize.height - 80
+                } action: { _, nearBottom in
+                    isNearBottom = nearBottom
+                }
+                .onChange(of: chatStore.typingBubble?.id) { _, newValue in
+                    guard newValue != nil, isNearBottom else { return }
+                    scrollToLatest(with: proxy)
+                }
                 .onChange(of: selectedChat.id, initial: true) { _, _ in
                     firstUnreadID = nil
+                    isNearBottom = true
                 }
                 .onChange(of: chatStore.hasLoadedTimeline, initial: true) { _, loaded in
                     guard loaded else { return }
@@ -171,7 +189,7 @@ struct ChatTimelineView: View {
     }
 
     private func scrollToLatest(with proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.25)) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
     }

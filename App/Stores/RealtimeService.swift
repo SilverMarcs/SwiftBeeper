@@ -30,6 +30,7 @@ final class RealtimeService {
         listenerTask?.cancel()
         listenerTask = nil
         lastSequence = 0
+        onEvent(.disconnected)
     }
 
     /// Stops and forgets the session, so the next connection is not a reconnect.
@@ -64,6 +65,7 @@ final class RealtimeService {
             guard !Task.isCancelled else { return }
             connectionHandle = nil
             listenerTask = nil
+            onEvent(.disconnected)
         } catch {
             // The core could not start. The next activation tries again.
             guard !Task.isCancelled else { return }
@@ -116,6 +118,12 @@ final class RealtimeService {
             if let chatID = envelope.chatID,
                let readKey = envelope.entries?.first?["lastReadByOtherSortKey"] {
                 onEvent(.receiptUpdated(chatID: chatID, lastReadByOtherSortKey: readKey))
+            }
+        case "typing.updated":
+            trackSequence(in: envelope)
+            if let chatID = envelope.chatID {
+                let participants = (try? decoder.decode(EntriesPayload<ChatParticipant>.self, from: data))?.entries ?? []
+                onEvent(.typingUpdated(chatID: chatID, participants: participants))
             }
         default:
             break

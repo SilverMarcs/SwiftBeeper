@@ -20,6 +20,7 @@ const (
 	realtimeTypeChatDeleted     = "chat.deleted"
 	realtimeTypeMessageUpserted = "message.upserted"
 	realtimeTypeReceiptUpdated  = "receipt.updated"
+	realtimeTypeTypingUpdated   = "typing.updated"
 
 	realtimeSignalReady                  = "ready"
 	realtimeSignalResyncRequired         = "resync.required"
@@ -76,6 +77,8 @@ func (h *eventHub) enqueue(evt any) {
 func (h *eventHub) run() {
 	for evt := range h.eventQueue {
 		switch evt := evt.(type) {
+		case *jsoncmd.Typing:
+			h.processTyping(evt)
 		case *jsoncmd.SyncComplete:
 			if evt != nil {
 				h.processSyncComplete(evt)

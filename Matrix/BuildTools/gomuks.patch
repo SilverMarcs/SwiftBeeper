@@ -201,8 +201,22 @@
 -		}
 -	}
 -}
-@@ -369 +341,4 @@
+@@ -239,3 +211,4 @@
+-func (h *HiClient) SetTyping(ctx context.Context, roomID id.RoomID, timeout time.Duration) error {
+-	_, err := h.Client.UserTyping(ctx, roomID, timeout > 0, timeout)
+-	return err
++// Relay only receives typing notifications; never publish our typing state,
++// including the SDK's automatic stop notification when sending a message.
++func (h *HiClient) SetTyping(context.Context, id.RoomID, time.Duration) error {
++	return nil
+@@ -369,7 +342,4 @@
 -	ctx = context.WithoutCancel(ctx)
+-	go func() {
+-		err := h.SetTyping(ctx, room.ID, 0)
+-		if err != nil {
+-			zerolog.Ctx(ctx).Err(err).Msg("Failed to stop typing while sending message")
+-		}
+-	}()
 +	// Notification replies await this send inside a background execution budget.
 +	if !synchronous {
 +		ctx = context.WithoutCancel(ctx)
@@ -211,6 +225,9 @@
 +++ b/pkg/hicli/sync.go
 @@ -30 +29,0 @@
 -	"maunium.net/go/mautrix/format"
+@@ -358 +357 @@
+-			go h.EventHandler(&jsoncmd.Typing{
++			h.EventHandler(&jsoncmd.Typing{
 @@ -586,7 +584,0 @@
 -			} else if evt.Sender == h.Account.UserID {
 -				editSource, _ = format.HTMLToMarkdownFull(htmlToMarkdownForInput, content.FormattedBody)

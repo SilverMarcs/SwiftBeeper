@@ -102,6 +102,11 @@ final class ChatStore {
     var hasMoreOlderMessages = false
     /// Furthest sortKey another participant has read in the open chat.
     var lastReadByOtherSortKey: String?
+    var typingParticipants: [ChatParticipant] = []
+    var typingBubble: TypingBubble?
+    /// Preserve the typing row's identity after its real message arrives.
+    var typingMessageRowIDs: [Message.ID: String] = [:]
+    @ObservationIgnored var typingExpirationTask: Task<Void, Never>?
     var isLoadingOlderMessages = false
     var isLoadingMessages = false
     var resolvingMediaIDs: Set<String> = []
@@ -186,6 +191,7 @@ final class ChatStore {
     /// the background; they resync when it returns.
     func setAppActive(_ active: Bool) {
         notificationService.setAppActive(active)
+        if !active { clearTyping() }
         #if os(iOS)
         if !active { realtimeService.stop() }
         #endif
@@ -279,9 +285,13 @@ final class ChatStore {
     private func handle(_ event: RealtimeEvent) {
         switch event {
         case .connected(let requiresResync):
+            clearTyping()
             notificationService.notificationPreferencesChanged()
             if requiresResync { scheduleResync() }
+        case .disconnected:
+            clearTyping()
         case .resyncRequired:
+            clearTyping()
             scheduleResync()
         case .notificationPreferencesChanged:
             notificationService.notificationPreferencesChanged()
@@ -296,7 +306,10 @@ final class ChatStore {
             if chatID == selectedChatID { upsertMessages(incoming) }
         case .receiptUpdated(let chatID, let readKey):
             if chatID == selectedChatID { lastReadByOtherSortKey = readKey }
+        case .typingUpdated(let chatID, let participants):
+            if chatID == selectedChatID { updateTyping(participants) }
         case .failed(let message):
+            clearTyping()
             messagesError = message
         }
     }
