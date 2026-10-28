@@ -25,13 +25,6 @@ struct ChatSidebarView: View {
                 }
                 #else
                 if isIPhone {
-                    if chatStore.isLoadingChats {
-                        ToolbarItem(placement: .primaryAction) {
-                            ProgressView()
-                                .accessibilityLabel("Loading chats")
-                        }
-                        .sharedBackgroundVisibility(.hidden)
-                    }
                     // Search and the filter share the bottom bar, like the
                     // chat's composer and attachment menu.
                     ToolbarItem(placement: .primaryAction) {
@@ -47,13 +40,6 @@ struct ChatSidebarView: View {
                         Button("Settings", systemImage: "gear") { showingSettings = true }
                     }
                     ToolbarSpacer()
-                    if chatStore.isLoadingChats {
-                        ToolbarItem(placement: .primaryAction) {
-                            ProgressView()
-                                .accessibilityLabel("Loading chats")
-                        }
-                        .sharedBackgroundVisibility(.hidden)
-                    }
                     ToolbarItem(placement: .primaryAction) {
                         ChatFilterMenu()
                     }

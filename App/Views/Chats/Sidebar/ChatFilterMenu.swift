@@ -22,8 +22,10 @@ struct ChatFilterMenu: View {
                 }
             }
         } label: {
-            Label("Filter", systemImage: "line.3.horizontal.decrease")
+            Image(systemName: "line.3.horizontal.decrease")
+                .foregroundStyle(chatStore.selectedFilter != .inbox(.primary) ? Color(.accent) : .primary)
         }
+        .accessibilityLabel("Filter")
         .menuOrder(.fixed)
         .menuIndicator(.hidden)
         .fixedSize()
