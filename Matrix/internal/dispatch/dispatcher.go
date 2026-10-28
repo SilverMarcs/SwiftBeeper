@@ -60,6 +60,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.archiveChat(ctx, input)
 	case "mute-chat":
 		return s.muteChat(ctx, input)
+	case "pin-chat":
+		return s.pinChat(ctx, input)
 	case "mark-chat-read":
 		return s.markChatRead(ctx, input)
 	case "list-messages":

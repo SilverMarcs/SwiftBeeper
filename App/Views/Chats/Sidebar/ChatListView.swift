@@ -35,5 +35,13 @@ struct ChatListView: View {
         .overlay {
             ChatListOverlay(isEmpty: displayedChats.isEmpty)
         }
+        .alert("Could Not Update Pin", isPresented: Binding(
+            get: { chatStore.pinError != nil },
+            set: { if !$0 { chatStore.pinError = nil } }
+        )) {
+            Button("OK", role: .cancel) { chatStore.pinError = nil }
+        } message: {
+            Text(chatStore.pinError ?? "")
+        }
     }
 }

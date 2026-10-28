@@ -29,6 +29,8 @@ type roomAccountDataState struct {
 	IsMuted               bool
 	MutedUntil            int64
 	IsLowPriority         bool
+	IsPinned              bool
+	PinOrder              *float64
 	IsMarkedUnread        bool
 	MarkedUnreadUpdatedAt int64
 	ArchivedUpdatedTS     *int64
@@ -73,6 +75,12 @@ func (s roomAccountDataState) apply(eventType string, content []byte) roomAccoun
 		var tags event.TagEventContent
 		if json.Unmarshal(content, &tags) == nil {
 			_, s.IsLowPriority = tags.Tags[event.RoomTagLowPriority]
+			favorite, pinned := tags.Tags[event.RoomTagFavourite]
+			s.IsPinned = pinned
+			s.PinOrder = nil
+			if order, err := favorite.Order.Float64(); pinned && err == nil {
+				s.PinOrder = &order
+			}
 		}
 	case event.AccountDataBeeperMute.Type:
 		var mute event.BeeperMuteEventContent

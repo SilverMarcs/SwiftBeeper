@@ -103,7 +103,16 @@ func (s *Dispatcher) loadChatList(ctx context.Context, req chatListInput, limit 
 	if hasMore {
 		items = items[:limit]
 	}
-	return wire.ListChatsOutput{Items: items, HasMore: hasMore}, nil
+	output := wire.ListChatsOutput{Items: items, HasMore: hasMore}
+	// Pins are independent of the activity cursor, including quiet chats far
+	// beyond the first page. Search continues to return ordinary matching rows.
+	if req.BeforeRoomID == "" && strings.TrimSpace(req.Query) == "" {
+		output.Pinned, err = s.loadPinnedChats(ctx, req, lookup)
+		if err != nil {
+			return wire.ListChatsOutput{}, err
+		}
+	}
+	return output, nil
 }
 
 func roomMatchesInbox(room *database.Room, state roomAccountDataState, inbox string) bool {
@@ -203,6 +212,8 @@ func (s *Dispatcher) mapRoomToChat(room *database.Room, summary *chatSummary, lo
 		UnreadCount:            int64(room.UnreadMessages),
 		IsArchived:             state.InArchive(),
 		IsMuted:                state.IsMuted,
+		IsPinned:               state.IsPinned,
+		PinOrder:               state.PinOrder,
 		IsMarkedUnread:         state.IsMarkedUnread,
 		LastReadMessageSortKey: lastReadSortKey,
 	}

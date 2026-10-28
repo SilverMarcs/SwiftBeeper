@@ -20,6 +20,13 @@ struct ChatRowView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
+                    if chat.isPinned == true {
+                        Image(systemName: "pin.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Pinned")
+                    }
+
                     Spacer()
 
                     if let timeText = chat.lastActivityText {

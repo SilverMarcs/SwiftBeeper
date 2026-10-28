@@ -43,6 +43,7 @@ struct AccountCapabilities: Decodable, Equatable {
 struct ListChatsOutput: Decodable {
     let items: [Chat]
     let hasMore: Bool
+    let pinned: [Chat]?
 }
 
 struct SearchChatsOutput: Decodable {

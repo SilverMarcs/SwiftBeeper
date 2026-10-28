@@ -33,6 +33,11 @@ extension APIClient {
         try await executeRaw("mute-chat", arguments: Arguments(chatID: chatID, muted: muted))
     }
 
+    static func pinChat(chatID: String, pinned: Bool) async throws {
+        struct Arguments: Encodable { let chatID: String; let pinned: Bool }
+        try await executeRaw("pin-chat", arguments: Arguments(chatID: chatID, pinned: pinned))
+    }
+
     static func markChatAsRead(chatID: String) async throws {
         struct Arguments: Encodable { let chatID: String }
         try await executeRaw("mark-chat-read", arguments: Arguments(chatID: chatID))

@@ -109,6 +109,8 @@ type Chat struct {
 	UnreadCount            int64        `json:"unreadCount"`
 	IsArchived             bool         `json:"isArchived"`
 	IsMuted                bool         `json:"isMuted"`
+	IsPinned               bool         `json:"isPinned"`
+	PinOrder               *float64     `json:"pinOrder,omitempty"`
 	LastActivity           time.Time    `json:"lastActivity"`
 	LastReadMessageSortKey string       `json:"lastReadMessageSortKey"`
 	// The room's own m.room.avatar, so the app can show a real group photo
@@ -123,6 +125,7 @@ type Chat struct {
 type ListChatsOutput struct {
 	Items   []Chat `json:"items"`
 	HasMore bool   `json:"hasMore"`
+	Pinned  []Chat `json:"pinned,omitempty"`
 }
 
 type ListMessagesOutput struct {

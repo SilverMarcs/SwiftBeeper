@@ -25,6 +25,9 @@ final class ChatStore {
     // MARK: Chat list
 
     var chats: [Chat] = []
+    var pinnedChats: [Chat] = []
+    var pinningChatIDs: Set<String> = []
+    var pinError: String?
     var hasMoreChats = false
     var isLoadingMoreChats = false
     var isLoadingChats = false
@@ -144,7 +147,9 @@ final class ChatStore {
 
     func chat(byID chatID: String) -> Chat? {
         if selectedChat?.id == chatID { return selectedChat }
-        return chats.first { $0.id == chatID } ?? searchResults?.first { $0.id == chatID }
+        return chats.first { $0.id == chatID }
+            ?? pinnedChats.first { $0.id == chatID }
+            ?? searchResults?.first { $0.id == chatID }
     }
 
     // MARK: - Lifecycle

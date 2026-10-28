@@ -59,6 +59,8 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
     var participants: ChatParticipants?
     var preview: Message?
     var isMuted: Bool?
+    var isPinned: Bool?
+    var pinOrder: Double?
     var type: ChatKind?
     var isArchived: Bool?
     var isMarkedUnread: Bool?

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Read, archive, and mute actions for a chat row.
+/// Read, pin, archive, and mute actions for a chat row.
 struct ChatRowActionsView: View {
     /// Leading swipes mark read, trailing swipes archive or mute, and the
     /// context menu offers everything.
@@ -24,6 +24,15 @@ struct ChatRowActionsView: View {
                 Task { await chatStore.markChatAsRead(chat.id) }
             }
             .tint(.blue)
+        }
+
+        if placement != .trailingSwipe {
+            let isPinned = chat.isPinned == true
+            Button(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin") {
+                Task { await chatStore.setChatPinned(chat.id, pinned: !isPinned) }
+            }
+            .tint(.yellow)
+            .disabled(chatStore.pinningChatIDs.contains(chat.id))
         }
 
         if placement != .leadingSwipe {

@@ -4,7 +4,13 @@ import Foundation
 /// and per-chat actions.
 extension ChatStore {
     var displayedChats: [Chat] {
-        searchQuery.isBlank ? chats : (searchResults ?? chats)
+        guard searchQuery.isBlank else { return searchResults ?? chats }
+        let pins = pinnedChats.sorted {
+            let left = $0.pinOrder ?? 1, right = $1.pinOrder ?? 1
+            return left == right ? $0.id < $1.id : left < right
+        }
+        let pinnedIDs = Set(pins.map(\.id))
+        return pins + chats.filter { !pinnedIDs.contains($0.id) }
     }
 
     var availableServiceFilters: [ChatFilter] {
@@ -43,7 +49,7 @@ extension ChatStore {
     /// Which chat to fall back to when the current selection becomes invalid.
     /// macOS and iPad auto-select the first chat; iPhone stays manual (nil).
     private var autoSelectedChatID: String? {
-        Device.isIPhone ? nil : chats.first?.id
+        Device.isIPhone ? nil : displayedChats.first?.id
     }
 
     // MARK: - Loading
@@ -84,7 +90,11 @@ extension ChatStore {
                 let refreshedIDs = Set(refreshedChats.map(\.id))
                 refreshedChats += chats.filter { !refreshedIDs.contains($0.id) }
             }
+            pinnedChats = response.pinned ?? []
             setChats(Array(refreshedChats.prefix(chatWindowSize)))
+            if let selected = pinnedChats.first(where: { $0.id == selectedChatID }) {
+                updateSelectedChat(selected)
+            }
             if !preservesOlderPages {
                 hasMoreChats = response.hasMore
             }
@@ -195,6 +205,25 @@ extension ChatStore {
 
     // MARK: - Chat actions
 
+    func setChatPinned(_ chatID: String, pinned: Bool) async {
+        guard pinningChatIDs.insert(chatID).inserted else { return }
+        let session = session
+        defer {
+            if self.session == session { pinningChatIDs.remove(chatID) }
+        }
+        do {
+            try await APIClient.pinChat(chatID: chatID, pinned: pinned)
+            guard self.session == session else { return }
+            // Read the cached summary, including the server's saved pin order.
+            let updated = try await APIClient.getChat(chatID: chatID)
+            guard self.session == session else { return }
+            applyChatUpsert(updated)
+        } catch {
+            guard self.session == session else { return }
+            pinError = error.localizedDescription
+        }
+    }
+
     func archiveChat(_ chatID: String) async { await setArchived(chatID, archived: true) }
     func unarchiveChat(_ chatID: String) async { await setArchived(chatID, archived: false) }
 
@@ -264,6 +293,9 @@ extension ChatStore {
             return
         }
 
+        pinnedChats.removeAll { $0.id == incoming.id }
+        if incoming.isPinned == true { pinnedChats.append(incoming) }
+
         var updated = chats
         if let index = updated.firstIndex(where: { $0.id == incoming.id }) {
             updated[index] = incoming
@@ -283,6 +315,7 @@ extension ChatStore {
     /// Removes a chat from the sidebar and search results, moving the
     /// selection on if it was open.
     func removeChatLocally(_ chatID: String) {
+        pinnedChats.removeAll { $0.id == chatID }
         setChats(chats.filter { $0.id != chatID })
         if var results = searchResults {
             results.removeAll { $0.id == chatID }
@@ -333,6 +366,9 @@ extension ChatStore {
         if let index = chats.firstIndex(where: { $0.id == chatID }) {
             mutate(&chats[index])
         }
+        if let index = pinnedChats.firstIndex(where: { $0.id == chatID }) {
+            mutate(&pinnedChats[index])
+        }
         if var results = searchResults,
            let searchIndex = results.firstIndex(where: { $0.id == chatID }) {
             mutate(&results[searchIndex])
@@ -342,6 +378,9 @@ extension ChatStore {
 
     /// Empties the sidebar, which also clears the selection and open timeline.
     func resetChatList() {
+        pinnedChats = []
+        pinningChatIDs = []
+        pinError = nil
         setChats([])
         selectedChatID = nil
         hasMoreChats = false
