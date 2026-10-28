@@ -28,16 +28,56 @@ async function providerToken(env) {
 }
 
 // The alert the app's notification service extension replaces with a preview.
-export function notification(title, body, chatID = "", messageID = "") {
+export function notification(title, body, chatID = "", messageID = "", isMention = false) {
   return {
     aps: { alert: { title, body }, sound: "default", badge: 1, "mutable-content": 1, "thread-id": chatID },
-    chatID, messageID,
+    chatID, messageID, isMention,
   };
 }
 
-// Sends one alert and returns "sent", "expired" (the device was removed) or
-// "failed".
+// Both Matrix callbacks and trusted direct sends use the same event identity.
+// A mention changes eligibility, never creates a second notification. Keep a
+// short lease while sending so concurrent callbacks cannot both send it.
 export async function deliver(env, device, payload) {
+  if (!payload.chatID || !payload.messageID) return send(env, device, payload);
+  const now = Date.now();
+  const claim = crypto.randomUUID();
+  // Retain only a day's deduplication IDs; no message text enters this table.
+  await env.DEVICES.prepare("DELETE FROM notification_deliveries WHERE claimed_until < ?")
+    .bind(now - 86400000).run();
+  const acquired = await env.DEVICES.prepare(`
+    INSERT INTO notification_deliveries (device_id, room_id, event_id, claim, claimed_until, sent)
+    VALUES (?, ?, ?, ?, ?, 0)
+    ON CONFLICT(device_id, room_id, event_id) DO UPDATE
+      SET claim = excluded.claim, claimed_until = excluded.claimed_until
+      WHERE notification_deliveries.sent = 0 AND notification_deliveries.claimed_until <= ?
+    RETURNING claim
+  `).bind(device.id, payload.chatID, payload.messageID, claim, now + 60000, now).first();
+  if (!acquired) {
+    const existing = await env.DEVICES.prepare(`
+      SELECT sent FROM notification_deliveries WHERE device_id = ? AND room_id = ? AND event_id = ?
+    `).bind(device.id, payload.chatID, payload.messageID).first();
+    // An in-flight attempt must be retried if it fails, rather than silently
+    // acknowledged. A successful earlier delivery is already complete.
+    return existing?.sent === 1 ? "sent" : "failed";
+  }
+  try {
+    const result = await send(env, device, payload);
+    if (result === "sent") {
+      await env.DEVICES.prepare("UPDATE notification_deliveries SET sent = 1 WHERE claim = ?")
+        .bind(claim).run();
+    } else {
+      await env.DEVICES.prepare("DELETE FROM notification_deliveries WHERE claim = ?").bind(claim).run();
+    }
+    return result;
+  } catch (error) {
+    await env.DEVICES.prepare("DELETE FROM notification_deliveries WHERE claim = ?").bind(claim).run();
+    throw error;
+  }
+}
+
+// Sends one alert and returns "sent", "expired" (the device was removed) or "failed".
+async function send(env, device, payload) {
   const body = JSON.stringify(payload);
   if (encoder.encode(body).length > MAX_PAYLOAD_BYTES) throw new Error("APNs payload exceeds 4096 bytes");
   const environment = env.APNS_ENVIRONMENT;

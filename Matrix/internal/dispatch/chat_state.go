@@ -276,8 +276,9 @@ type blockedRoom struct {
 }
 
 // PushPreferences exports the rooms whose notifications the push gateway
-// suppresses: muted rooms until their expiry, archived ones forever (-1).
-// The gateway receives no Matrix credentials, message content, or keys.
+// suppresses for ordinary messages: muted rooms until their expiry, archived
+// ones forever (-1). The gateway lets personal mentions bypass these blocks.
+// This preference export contains no Matrix credentials, message content, or keys.
 func (s *Dispatcher) PushPreferences(ctx context.Context) (any, error) {
 	states, err := s.loadRoomAccountDataStates(ctx)
 	if err != nil {

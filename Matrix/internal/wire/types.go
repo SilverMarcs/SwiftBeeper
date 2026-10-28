@@ -98,6 +98,17 @@ type Message struct {
 	Reactions       []Reaction   `json:"reactions"`
 	SenderName      string       `json:"senderName"`
 	Text            string       `json:"text"`
+	// FormattedText is display Markdown with Matrix user links preserved.
+	// Text remains the plain body for previews, copying and editing.
+	FormattedText string           `json:"formattedText,omitempty"`
+	Mentions      *MessageMentions `json:"mentions,omitempty"`
+}
+
+// MessageMentions preserves intentional notifications separately from visible
+// user links. A link can exist without notifying its target, and vice versa.
+type MessageMentions struct {
+	UserIDs []string `json:"userIDs"`
+	Room    bool     `json:"room"`
 }
 
 type Chat struct {

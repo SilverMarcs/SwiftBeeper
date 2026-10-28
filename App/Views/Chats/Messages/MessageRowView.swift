@@ -5,6 +5,7 @@ import SwiftUI
 struct MessageRowView: View {
     let entry: TimelineEntry
     let chat: Chat
+    @Environment(ChatStore.self) private var chatStore
 
     @State private var profileSheetParticipant: ChatParticipant?
 
@@ -47,6 +48,20 @@ struct MessageRowView: View {
                 }
 
                 MessageContentView(message: message, chat: chat)
+                    .environment(\.openURL, OpenURLAction { url in
+                        openMention(url, in: message)
+                    })
+
+                if !isOutgoing, message.mentions?.room == true {
+                    Label("Mentions everyone", systemImage: "at")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !isOutgoing, let selfID = chatStore.currentUserProfile?.id,
+                   message.mentions?.userIDs.contains(selfID) == true {
+                    Label("Mentions you", systemImage: "at")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 if isOutgoing && entry.showsReadIndicator {
                     MessageDeliveryStatusView(status: .read)
@@ -60,5 +75,20 @@ struct MessageRowView: View {
         .sheet(item: $profileSheetParticipant) { participant in
             ParticipantProfileSheet(participant: participant)
         }
+    }
+
+    private func openMention(_ url: URL, in message: Message) -> OpenURLAction.Result {
+        guard let mention = MessageMentionLink(url) else { return .systemAction }
+        let attributed = message.displayFormattedText.messageAttributed
+        let label = attributed.runs.first(where: { $0.link == url }).map {
+            String(attributed[$0.range].characters)
+        }
+        // Large groups only load a participant sample. A link still opens a
+        // useful profile even when its user isn't in that sample anymore.
+        profileSheetParticipant = chat.participant(with: mention.userID) ?? ChatParticipant(
+            id: mention.userID, username: nil, fullName: label, imgURL: nil,
+            isSelf: mention.userID == chatStore.currentUserProfile?.id
+        )
+        return .handled
     }
 }

@@ -20,7 +20,7 @@ struct MessageContentView: View {
             if message.isDeletedMessage {
                 Group {
                     if message.hasRetainedDeletedContent {
-                        Text(message.displayText.messageAttributed)
+                        Text(message.displayFormattedText.messageAttributed)
                             .strikethrough()
                             .tint(isOutgoing ? .white : .blue)
                     } else {
@@ -47,7 +47,7 @@ struct MessageContentView: View {
                 }
 
                 if let visibleText = message.visibleText {
-                    MessageTextView(text: visibleText, isOutgoing: isOutgoing)
+                    MessageTextView(text: message.formattedText ?? visibleText, isOutgoing: isOutgoing)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
                         // Media takes over the typing bubble when present; its
                         // caption has a separate background and must not match too.

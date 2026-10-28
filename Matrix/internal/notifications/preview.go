@@ -44,6 +44,7 @@ type Preview struct {
 	Avatar        []byte        `json:"avatar,omitempty"`
 	Recipients    []Participant `json:"recipients,omitempty"`
 	TargetEventID id.EventID    `json:"targetEventID,omitempty"`
+	MentionsMe    bool          `json:"mentionsMe"`
 }
 
 type Participant struct {
@@ -172,7 +173,7 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	}
 	preview := &Preview{Title: truncate(title, 120), Body: truncate(body, 500),
 		SenderID: evt.Sender.String(), SenderName: truncate(sender, 120), IsGroup: isGroup,
-		TargetEventID: targetEventID}
+		TargetEventID: targetEventID, MentionsMe: mentionsUser(content, req.UserID)}
 	var extras sync.WaitGroup
 	extras.Add(1)
 	go func() {
@@ -188,6 +189,19 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	}
 	extras.Wait()
 	return preview, nil
+}
+
+// Use recipient metadata, never a name match or the generic highlight tweak
+// (which can also mean a reply or keyword). A mention is part of its message.
+func mentionsUser(content json.RawMessage, userID id.UserID) bool {
+	var message event.MessageEventContent
+	if userID == "" || json.Unmarshal(content, &message) != nil {
+		return false
+	}
+	if message.NewContent != nil {
+		message = *message.NewContent
+	}
+	return message.Mentions != nil && message.Mentions.Has(userID)
 }
 
 // notificationBody describes a message, or a reaction to one of the user's

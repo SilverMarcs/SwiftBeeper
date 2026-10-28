@@ -70,6 +70,8 @@ type Command struct {
 // Execute runs one command; input is the command's whole JSON object.
 func (r *Runtime) Execute(ctx context.Context, command Command, input json.RawMessage) (any, error) {
 	switch command.Action {
+	case "configure-mention-notifications":
+		return wire.Success, r.configureMentionNotifications(ctx)
 	case "active":
 		r.setActive(command.Active)
 		return wire.Success, nil

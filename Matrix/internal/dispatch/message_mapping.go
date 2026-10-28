@@ -56,6 +56,7 @@ func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtTy
 	// forwarding the fallback duplicates quoted text and any URLs it contains.
 	content.RemoveReplyFallback()
 	content.RemovePerMessageProfileFallback()
+	message.Mentions = messageMentions(content.Mentions)
 
 	if attachment, ok := messageAttachment(content, evtType); ok {
 		// One media part is currently mapped per event. Its identity survives
@@ -73,6 +74,9 @@ func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtTy
 		if message.Text == "" && evt.LocalContent != nil {
 			message.Text = evt.LocalContent.SanitizedHTML
 		}
+	}
+	if message.Text != "" {
+		message.FormattedText = messageMentionText(content)
 	}
 	return nil
 }

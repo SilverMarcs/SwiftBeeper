@@ -22,8 +22,9 @@ final class NotificationDelivery: Sendable {
         state.withLock { value in
             guard let content = value.content else { return nil }
             content.title = preview.title
-            content.subtitle = preview.isGroup ? preview.senderName : ""
+            content.subtitle = preview.subtitle
             content.body = preview.body
+            content.userInfo["isMention"] = preview.mentionsMe == true
             if let targetEventID = preview.targetEventID {
                 content.userInfo["messageID"] = targetEventID
             }

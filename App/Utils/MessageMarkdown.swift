@@ -57,7 +57,8 @@ private extension AttributedString {
                 continue
             }
 
-            var replacement = AttributedString(destination.inlineDisplayLabel)
+            // A bare Matrix user link must retain its complete identity.
+            var replacement = AttributedString(MessageMentionLink(destination)?.userID ?? destination.inlineDisplayLabel)
             replacement.link = destination
             replacement.underlineStyle = .single
             replaceSubrange(attributedRange, with: replacement)

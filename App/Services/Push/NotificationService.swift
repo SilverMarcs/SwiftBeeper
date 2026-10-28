@@ -149,6 +149,7 @@ final class NotificationService {
                 try Task.checkCancellation()
                 guard isSignedIn else { return }
                 if preferences != uploadedPreferences {
+                    try await APIClient.configureMentionNotifications()
                     try await server().uploadPreferences(preferences)
                     try Task.checkCancellation()
                     uploadedPreferences = preferences

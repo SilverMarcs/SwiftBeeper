@@ -92,10 +92,11 @@ async function unregister(env, id) {
   return json({ ok: true });
 }
 
-// The Matrix push gateway callback. The homeserver sends event_id_only
-// notifications; the pushkey alone authorizes forwarding.
+// The standard Matrix callback carries our exact mention tweak. Generic
+// highlight/high priority can mean replies or encrypted traffic, so neither
+// bypasses a block. Message content is ignored and never logged or stored.
 async function matrixPush(request, env) {
-  const { notification: incoming } = await readJSON(request);
+  const { notification: incoming } = await readJSON(request, 1048576);
   if (!incoming || !Array.isArray(incoming.devices) || incoming.devices.length > 100 ||
       !optionalBoundedString(incoming.event_id, 256) || !optionalBoundedString(incoming.room_id, 256)) throw new HTTPError(400, "Invalid Matrix notification");
   const rejected = [];
@@ -110,8 +111,9 @@ async function matrixPush(request, env) {
       ? await env.DEVICES.prepare("SELECT id, token FROM devices WHERE pushkey = ?").bind(requested.pushkey).first() : null;
     if (!device) { rejected.push(requested.pushkey); continue; }
     // Ignore unread-count-only updates: opening Relay clears the local badge.
-    if (!incoming.event_id || !incoming.room_id || blocked) continue;
-    const result = await deliver(env, device, notification("Relay", "New message", incoming.room_id, incoming.event_id));
+    const isMention = requested.tweaks?.["com.silvermarcs.relay.mention"] === true;
+    if (!incoming.event_id || !incoming.room_id || (blocked && !isMention)) continue;
+    const result = await deliver(env, device, notification("Relay", isMention ? "You were mentioned" : "New message", incoming.room_id, incoming.event_id, isMention));
     if (result === "expired") rejected.push(requested.pushkey);
     if (result === "failed") failed = true;
   }
@@ -124,10 +126,12 @@ async function directPush(request, env) {
   const input = await readJSON(request);
   if (!isBoundedString(input.title, 200) || !input.title || !isBoundedString(input.body, 2000) || !input.body ||
       !optionalBoundedString(input.chatID, 256) || !optionalBoundedString(input.messageID, 256) ||
-      !optionalBoundedString(input.deviceID, 128)) throw new HTTPError(400, "Invalid notification");
-  const payload = notification(input.title, input.body, input.chatID, input.messageID);
+      !optionalBoundedString(input.deviceID, 128) ||
+      (input.isMention !== undefined && typeof input.isMention !== "boolean")) throw new HTTPError(400, "Invalid notification");
+  const isMention = input.isMention === true;
+  const payload = notification(input.title, input.body, input.chatID, input.messageID, isMention);
   if (new TextEncoder().encode(JSON.stringify(payload)).length > 4096) throw new HTTPError(400, "Notification exceeds APNs limit");
-  if (await isBlocked(env, input.chatID)) return json({ sent: 0, failed: 0, suppressed: true });
+  if (!isMention && await isBlocked(env, input.chatID)) return json({ sent: 0, failed: 0, suppressed: true });
   const { results } = input.deviceID
     ? await env.DEVICES.prepare("SELECT id, token FROM devices WHERE id = ?").bind(input.deviceID).all()
     : await env.DEVICES.prepare("SELECT id, token FROM devices").all();

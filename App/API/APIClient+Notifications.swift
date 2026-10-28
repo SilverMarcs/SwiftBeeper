@@ -2,6 +2,11 @@ import Foundation
 
 /// Push delivery and notification actions.
 extension APIClient {
+    /// Ensure personal mentions can reach the gateway ahead of room mutes.
+    static func configureMentionNotifications() async throws {
+        try await executeRaw("configure-mention-notifications", arguments: EmptyArguments())
+    }
+
     /// What the notification extension needs to decrypt pushes, as JSON for
     /// the shared keychain.
     static func notificationCredentials() async throws -> Data {

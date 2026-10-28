@@ -14,6 +14,8 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let timestamp: Date
     let sortKey: String
     let text: String?
+    let formattedText: String?
+    let mentions: MessageMentions?
     let isSender: Bool
     let attachments: [Attachment]?
     let isUnread: Bool?
@@ -73,6 +75,12 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     }
 
     var hasText: Bool { visibleText != nil }
+
+    /// Formatting is presentation only; previews and copying use the plain body.
+    var displayFormattedText: String {
+        if let formattedText, !formattedText.isEmpty { return formattedText }
+        return displayText
+    }
 
     var timestampText: String {
         let calendar = Calendar.app

@@ -40,7 +40,10 @@ func (r *Runtime) updatePusher(ctx context.Context, command Command) (any, error
 		request["lang"] = "en"
 		// Preserve pushers belonging to the user's other apps and devices.
 		request["append"] = true
-		request["data"] = map[string]string{"url": gateway.String(), "format": "event_id_only"}
+		// The standard callback carries push-rule tweaks. event_id_only drops
+		// them, making a mention indistinguishable from any other encrypted event.
+		// The gateway ignores content and forwards only IDs and the mention flag.
+		request["data"] = map[string]string{"url": gateway.String()}
 	}
 	if _, err := cli.Client.MakeRequest(ctx, http.MethodPost, cli.Client.BuildClientURL("v3", "pushers", "set"), request, nil); err != nil {
 		return nil, err

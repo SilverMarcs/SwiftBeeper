@@ -2,9 +2,10 @@
 
 A personal Cloudflare Worker that forwards Matrix notifications to APNs. One
 shared secret protects device registration and notification preferences; D1
-holds your devices and suppressed room IDs with their expiry times.
-There are no accounts, Matrix sessions, sync loops, messages, or encryption keys
-on this service. This folder is independent of the Xcode project.
+holds your devices, suppressed room IDs with expiry times, and one day of
+delivery IDs for retry suppression. There are no Matrix sessions, sync loops,
+stored messages, or encryption keys on this service. This folder is independent
+of the Xcode project.
 
 Current deployment: <https://relay-push.zabirraihan.workers.dev>. The configured
 D1 database holds device registrations and notification preferences. Worker secrets are configured in
@@ -62,16 +63,15 @@ The deploy command prints your public HTTPS Worker URL. `/health` returns
   "lang": "en",
   "append": true,
   "data": {
-    "url": "https://your-worker.workers.dev/_matrix/push/v1/notify",
-    "format": "event_id_only"
+    "url": "https://your-worker.workers.dev/_matrix/push/v1/notify"
   }
 }
 ```
 
-Beeper then posts events to that URL. The random device pushkey authorizes
+Matrix then posts events to that URL. The random device pushkey authorizes
 forwarding; Matrix does not send the registration secret. The Worker sends APNs
 an alert with `mutable-content: 1`, the room ID (`chatID`), and event ID
-(`messageID`). It stores no message content. Unknown or expired devices are
+(`messageID`), and a boolean `isMention`. It stores no message content. Unknown or expired devices are
 rejected; transient APNs errors return a retryable error. Unread-count-only
 updates are ignored because opening Relay clears its local badge.
 
@@ -79,17 +79,46 @@ updates are ignored because opening Relay clears its local badge.
 single account's suppression list with `{"rooms":[{"roomID":"!room:server","blockedUntil":-1}]}`.
 Negative expiry means forever; positive expiry is Unix milliseconds. The Worker
 checks this list before both Matrix callbacks and direct notifications reach
-APNs, so a suppressed room produces no alert, sound, or badge. Expired mutes stop
+APNs, so ordinary messages in a suppressed room produce no alert, sound, or badge. Expired mutes stop
 matching automatically, with no scheduled job.
 
 Relay combines muted chats with Beeper's archived and Low Priority chats. In
 Relay, both of those inbox categories appear under Archive. Muted chats retain
 their expiry; archived and Low Priority chats are blocked until removed from
-that category. This also suppresses mentions and replies in those chats.
+that category. Replies and keywords remain suppressed, but **personal mentions
+of the signed-in user bypass these blocks**. Room-wide mentions do not bypass
+muting. A mention remains the original message, with the same event ID and one
+notification; it is not an additional notification or message. Both gateway
+entry points share per-device event deduplication, with APNs collapse IDs as a
+further safeguard. Transient failures release their lease for Matrix to retry.
 It uploads once per app launch and after preference changes, skipping unchanged data
 within that launch. Changes made in another app reach the Worker when Relay
 next receives them through Matrix sync. Existing Matrix push rules still apply
 upstream. No Matrix credentials are sent to the Worker.
+
+Relay installs the account-level `com.silvermarcs.relay.mention` override ahead
+of room mutes, below the global master switch. It uses `m.mentions.user_ids`,
+requests the normal message push, and adds an exact mention tweak. Matrix push
+rules are shared with other clients on the same account. The app checks the
+rule at launch and when the suppression list changes. It does not unmute or
+unarchive chats. Launch the updated app on each device to register the new
+pusher format and apply the rule.
+
+The `event_id_only` format discards push-rule tweaks, so updated pushers use the
+standard Matrix callback. That callback can include sender/room metadata and
+unencrypted message content. The Worker ignores this content and never stores,
+logs, or forwards it to APNs. It reads only event/room/device IDs and the exact
+mention tweak; generic `highlight` or high priority is not proof of a mention.
+Older event-ID-only pushers still work for ordinary notifications.
+
+Unencrypted Matrix messages and Beeper bridge events with visible mention
+metadata support this server-side exception. Fully encrypted Matrix events
+whose mention metadata is also encrypted cannot be classified by the server.
+Reliable mention-only alerts for those muted rooms require on-device filtering
+with Apple's separately approved notification-filtering entitlement. Relay
+does not currently have that entitlement, and does not bypass muting for all
+encrypted events as a workaround. When the extension decrypts a delivered
+message, its preview uses the real recipients to identify it as a mention.
 
 The app requests notification permission after login and registers automatically
 at launch or when returning to the foreground. Settings has one Notifications
@@ -123,7 +152,9 @@ For trusted callers that already have notification text, `POST /notify` accepts
 the same bearer secret and
 `{"title":"Sender","body":"Message","chatID":"room","messageID":"event"}`.
 Optional `deviceID` selects one of your installations; otherwise it sends to all
-your registered devices.
+your registered devices. Optional `isMention: true` identifies a personal
+mention and bypasses room suppression. Use the original chat and message IDs
+so a direct send and a Matrix callback cannot become two notifications.
 
 ## Local development
 
