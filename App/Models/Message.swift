@@ -82,10 +82,15 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 
-    /// Reactions grouped by key, in key order; nil when there are none.
+    /// Visible reactions grouped by key, in key order; nil when there are none.
     var groupedReactions: [GroupedReaction]? {
-        guard let reactions, !reactions.isEmpty else { return nil }
-        return Dictionary(grouping: reactions, by: \.reactionKey)
+        // Custom emoji shortcodes have no image representation in Relay.
+        // Keep the original reactions, but don't render their raw :name: keys.
+        let visibleReactions = reactions?.filter {
+            !($0.reactionKey.hasPrefix(":") && $0.reactionKey.hasSuffix(":"))
+        } ?? []
+        guard !visibleReactions.isEmpty else { return nil }
+        return Dictionary(grouping: visibleReactions, by: \.reactionKey)
             .map { key, group in
                 GroupedReaction(reactionKey: key, count: group.count, participantIDs: group.map(\.participantID))
             }
