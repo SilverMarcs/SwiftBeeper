@@ -21,6 +21,7 @@ final class InputManager {
     /// Attachments belong to the chat where intake began. In particular, a
     /// PhotosPicker transfer may finish after the user has navigated elsewhere.
     private var pendingAttachmentsByChatID: [String: [PendingAttachment]] = [:]
+    var attachmentImportError: String?
     /// Remembers which chat owns the draft being edited so an edit finishing
     /// during navigation cannot clear the newly selected chat's draft.
     private var editingDraftChatID: String?
@@ -259,15 +260,17 @@ final class InputManager {
     func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard !providers.isEmpty, let targetChatID = selectedChatID else { return false }
 
-        for provider in providers {
-            provider.loadFileRepresentation(forTypeIdentifier: UTType.item.identifier) { url, _ in
-                guard let url else { return }
-                guard let data = try? Data(contentsOf: url) else { return }
-                let fileName = url.lastPathComponent
-                let mimeType = url.mimeType
-
-                Task { @MainActor in
-                    self.addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: targetChatID)
+        let transfers = providers.map { DroppedAttachment.beginLoading(from: $0) }
+        Task {
+            for transfer in transfers {
+                do {
+                    for try await attachment in transfer {
+                        pendingAttachmentsByChatID[targetChatID, default: []].append(attachment)
+                    }
+                } catch {
+                    if selectedChatID == targetChatID {
+                        attachmentImportError = error.localizedDescription
+                    }
                 }
             }
         }

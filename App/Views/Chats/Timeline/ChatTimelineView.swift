@@ -158,9 +158,6 @@ struct ChatTimelineView: View {
                         }
                     }
                 }
-                .onDrop(of: [.item], isTargeted: nil) { providers in
-                    inputManager.handleDrop(providers)
-                }
                 #if os(iOS)
                 .if(isIPhone) {
                     $0.searchFieldComposer()
@@ -171,6 +168,17 @@ struct ChatTimelineView: View {
                     $0.safeAreaBar(edge: .bottom, spacing: 0) {
                         MessageInputView()
                     }
+                }
+                .onDrop(of: [.item], isTargeted: nil) { providers in
+                    inputManager.handleDrop(providers)
+                }
+                .alert("Couldn’t Attach Item", isPresented: Binding(
+                    get: { inputManager.attachmentImportError != nil },
+                    set: { if !$0 { inputManager.attachmentImportError = nil } }
+                )) {
+                    Button("OK") { inputManager.attachmentImportError = nil }
+                } message: {
+                    Text(inputManager.attachmentImportError ?? "")
                 }
             }
             .modifier(ComposerDictationLifecycle())
