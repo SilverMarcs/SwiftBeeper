@@ -23,6 +23,10 @@ targets = {
 if platform not in targets:
     raise SystemExit("Expected macos, ios or simulator")
 sdk, target, go_os = targets[platform]
+architectures = os.environ.get("ARCHS", "arm64").split()
+go_architectures = {"arm64": "arm64", "x86_64": "amd64"}
+if not architectures or any(architecture not in go_architectures for architecture in architectures):
+    raise SystemExit("Expected arm64 or x86_64 architectures")
 build = matrix / "Build"
 build.mkdir(exist_ok=True)
 
@@ -72,7 +76,8 @@ with (build / "core.lock").open("w") as lock:
     # directory (catching deletions and renames), and the same toolchain and SDK.
     sdk_path = output(["xcrun", "--sdk", sdk, "--show-sdk-path"])
     stamp_file = destination / (library + ".stamp")
-    stamp_text = "\n".join([output(["go", "version"]), sdk_path, target])
+    requested_targets = [target.replace("arm64-", architecture + "-", 1) for architecture in architectures]
+    stamp_text = "\n".join([output(["go", "version"]), sdk_path, *requested_targets])
     inputs = [path for root in ("cmd", "internal", "SDKSource") for path in (matrix / root).rglob("*")
               if path.is_dir() or path.suffix == ".go"]
     inputs += [matrix / "go.mod", matrix / "go.sum", patch, Path(__file__)]
@@ -81,15 +86,26 @@ with (build / "core.lock").open("w") as lock:
             archive.stat().st_mtime >= max(path.stat().st_mtime for path in inputs):
         print("Relay " + component + " for " + platform + " is up to date")
         sys.exit(0)
-    flags = "-target " + target + " -isysroot " + sdk_path
-    environment = os.environ.copy()
-    environment.update({"CGO_ENABLED": "1", "GOOS": go_os, "GOARCH": "arm64",
-        "CC": output(["xcrun", "--sdk", sdk, "--find", "clang"]) + " " + flags,
-        "CXX": output(["xcrun", "--sdk", sdk, "--find", "clang++"]) + " " + flags,
-        "CGO_CFLAGS": flags, "CGO_CXXFLAGS": flags, "CGO_LDFLAGS": flags})
+    clang = output(["xcrun", "--sdk", sdk, "--find", "clang"])
+    clangxx = output(["xcrun", "--sdk", sdk, "--find", "clang++"])
+    archives = []
+    for architecture, requested_target in zip(architectures, requested_targets):
+        architecture_directory = destination / architecture
+        architecture_directory.mkdir(parents=True, exist_ok=True)
+        architecture_archive = architecture_directory / archive.name
+        flags = "-target " + requested_target + " -isysroot " + sdk_path
+        environment = os.environ.copy()
+        environment.update({"CGO_ENABLED": "1", "GOOS": go_os, "GOARCH": go_architectures[architecture],
+            "CC": clang + " " + flags, "CXX": clangxx + " " + flags,
+            "CGO_CFLAGS": flags, "CGO_CXXFLAGS": flags, "CGO_LDFLAGS": flags})
+        subprocess.run(["go", "build", "-tags", "goolm", "-trimpath", "-buildmode=c-archive", "-o", str(architecture_archive), "./cmd/" + package], cwd=matrix, env=environment, check=True)
+        archives.append(architecture_archive)
+    if len(archives) == 1:
+        shutil.copyfile(archives[0], archive)
+    else:
+        subprocess.run(["xcrun", "lipo", "-create", *map(str, archives), "-output", str(archive)], check=True)
     headers.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["go", "build", "-tags", "goolm", "-trimpath", "-buildmode=c-archive", "-o", str(archive), "./cmd/" + package], cwd=matrix, env=environment, check=True)
-    shutil.copyfile(destination / ("lib" + library + ".h"), headers / ("lib" + library + ".h"))
+    shutil.copyfile(archives[0].with_suffix(".h"), headers / ("lib" + library + ".h"))
     stamp_file.write_text(stamp_text)
     (headers / "module.modulemap").write_text('module ' + library + ' {\n    header "lib' + library + '.h"\n    export *\n}\n')
 print("Built Relay " + component + " for " + platform)
