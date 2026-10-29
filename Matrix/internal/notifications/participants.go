@@ -14,7 +14,18 @@ import (
 
 // Apple needs real additional recipients for group communication presentation.
 // Read only a bounded prefix of this room's response, with no per-member calls.
-func fetchRecipients(ctx context.Context, cli *mautrix.Client, roomID id.RoomID, me, sender id.UserID) []Participant {
+func fetchRecipients(ctx context.Context, cli *mautrix.Client, store cache, roomID id.RoomID, me, sender id.UserID) []Participant {
+	recipients := fetchRoomRecipients(ctx, cli, roomID, me, sender)
+	key := string(roomID) + "|" + string(sender)
+	if recipients == nil {
+		_ = json.Unmarshal(store.read("room-recipients", key), &recipients)
+	} else if data, err := json.Marshal(recipients); err == nil {
+		store.write("room-recipients", key, data)
+	}
+	return recipients
+}
+
+func fetchRoomRecipients(ctx context.Context, cli *mautrix.Client, roomID id.RoomID, me, sender id.UserID) []Participant {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	_, resp, err := cli.MakeFullRequestWithResp(ctx, mautrix.FullRequest{
@@ -55,7 +66,8 @@ func fetchRecipients(ctx context.Context, cli *mautrix.Client, roomID id.RoomID,
 		if decoder.Decode(&member) != nil {
 			break
 		}
-		if userID == "" || userID == string(me) || userID == string(sender) {
+		localpart, _, _ := strings.Cut(strings.TrimPrefix(userID, "@"), ":")
+		if userID == "" || userID == string(me) || userID == string(sender) || strings.HasSuffix(localpart, "bot") {
 			continue
 		}
 		name := strings.TrimSpace(member.Name)

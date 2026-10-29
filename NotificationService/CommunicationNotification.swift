@@ -9,8 +9,14 @@ enum CommunicationNotification {
                                     preview: NotificationPreview) async -> UNNotificationContent {
         guard let conversationID = content.userInfo["chatID"] as? String else { return content }
         let avatar = preview.avatar.flatMap(INImage.init(imageData:))
+        let groupImage = preview.isGroup ? avatar ?? NotificationAppIcon.image() : nil
+        // Incomplete group metadata must fall back to the prepared group title
+        // and Relay icon, rather than donating an apparent direct message.
+        if preview.isGroup && ((preview.recipients ?? []).isEmpty || groupImage == nil) {
+            return content
+        }
         #if os(macOS)
-        let senderImage = avatar
+        let senderImage = preview.isGroup ? groupImage : avatar
         #else
         let senderImage = preview.isGroup ? nil : avatar
         #endif
@@ -30,8 +36,8 @@ enum CommunicationNotification {
             conversationIdentifier: conversationID, serviceName: "Relay",
             sender: sender, attachments: nil)
         #if !os(macOS)
-        if preview.isGroup, let avatar {
-            intent.setImage(avatar, forParameterNamed: \.speakableGroupName)
+        if preview.isGroup, let groupImage {
+            intent.setImage(groupImage, forParameterNamed: \.speakableGroupName)
         }
         #endif
         let interaction = INInteraction(intent: intent, response: nil)

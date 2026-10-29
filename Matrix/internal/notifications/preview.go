@@ -166,6 +166,20 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	title := sender
 	name := strings.TrimSpace(roomName.Name)
 	isGroup := name != "" && name != sender && !ownMembership.IsDirect
+	var recipients []Participant
+	if name == "" && !ownMembership.IsDirect {
+		// Bridges can omit m.room.name for group DMs. Additional people,
+		// excluding the service bot, distinguish them from one-to-one chats.
+		recipients = fetchRecipients(ctx, cli, store, req.RoomID, req.UserID, evt.Sender)
+		if len(recipients) > 0 {
+			isGroup = true
+			names := []string{sender}
+			for _, recipient := range recipients {
+				names = append(names, recipient.Name)
+			}
+			name = strings.Join(names, ", ")
+		}
+	}
 	if name != "" {
 		title = name
 	}
@@ -179,18 +193,18 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	}
 	preview := &Preview{Title: truncate(title, 120), Body: truncate(body, 500),
 		SenderID: evt.Sender.String(), SenderName: truncate(sender, 120), IsGroup: isGroup,
-		TargetEventID: targetEventID, MentionsMe: mentionsUser(content, req.UserID)}
+		Recipients: recipients, TargetEventID: targetEventID, MentionsMe: mentionsUser(content, req.UserID)}
 	var extras sync.WaitGroup
 	extras.Add(1)
 	go func() {
 		defer extras.Done()
 		preview.Avatar = fetchAvatar(ctx, cli, store, avatarURL)
 	}()
-	if isGroup {
+	if isGroup && recipients == nil {
 		extras.Add(1)
 		go func() {
 			defer extras.Done()
-			preview.Recipients = fetchRecipients(ctx, cli, req.RoomID, req.UserID, evt.Sender)
+			preview.Recipients = fetchRecipients(ctx, cli, store, req.RoomID, req.UserID, evt.Sender)
 		}()
 	}
 	extras.Wait()
