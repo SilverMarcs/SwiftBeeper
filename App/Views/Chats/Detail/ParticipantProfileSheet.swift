@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A chat member's avatar, name, username, and identifier.
+/// A chat member's avatar, name, network, username, and identifier.
 struct ParticipantProfileSheet: View {
     let participant: ChatParticipant
     let sourceChat: Chat
@@ -38,6 +38,9 @@ struct ParticipantProfileSheet: View {
 
                 Section("Profile") {
                     InfoRow("Name", value: participant.displayName)
+                    InfoRow("Network", value: chatStore.connectedAccounts.first {
+                        $0.accountID == sourceChat.accountID
+                    }?.network ?? "Unknown")
 
                     if let username = participant.username, !username.isEmpty {
                         InfoRow("Username", value: username)
