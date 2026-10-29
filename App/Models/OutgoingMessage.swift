@@ -12,6 +12,7 @@ struct OutgoingMessage: Identifiable, Equatable {
     let id: UUID
     let chatID: String
     let text: String
+    let mentions: [ComposerMention]
     let attachments: [PendingAttachment]
     let replyToMessageID: String?
     let createdAt: Date
@@ -25,6 +26,7 @@ struct OutgoingMessage: Identifiable, Equatable {
         id: UUID = UUID(),
         chatID: String,
         text: String,
+        mentions: [ComposerMention] = [],
         attachments: [PendingAttachment],
         replyToMessageID: String?,
         createdAt: Date = .now
@@ -32,6 +34,7 @@ struct OutgoingMessage: Identifiable, Equatable {
         self.id = id
         self.chatID = chatID
         self.text = text
+        self.mentions = mentions
         self.attachments = attachments
         self.replyToMessageID = replyToMessageID
         self.createdAt = createdAt

@@ -17,13 +17,14 @@ extension ChatStore {
     /// Adds a message to the outbox synchronously so the timeline can display it
     /// before any upload or Matrix request begins.
     @discardableResult
-    func sendMessage(text: String, attachments: [PendingAttachment], to chatID: String) -> OutgoingMessage? {
+    func sendMessage(text: String, mentions: [ComposerMention] = [], attachments: [PendingAttachment], to chatID: String) -> OutgoingMessage? {
         let trimmedText = text.trimmed
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
 
         let outgoing = OutgoingMessage(
             chatID: chatID,
             text: trimmedText,
+            mentions: mentions,
             attachments: attachments,
             replyToMessageID: replyingToMessage?.id
         )
@@ -87,7 +88,8 @@ extension ChatStore {
                     chatID: outgoing.chatID,
                     text: isFirst && !outgoing.text.isEmpty ? outgoing.text : nil,
                     replyToMessageID: isFirst ? outgoing.replyToMessageID : nil,
-                    attachment: attachmentInput
+                    attachment: attachmentInput,
+                    mentions: isFirst ? outgoing.mentions : []
                 )
                 recordPendingMessageID(response.pendingMessageID, for: outgoing.id)
             }
@@ -170,7 +172,7 @@ extension ChatStore {
     }
 
     /// Returns whether the edit was saved; on failure the edit stays open.
-    func saveEdit(newText: String) async -> Bool {
+    func saveEdit(newText: String, mentions: [ComposerMention] = []) async -> Bool {
         guard let message = editingMessage else { return false }
 
         let trimmedText = newText.trimmed
@@ -180,7 +182,7 @@ extension ChatStore {
         defer { isSavingEdit = false }
 
         do {
-            try await APIClient.editMessage(chatID: message.chatID, messageID: message.id, text: trimmedText)
+            try await APIClient.editMessage(chatID: message.chatID, messageID: message.id, text: newText, mentions: mentions)
             editingMessage = nil
             messagesError = nil
             return true

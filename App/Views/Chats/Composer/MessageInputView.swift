@@ -8,6 +8,7 @@ struct MessageInputView: View {
     @Environment(ChatStore.self) private var chatStore
 
     @FocusState private var isMessageFieldFocused: Bool
+    @State private var selection: TextSelection?
 
     var body: some View {
         GlassEffectContainer {
@@ -56,6 +57,7 @@ struct MessageInputView: View {
                         TextField(
                             input.messageFieldPrompt,
                             text: Bindable(input).draft,
+                            selection: $selection,
                             axis: .vertical
                         )
                             .textFieldStyle(.plain)
@@ -69,6 +71,7 @@ struct MessageInputView: View {
                                 input.sendAnimator.sourceFrame = { frame }
                             }
                             .onSubmit(submit)
+                            .composerMentionPopover(isFocused: isMessageFieldFocused, restoreCursor: restoreMentionCursor)
 
                         ComposerDictationButton(isInline: true)
                             .buttonStyle(.plain)
@@ -93,6 +96,9 @@ struct MessageInputView: View {
         .onChange(of: chatStore.editingMessage?.id) { _, _ in
             input.editingMessageDidChange()
         }
+        .onChange(of: selection) { _, newValue in
+            updateComposerSelection(newValue)
+        }
         // Mirror focus into InputManager so the iPad detail view can scroll
         // the timeline when the keyboard appears (FocusState is view-local).
         .onChange(of: isMessageFieldFocused) { _, focused in
@@ -111,6 +117,7 @@ struct MessageInputView: View {
             }
         }
         .onChange(of: chatStore.selectedChat?.id) { _, _ in
+            selection = nil
             if isMac {
                 focusMessageField()
             }
@@ -164,6 +171,26 @@ struct MessageInputView: View {
         #if !os(macOS)
         focusMessageField()
         #endif
+    }
+
+    private func restoreMentionCursor(_ offset: Int) {
+        guard let range = Range(NSRange(location: offset, length: 0), in: input.draft) else { return }
+        selection = TextSelection(insertionPoint: range.lowerBound)
+        focusMessageField()
+    }
+
+    private func updateComposerSelection(_ newValue: TextSelection?) {
+        let chatID = input.selectedChatID
+        Task { @MainActor in
+            // Selection can arrive while the text binding is still writing.
+            // Wait for that write, then use only the latest selection.
+            await Task.yield()
+            guard input.selectedChatID == chatID, selection == newValue else { return }
+            let text = input.draft
+            guard let newValue, case .selection(let range) = newValue.indices,
+                  range.lowerBound >= text.startIndex, range.upperBound <= text.endIndex else { return }
+            input.composerSelection = NSRange(range, in: text)
+        }
     }
 
     private func focusMessageField(after delay: Duration = .zero) {

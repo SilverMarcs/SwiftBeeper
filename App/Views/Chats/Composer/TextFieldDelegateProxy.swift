@@ -6,13 +6,14 @@ import UIKit
 final class TextFieldDelegateProxy: NSObject, UITextFieldDelegate {
     weak var originalDelegate: UITextFieldDelegate?
     var shouldReturn: ((UITextField) -> Bool)?
+    var selectionDidChange: ((UITextField) -> Void)?
 
     init(originalDelegate: UITextFieldDelegate?) {
         self.originalDelegate = originalDelegate
     }
 
     override func responds(to aSelector: Selector!) -> Bool {
-        if aSelector == #selector(textFieldShouldReturn(_:)) {
+        if aSelector == #selector(textFieldShouldReturn(_:)) || aSelector == #selector(textFieldDidChangeSelection(_:)) {
             return true
         }
         return originalDelegate?.responds(to: aSelector) ?? super.responds(to: aSelector)
@@ -27,6 +28,11 @@ final class TextFieldDelegateProxy: NSObject, UITextFieldDelegate {
             return shouldReturn(textField)
         }
         return originalDelegate?.textFieldShouldReturn?(textField) ?? true
+    }
+
+    func textFieldDidChangeSelection(_ textField: UITextField) {
+        originalDelegate?.textFieldDidChangeSelection?(textField)
+        selectionDidChange?(textField)
     }
 }
 #endif

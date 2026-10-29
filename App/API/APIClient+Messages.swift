@@ -11,21 +11,27 @@ extension APIClient {
         return try await execute("list-messages", arguments: Arguments(chatID: chatID, cursor: cursor))
     }
 
-    static func sendMessage(chatID: String, text: String?, replyToMessageID: String? = nil, attachment: MessageAttachmentInput? = nil) async throws -> SendMessageOutput {
+    static func sendMessage(chatID: String, text: String?, replyToMessageID: String? = nil, attachment: MessageAttachmentInput? = nil, mentions: [ComposerMention] = []) async throws -> SendMessageOutput {
         struct Arguments: Encodable {
             let chatID: String
             let text: String?
             let replyToMessageID: String?
             let attachment: MessageAttachmentInput?
+            let mentions: [ComposerMention]
         }
         return try await execute("send-message", arguments: Arguments(
-            chatID: chatID, text: text, replyToMessageID: replyToMessageID, attachment: attachment
+            chatID: chatID, text: text, replyToMessageID: replyToMessageID, attachment: attachment, mentions: mentions
         ))
     }
 
-    static func editMessage(chatID: String, messageID: String, text: String) async throws {
-        struct Arguments: Encodable { let chatID: String; let messageID: String; let text: String }
-        try await executeRaw("edit-message", arguments: Arguments(chatID: chatID, messageID: messageID, text: text))
+    static func editMessage(chatID: String, messageID: String, text: String, mentions: [ComposerMention] = []) async throws {
+        struct Arguments: Encodable {
+            let chatID: String
+            let messageID: String
+            let text: String
+            let mentions: [ComposerMention]
+        }
+        try await executeRaw("edit-message", arguments: Arguments(chatID: chatID, messageID: messageID, text: text, mentions: mentions))
     }
 
     static func addReaction(chatID: String, messageID: String, reactionKey: String) async throws {

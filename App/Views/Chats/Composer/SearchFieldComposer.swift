@@ -20,6 +20,8 @@ struct SearchFieldComposer: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // The timeline's bottom edge sits just above the native composer.
+            .composerMentionPopover(isFocused: isFocused, restoreCursor: restoreMentionCursor)
             .onChange(of: chatStore.editingMessage?.id) { _, _ in
                 inputManager.editingMessageDidChange()
             }
@@ -222,6 +224,20 @@ struct SearchFieldComposer: ViewModifier {
             inputManager.handleSubmit(sourceFrame: sourceFrame)
             return false
         }
+        delegateProxy?.selectionDidChange = { field in
+            guard let text = field.text, let range = field.selectedTextRange else { return }
+            let selection = NSRange(
+                location: field.offset(from: field.beginningOfDocument, to: range.start),
+                length: field.offset(from: range.start, to: range.end)
+            )
+            let chatID = inputManager.selectedChatID
+            Task { @MainActor [weak field] in
+                await Task.yield()
+                guard inputManager.selectedChatID == chatID,
+                      field?.text == text, inputManager.draft == text else { return }
+                inputManager.composerSelection = selection
+            }
+        }
         if let searchBar {
             if searchBarDelegateProxy == nil || searchBar.delegate !== searchBarDelegateProxy {
                 let proxy = SearchBarDelegateProxy(originalDelegate: searchBar.delegate)
@@ -234,6 +250,25 @@ struct SearchFieldComposer: ViewModifier {
             }
         }
         restoreDraft(in: textField, referenceView: referenceView)
+    }
+
+    private func restoreMentionCursor(_ offset: Int) {
+        let chatID = inputManager.selectedChatID
+        let insertedDraft = inputManager.draft
+        isFocused = true
+        // Updating searchable text can move the cursor to the end. Restore it
+        // after SwiftUI applies the draft, including its visible field clone.
+        Task { @MainActor in
+            await Task.yield()
+            guard inputManager.selectedChatID == chatID, inputManager.draft == insertedDraft else { return }
+            guard let field = searchField.textField, let reference = searchField.referenceView else { return }
+            for field in [field] + composerFields(matching: field, referenceView: reference) where field.isFirstResponder {
+                field.text = inputManager.draft
+                if let cursor = field.position(from: field.beginningOfDocument, offset: offset) {
+                    field.selectedTextRange = field.textRange(from: cursor, to: cursor)
+                }
+            }
+        }
     }
 
     /// Shows the draft in composer fields UIKit emptied while closing. Fields

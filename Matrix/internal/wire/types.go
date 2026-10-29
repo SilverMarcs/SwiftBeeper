@@ -158,6 +158,14 @@ type SendMessageInput struct {
 	Text             string                 `json:"text"`
 	ReplyToMessageID string                 `json:"replyToMessageID"`
 	Attachment       MessageAttachmentInput `json:"attachment"`
+	Mentions         []ComposerMention      `json:"mentions"`
+}
+
+// ComposerMention identifies an explicitly selected span, in UTF-16 units.
+type ComposerMention struct {
+	UserID   string `json:"userID"`
+	Location int    `json:"location"`
+	Length   int    `json:"length"`
 }
 
 type MessageAttachmentInput struct {

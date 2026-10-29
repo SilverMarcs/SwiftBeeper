@@ -13,11 +13,15 @@ final class InputManager {
     let dictation = ComposerDictation()
     private(set) var isSubmittingDictation = false
     private(set) var dictationFocusRequestID: UUID?
-    private let chatStore: ChatStore
+    let chatStore: ChatStore
     let sendAnimator = MessageSendAnimator()
 
     /// Per-chat draft text, keyed by chat ID, so switching chats keeps drafts.
-    private var draftsByChatID: [String: String] = [:]
+    var draftsByChatID: [String: ComposerDraft] = [:]
+    var composerSelection: NSRange?
+    var mentionParticipants: [ChatParticipant] = []
+    var mentionParticipantsChatID: String?
+    var dismissedMentionQuery: ComposerMentionQuery?
     /// Attachments belong to the chat where intake began. In particular, a
     /// PhotosPicker transfer may finish after the user has navigated elsewhere.
     private var pendingAttachmentsByChatID: [String: [PendingAttachment]] = [:]
@@ -59,11 +63,16 @@ final class InputManager {
     var draft: String {
         get {
             guard let selectedChatID else { return "" }
-            return draftsByChatID[selectedChatID] ?? ""
+            return draftsByChatID[selectedChatID]?.text ?? ""
         }
         set {
             guard let selectedChatID else { return }
-            draftsByChatID[selectedChatID] = newValue
+            guard newValue != draft else { return }
+            var snapshot = draftsByChatID[selectedChatID] ?? ComposerDraft()
+            snapshot.updateText(newValue)
+            composerSelection = nil
+            dismissedMentionQuery = nil
+            draftsByChatID[selectedChatID] = snapshot
         }
     }
 
@@ -83,8 +92,8 @@ final class InputManager {
     /// Appends a reply that failed to send from a notification to that chat's
     /// draft, so it is ready to resend when the chat opens.
     func restoreNotificationDraft(_ text: String, for chatID: String) {
-        let existing = draftsByChatID[chatID] ?? ""
-        draftsByChatID[chatID] = existing.isEmpty ? text : existing + "\n" + text
+        let existing = draftsByChatID[chatID]?.text ?? ""
+        draftsByChatID[chatID, default: ComposerDraft()].updateText(existing.isEmpty ? text : existing + "\n" + text)
         pendingFocus = true
     }
 
@@ -117,7 +126,8 @@ final class InputManager {
     func editingMessageDidChange() {
         if let editingMessage = chatStore.editingMessage {
             editingDraftChatID = editingMessage.chatID
-            draftsByChatID[editingMessage.chatID] = editingMessage.text ?? ""
+            draftsByChatID[editingMessage.chatID] = ComposerDraft(message: editingMessage)
+            composerSelection = nil
         } else if let editingDraftChatID {
             draftsByChatID[editingDraftChatID] = nil
             self.editingDraftChatID = nil
@@ -180,23 +190,24 @@ final class InputManager {
 
     private func sendMessage(from sourceFrame: CGRect?) {
         guard let chatID = chatStore.selectedChatID else { return }
-        let text = trimmedDraft
+        let snapshot = (draftsByChatID[chatID] ?? ComposerDraft()).trimmed
+        let text = snapshot.text
         let attachments = pendingAttachments
 
-        guard !text.isEmpty || !attachments.isEmpty else { return }
+        guard !text.trimmed.isEmpty || !attachments.isEmpty else { return }
         let animationSource = sourceFrame ?? sendAnimator.sourceFrame?()
         draftsByChatID[chatID] = nil
         pendingAttachmentsByChatID[chatID] = nil
 
-        if let outgoing = chatStore.sendMessage(text: text, attachments: attachments, to: chatID) {
+        if let outgoing = chatStore.sendMessage(text: text, mentions: snapshot.mentions, attachments: attachments, to: chatID) {
             sendAnimator.begin(outgoing, from: animationSource)
         }
     }
 
     private func saveEdit() {
-        let text = trimmedDraft
         let editingChatID = chatStore.editingMessage?.chatID
-        let previousDraft = draft
+        let previousDraft = editingChatID.flatMap { draftsByChatID[$0] } ?? ComposerDraft()
+        let snapshot = previousDraft.trimmed
         if let editingChatID {
             draftsByChatID[editingChatID] = nil
         }
@@ -205,11 +216,11 @@ final class InputManager {
         editingDraftChatID = nil
 
         Task {
-            let didSave = await chatStore.saveEdit(newText: text)
+            let didSave = await chatStore.saveEdit(newText: snapshot.text, mentions: snapshot.mentions)
             guard !didSave, let editingChatID else { return }
             // Still editing: restore the text unless something new was typed.
             editingDraftChatID = editingChatID
-            if (draftsByChatID[editingChatID] ?? "").isEmpty {
+            if (draftsByChatID[editingChatID]?.text ?? "").isEmpty {
                 draftsByChatID[editingChatID] = previousDraft
             }
         }

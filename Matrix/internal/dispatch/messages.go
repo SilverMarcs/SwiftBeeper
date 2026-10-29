@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
+	"go.mau.fi/gomuks/pkg/hicli/database"
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/event"
+	"maunium.net/go/mautrix/format"
 	"maunium.net/go/mautrix/id"
 
 	"relay/core/internal/wire"
@@ -41,7 +44,10 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage) (an
 	if err != nil {
 		return nil, err
 	}
-	text := strings.TrimSpace(req.Text)
+	text, err := outgoingMentionText(req.Text, req.Mentions)
+	if err != nil {
+		return nil, err
+	}
 	hasAttachment := strings.TrimSpace(req.Attachment.UploadID) != ""
 	if text == "" && !hasAttachment {
 		return nil, errors.New("text or attachment is required")
@@ -67,6 +73,8 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage) (an
 		relatesTo = &event.RelatesTo{InReplyTo: &event.InReplyTo{EventID: id.EventID(replyTo)}}
 	}
 
+	// The SDK derives m.mentions from these Matrix links, along with HTML and
+	// plain fallbacks. A link inside a code span remains ordinary code text.
 	dbEvent, err := cli.SendMessage(ctx, roomID, base, nil, text, relatesTo, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send message: %w", err)
@@ -127,9 +135,10 @@ func (s *Dispatcher) clearUnreadMarkerAfterSend(ctx context.Context, roomID id.R
 
 func (s *Dispatcher) editMessage(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
-		ChatID    string `json:"chatID"`
-		MessageID string `json:"messageID"`
-		Text      string `json:"text"`
+		ChatID    string                 `json:"chatID"`
+		MessageID string                 `json:"messageID"`
+		Text      string                 `json:"text"`
+		Mentions  []wire.ComposerMention `json:"mentions"`
 	}
 	if err := decodeJSON(input, &req); err != nil {
 		return nil, err
@@ -154,6 +163,39 @@ func (s *Dispatcher) editMessage(ctx context.Context, input json.RawMessage) (an
 		return nil, errors.New("messageID: cannot edit messages with attachments")
 	}
 	relatesTo := &event.RelatesTo{Type: event.RelReplace, EventID: eventID}
+	if len(req.Mentions) > 0 {
+		text, err := outgoingMentionText(req.Text, req.Mentions)
+		if err != nil {
+			return nil, err
+		}
+		content := format.RenderMarkdown(text, true, false)
+		content.Mentions.UserIDs = slices.DeleteFunc(content.Mentions.UserIDs, func(userID id.UserID) bool {
+			return userID == cli.Account.UserID
+		})
+		// Keep the complete recipients on new_content, but notify only people
+		// newly mentioned in this revision, as required by Matrix edits.
+		if err = s.populateLastEditRefs(ctx, []*database.Event{target}); err != nil {
+			return nil, err
+		}
+		var previous event.MessageEventContent
+		if err = json.Unmarshal(target.GetContent(), &previous); err != nil {
+			return nil, err
+		}
+		added := &event.Mentions{}
+		for _, userID := range content.Mentions.UserIDs {
+			if !previous.Mentions.Has(userID) {
+				added.Add(userID)
+			}
+		}
+		replacement := &event.MessageEventContent{
+			MsgType: content.MsgType, Body: "* " + content.Body,
+			NewContent: &content, RelatesTo: relatesTo, Mentions: added,
+		}
+		if _, err = cli.Send(ctx, roomID, event.EventMessage, replacement, false, false); err != nil {
+			return nil, fmt.Errorf("failed to edit message: %w", err)
+		}
+		return wire.Success, nil
+	}
 	if _, err = cli.SendMessage(ctx, roomID, nil, nil, req.Text, relatesTo, nil, nil); err != nil {
 		return nil, fmt.Errorf("failed to edit message: %w", err)
 	}
