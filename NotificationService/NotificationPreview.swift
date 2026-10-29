@@ -17,8 +17,8 @@ struct NotificationPreview: Decodable, Sendable {
     let targetEventID: String?
     let mentionsMe: Bool?
 
-    var subtitle: String {
-        if mentionsMe == true {
+    func subtitle(isMention: Bool) -> String {
+        if isMention {
             return isGroup ? String(localized: "\(senderName) mentioned you") : String(localized: "Mentioned you")
         }
         return isGroup ? senderName : ""

@@ -12,6 +12,14 @@ struct RootView: View {
 
     var body: some View {
         ContentView()
+            .alert("Couldn’t Schedule Reminder", isPresented: Binding(
+                get: { notificationService.reminderErrorMessage != nil },
+                set: { if !$0 { notificationService.reminderErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(notificationService.reminderErrorMessage ?? "")
+            }
             .task(id: sessionStore.isSignedIn) {
                 await chatStore.setSignedIn(sessionStore.isSignedIn)
             }

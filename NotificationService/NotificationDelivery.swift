@@ -21,10 +21,11 @@ final class NotificationDelivery: Sendable {
     func prepare(_ preview: NotificationPreview) -> UNNotificationContent? {
         state.withLock { value in
             guard let content = value.content else { return nil }
+            let isMention = preview.mentionsMe == true || content.userInfo["isMention"] as? Bool == true
             content.title = preview.title
-            content.subtitle = preview.subtitle
+            content.subtitle = preview.subtitle(isMention: isMention)
             content.body = preview.body
-            content.userInfo["isMention"] = preview.mentionsMe == true
+            content.userInfo["isMention"] = isMention
             if let targetEventID = preview.targetEventID {
                 content.userInfo["messageID"] = targetEventID
             }

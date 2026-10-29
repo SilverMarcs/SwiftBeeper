@@ -75,7 +75,11 @@ struct ChatTimelineView: View {
                 .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline)")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.bottom, for: .alignment)
-                .contentMargins(.horizontal, 10, for: .scrollContent)
+                #if os(macOS)
+                .contentMargins(.horizontal, 15, for: .scrollContent)
+                #else
+                .contentMargins(.horizontal, 12, for: .scrollContent)
+                #endif
                 .contentMargins(.bottom, 24, for: .scrollContent)
                 .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
                 #if os(iOS)

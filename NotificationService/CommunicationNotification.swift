@@ -47,7 +47,7 @@ enum CommunicationNotification {
             guard let updated = try content.updating(from: intent).mutableCopy() as? UNMutableNotificationContent else { return content }
             // Keep Relay's title / sender / body layout over the intent's.
             updated.title = preview.title
-            updated.subtitle = preview.subtitle
+            updated.subtitle = content.subtitle
             updated.body = preview.body
             updated.threadIdentifier = conversationID
             updated.categoryIdentifier = content.categoryIdentifier

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared read, pin, archive, and mute actions for chat rows and the detail menu.
+/// Shared read, pin, archive, mute, and reminder actions for chat rows and the detail menu.
 struct ChatRowActionsView: View {
     /// Leading swipes toggle read state or pin, trailing swipes archive or mute, and the
     /// context menu offers everything.
@@ -74,6 +74,10 @@ struct ChatRowActionsView: View {
             }
             .tint(.purple)
             .disabled(chatStore.mutingChatIDs.contains(chat.id))
+        }
+
+        if placement == .contextMenu {
+            ChatReminderMenu(chat: chat)
         }
     }
 }

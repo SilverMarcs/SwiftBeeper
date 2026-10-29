@@ -53,17 +53,6 @@ struct MessageRowView: View {
                         openMention(url, in: message)
                     })
 
-                if !isOutgoing, message.mentions?.room == true {
-                    Label("Mentions everyone", systemImage: "at")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if !isOutgoing, let selfID = chatStore.currentUserProfile?.id,
-                   message.explicitlyMentions(selfID) {
-                    Label("Mentions you", systemImage: "at")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 if isOutgoing && entry.showsReadIndicator {
                     MessageDeliveryStatusView(status: .read)
                 }

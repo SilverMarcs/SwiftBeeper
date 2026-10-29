@@ -52,7 +52,8 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
             #endif
             // iOS calls willPresent for foreground delivery. Do not depend on
             // a separate scene-phase update arriving before the notification.
-            if content.replyDraft == nil,
+            if content.categoryIdentifier != NotificationCategory.reminder,
+               content.replyDraft == nil,
                !content.chatID.isEmpty, Self.chatStore?.visibleChatID == content.chatID {
                 return []
             }

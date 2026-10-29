@@ -11,6 +11,7 @@ final class NotificationService {
     /// Whether Relay is frontmost.
     private(set) var isAppActive = false
     private(set) var authorizationStatus: UNAuthorizationStatus?
+    var reminderErrorMessage: String?
     private(set) var errorMessage: String?
     private(set) var isRegistering = false
     private(set) var isPreparing = false
@@ -18,7 +19,7 @@ final class NotificationService {
     /// foreground does not register it again.
     private var registeredToken: String?
 
-    @ObservationIgnored private var isSignedIn = false
+    @ObservationIgnored private(set) var isSignedIn = false
     @ObservationIgnored private var requestedAppleToken = false
     @ObservationIgnored private var notificationsAllowed = false
     @ObservationIgnored private var identity: PushIdentity?
@@ -48,6 +49,7 @@ final class NotificationService {
         isSignedIn = signedIn
         guard signedIn else {
             UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+            await UNUserNotificationCenter.current().removePendingReplyReminders()
             try? NotificationCredentials.remove()
             identity = nil
             notificationsAllowed = false
@@ -177,6 +179,7 @@ final class NotificationService {
         do {
             try await removeRegistration()
             try NotificationCredentials.remove()
+            await UNUserNotificationCenter.current().removePendingReplyReminders()
             identity = nil
             requestedAppleToken = false
             deviceToken = nil

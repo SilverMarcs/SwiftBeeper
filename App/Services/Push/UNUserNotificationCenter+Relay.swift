@@ -16,7 +16,20 @@ extension UNUserNotificationCenter {
             intentIdentifiers: ["INSendMessageIntent"],
             options: []
         )
-        setNotificationCategories([category])
+        let reminder = UNNotificationCategory(
+            identifier: NotificationCategory.reminder,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        setNotificationCategories([category, reminder])
+    }
+
+    func removePendingReplyReminders() async {
+        let identifiers = await pendingNotificationRequests()
+            .filter { $0.content.categoryIdentifier == NotificationCategory.reminder }
+            .map(\.identifier)
+        removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
     func removeDeliveredNotifications(forChat chatID: String) async {
