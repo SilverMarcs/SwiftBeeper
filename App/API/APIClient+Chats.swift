@@ -23,6 +23,14 @@ extension APIClient {
         return try await execute("get-chat", arguments: Arguments(chatID: chatID, maxParticipantCount: maxParticipantCount))
     }
 
+    /// Looks up an existing DM in the local database, on the source chat's account.
+    static func findDirectChat(participantID: String, sourceChatID: String) async throws -> Chat? {
+        struct Arguments: Encodable { let participantID: String; let sourceChatID: String }
+        return try await execute("find-direct-chat", arguments: Arguments(
+            participantID: participantID, sourceChatID: sourceChatID
+        ))
+    }
+
     static func archiveChat(chatID: String, archived: Bool) async throws {
         struct Arguments: Encodable { let chatID: String; let archived: Bool }
         try await executeRaw("archive-chat", arguments: Arguments(chatID: chatID, archived: archived))

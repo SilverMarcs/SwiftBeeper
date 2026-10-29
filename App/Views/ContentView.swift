@@ -19,7 +19,7 @@ struct ContentView: View {
                         .id(chatStore.selectedChatID)
                         #endif
                 }
-                .onChange(of: chatStore.notificationSelectionID) {
+                .onChange(of: chatStore.chatNavigationID) {
                     preferredCompactColumn = .detail
                 }
             }

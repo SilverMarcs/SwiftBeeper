@@ -54,6 +54,19 @@ extension ChatStore {
         Device.isIPhone ? nil : displayedChats.first?.id
     }
 
+    // MARK: - Navigation
+
+    /// Retains a directly opened chat even when its row isn't in the loaded page.
+    func openChat(_ chat: Chat) {
+        searchQuery = ""
+        if selectedFilter == .inbox(.unread) || !chatBelongsToCurrentFilter(chat) {
+            selectedFilter = .inbox(chat.isArchived == true ? .archive : .primary)
+        }
+        selectedChat = chat
+        selectedChatID = chat.id
+        chatNavigationID = UUID()
+    }
+
     // MARK: - Loading
 
     func loadChats() async {

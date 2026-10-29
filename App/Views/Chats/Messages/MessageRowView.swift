@@ -8,6 +8,7 @@ struct MessageRowView: View {
     @Environment(ChatStore.self) private var chatStore
 
     @State private var profileSheetParticipant: ChatParticipant?
+    @State private var pendingDirectChat: Chat?
 
     var body: some View {
         let message = entry.message
@@ -72,9 +73,17 @@ struct MessageRowView: View {
                 Spacer(minLength: 50)
             }
         }
-        .sheet(item: $profileSheetParticipant) { participant in
-            ParticipantProfileSheet(participant: participant)
+        .sheet(item: $profileSheetParticipant, onDismiss: openPendingDirectChat) { participant in
+            ParticipantProfileSheet(participant: participant, sourceChat: chat) { chat in
+                pendingDirectChat = chat
+            }
         }
+    }
+
+    private func openPendingDirectChat() {
+        guard let chat = pendingDirectChat else { return }
+        pendingDirectChat = nil
+        chatStore.openChat(chat)
     }
 
     private func openMention(_ url: URL, in message: Message) -> OpenURLAction.Result {

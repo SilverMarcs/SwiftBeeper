@@ -194,10 +194,14 @@ func roomIDs(rooms []*database.Room) []id.RoomID {
 	return ids
 }
 
+func isDirectChat(room *database.Room, summary *chatSummary) bool {
+	// Named bridge rooms can retain a direct-chat membership hint without a DM user ID.
+	return (room.DMUserID != nil && *room.DMUserID != "") || (summary.isDirect && summary.total == 2)
+}
+
 func (s *Dispatcher) mapRoomToChat(room *database.Room, summary *chatSummary, lookup *accountLookup, state roomAccountDataState, lastReadSortKey string) wire.Chat {
 	chatType := wire.ChatTypeGroup
-	// Named bridge rooms can retain a direct-chat membership hint without a DM user ID.
-	if (room.DMUserID != nil && *room.DMUserID != "") || (summary.isDirect && summary.total == 2) {
+	if isDirectChat(room, summary) {
 		chatType = wire.ChatTypeSingle
 	}
 	chat := wire.Chat{

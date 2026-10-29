@@ -59,8 +59,8 @@ final class ChatStore {
     @ObservationIgnored var visibleChatID: String?
     /// A tapped notification's chat, held until it can be selected.
     @ObservationIgnored private(set) var pendingNotificationChatID: String?
-    /// Changes each time a notification tap selects its chat.
-    private(set) var notificationSelectionID: UUID?
+    /// Changes whenever an action opens a chat, including one outside the sidebar.
+    var chatNavigationID: UUID?
     @ObservationIgnored private var notificationChatTask: Task<Void, Never>?
     @ObservationIgnored private var notificationChatRequestID = UUID()
 
@@ -208,7 +208,7 @@ final class ChatStore {
         notificationChatRequestID = UUID()
         if !isSignedIn {
             pendingNotificationChatID = nil
-            notificationSelectionID = nil
+            chatNavigationID = nil
         }
         resyncTask?.cancel()
         resyncTask = nil
@@ -250,10 +250,9 @@ final class ChatStore {
     /// Selects the pending chat once the app is active and the chat is known.
     func resolveNotificationChat() {
         guard notificationService.isAppActive,
-              let id = pendingNotificationChatID, chat(byID: id) != nil else { return }
+              let id = pendingNotificationChatID, let chat = chat(byID: id) else { return }
         pendingNotificationChatID = nil
-        selectedChatID = id
-        notificationSelectionID = UUID()
+        openChat(chat)
     }
 
     /// Fetches the pending chat directly, for one outside the loaded sidebar.

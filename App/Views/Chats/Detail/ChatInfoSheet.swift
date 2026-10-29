@@ -3,8 +3,10 @@ import SwiftUI
 /// The chat's type, account, members, and identifiers.
 struct ChatInfoSheet: View {
     let chat: Chat
+    let onOpenChat: (Chat) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selectedParticipant: ChatParticipant?
+    @State private var pendingDirectChat: Chat?
     /// A fetch with more participants, when the passed chat holds only a preview.
     @State private var detail: Chat?
 
@@ -55,12 +57,21 @@ struct ChatInfoSheet: View {
             }
         }
         .frame(minWidth: 400, minHeight: 350)
-        .sheet(item: $selectedParticipant) { participant in
-            ParticipantProfileSheet(participant: participant)
+        .sheet(item: $selectedParticipant, onDismiss: openPendingDirectChat) { participant in
+            ParticipantProfileSheet(participant: participant, sourceChat: chat) { chat in
+                pendingDirectChat = chat
+            }
         }
         .task(id: chat.id) {
             guard chat.participants?.hasMore == true else { return }
             detail = try? await APIClient.getChat(chatID: chat.id, maxParticipantCount: Self.participantPreviewLimit)
         }
+    }
+
+    private func openPendingDirectChat() {
+        guard let chat = pendingDirectChat else { return }
+        pendingDirectChat = nil
+        onOpenChat(chat)
+        dismiss()
     }
 }

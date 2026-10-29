@@ -10,6 +10,7 @@ struct ChatDetailView: View {
     @State private var isVisible = false
     @State private var showingChatInfo = false
     @State private var profileSheetParticipant: ChatParticipant?
+    @State private var pendingDirectChat: Chat?
 
     var body: some View {
         let selectedChat = chatStore.selectedChat
@@ -76,13 +77,17 @@ struct ChatDetailView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingChatInfo) {
+            .sheet(isPresented: $showingChatInfo, onDismiss: openPendingDirectChat) {
                 if let selectedChat {
-                    ChatInfoSheet(chat: selectedChat)
+                    ChatInfoSheet(chat: selectedChat) { chat in
+                        pendingDirectChat = chat
+                    }
                 }
             }
             .sheet(item: $profileSheetParticipant) { participant in
-                ParticipantProfileSheet(participant: participant)
+                if let selectedChat {
+                    ParticipantProfileSheet(participant: participant, sourceChat: selectedChat)
+                }
             }
             .onAppear {
                 isVisible = true
@@ -97,6 +102,12 @@ struct ChatDetailView: View {
                 input.sendAnimator.cancelAll()
                 if isVisible { chatStore.visibleChatID = newValue }
             }
+    }
+
+    private func openPendingDirectChat() {
+        guard let chat = pendingDirectChat else { return }
+        pendingDirectChat = nil
+        chatStore.openChat(chat)
     }
 
     #if os(macOS)
