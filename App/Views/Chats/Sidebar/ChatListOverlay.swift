@@ -11,7 +11,7 @@ struct ChatListOverlay: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if isEmpty,
-                  chatStore.searchQuery.isBlank,
+                  !chatStore.isSearchActive,
                   let chatsError = chatStore.chatsError {
             ContentUnavailableView(
                 "Could Not Load Chats",

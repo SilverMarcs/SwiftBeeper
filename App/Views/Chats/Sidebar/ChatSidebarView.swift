@@ -12,7 +12,9 @@ struct ChatSidebarView: View {
         ChatListView()
             .searchable(text: $chatStore.searchQuery, placement: isIPhone ? .automatic : .sidebar, prompt: "Search chats")
             .searchPresentationToolbarBehavior(.avoidHidingContent)
-            .onSubmit(of: .search) { chatStore.submitSearch() }
+            .task(id: [chatStore.searchQuery, chatStore.selectedFilter.id, chatStore.session.uuidString]) {
+                await chatStore.searchChats()
+            }
             .navigationTitle("Chats")
             .toolbarTitleDisplayMode(isIPad ? .inline : .inlineLarge)
             .toolbar(removing: .sidebarToggle)

@@ -18,7 +18,7 @@ struct ChatListView: View {
                     .tag(chat.id)
             }
 
-            if chatStore.hasMoreChats, chatStore.searchQuery.isBlank {
+            if chatStore.hasMoreChats, !chatStore.isSearchActive {
                 ProgressView()
                     .controlSize(.small)
                     .frame(maxWidth: .infinity)

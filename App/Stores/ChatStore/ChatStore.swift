@@ -42,15 +42,9 @@ final class ChatStore {
     private(set) var connectedAccounts: [Account] = []
     private(set) var currentUserProfile: ChatParticipant?
 
-    var searchQuery: String = "" {
-        didSet {
-            guard oldValue != searchQuery else { return }
-            resetSearch()
-        }
-    }
+    var searchQuery = ""
     var searchResults: [Chat]?
     var isSearching = false
-    @ObservationIgnored var searchTask: Task<Void, Never>?
     @ObservationIgnored var latestSearchRequestID: UUID?
     @ObservationIgnored var latestChatsRequestID: UUID?
     @ObservationIgnored var lastLoadedFilterID: String?

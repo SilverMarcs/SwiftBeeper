@@ -3,8 +3,10 @@ import Foundation
 /// The sidebar: loading and paging the chat list, search, live chat updates,
 /// and per-chat actions.
 extension ChatStore {
+    var isSearchActive: Bool { searchQuery.trimmed.count >= 3 }
+
     var displayedChats: [Chat] {
-        guard searchQuery.isBlank else { return searchResults ?? chats }
+        guard !isSearchActive else { return searchResults ?? [] }
         let pins = pinnedChats.sorted {
             let left = $0.pinOrder ?? 1, right = $1.pinOrder ?? 1
             return left == right ? $0.id < $1.id : left < right
@@ -116,7 +118,7 @@ extension ChatStore {
 
     func loadMoreChats() async {
         guard isSignedIn, !isLoadingChats, !isLoadingMoreChats,
-              searchQuery.isBlank, chatsError == nil else { return }
+              !isSearchActive, chatsError == nil else { return }
         guard hasMoreChats, let lastChat = chats.last else { return }
 
         let requestedFilter = selectedFilter
@@ -136,7 +138,7 @@ extension ChatStore {
             guard selectedFilter.id == requestedFilter.id,
                   latestChatsRequestID == requestID, !isLoadingChats,
                   self.session == session,
-                  searchQuery.isBlank, !Task.isCancelled else { return }
+                  !isSearchActive, !Task.isCancelled else { return }
             let existingIDs = Set(chats.map(\.id))
             let newChats = response.items.filter { !existingIDs.contains($0.id) }
             setChats(chats + newChats)
@@ -149,36 +151,32 @@ extension ChatStore {
 
     // MARK: - Search
 
-    func submitSearch() {
+    func searchChats() async {
         let query = searchQuery.trimmed
-        guard !query.isEmpty else {
+        guard isSignedIn, isSearchActive else {
             resetSearch()
             return
         }
 
-        searchTask?.cancel()
         let requestID = UUID()
         latestSearchRequestID = requestID
-        searchResults = []
-        isSearching = true
+        isSearching = false
 
         let filter = selectedFilter
         let inbox = selectedInboxFilter
-        searchTask = Task { [weak self] in
-            await self?.performSearch(query: query, filter: filter, inbox: inbox, requestID: requestID)
-        }
-    }
+        let session = session
 
-    private func performSearch(query: String, filter: ChatFilter, inbox: InboxFilter, requestID: UUID) async {
         defer {
             if latestSearchRequestID == requestID {
                 isSearching = false
-                searchTask = nil
                 latestSearchRequestID = nil
             }
         }
 
         do {
+            try await Task.sleep(for: .milliseconds(200))
+            try Task.checkCancellation()
+            isSearching = true
             let response = try await APIClient.searchChats(
                 query: query,
                 inbox: inbox.rawValue,
@@ -187,6 +185,7 @@ extension ChatStore {
             guard !Task.isCancelled,
                   latestSearchRequestID == requestID,
                   selectedFilter.id == filter.id,
+                  self.session == session,
                   searchQuery.trimmed == query else { return }
             searchResults = response.items
         } catch {
@@ -196,8 +195,6 @@ extension ChatStore {
     }
 
     func resetSearch() {
-        searchTask?.cancel()
-        searchTask = nil
         latestSearchRequestID = nil
         searchResults = nil
         isSearching = false
