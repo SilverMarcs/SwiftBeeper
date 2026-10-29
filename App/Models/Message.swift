@@ -82,6 +82,17 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         return displayText
     }
 
+    /// Reply notification recipients can include people absent from the body.
+    /// The mention label requires a visible user link after reply fallback removal.
+    func explicitlyMentions(_ userID: String) -> Bool {
+        guard mentions?.userIDs.contains(userID) == true,
+              let formattedText else { return false }
+        return formattedText.messageAttributed.runs.contains { run in
+            guard let url = run.link else { return false }
+            return MessageMentionLink(url)?.userID == userID
+        }
+    }
+
     var timestampText: String {
         let calendar = Calendar.app
         if calendar.component(.year, from: timestamp) == calendar.component(.year, from: .now) {

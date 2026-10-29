@@ -57,7 +57,7 @@ struct MessageRowView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if !isOutgoing, let selfID = chatStore.currentUserProfile?.id,
-                   message.mentions?.userIDs.contains(selfID) == true {
+                   message.explicitlyMentions(selfID) {
                     Label("Mentions you", systemImage: "at")
                         .font(.caption)
                         .foregroundStyle(.secondary)
