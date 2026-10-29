@@ -18,7 +18,7 @@ import (
 )
 
 // The per-chat state the user sets: mute, archive (Beeper's inbox.done plus
-// the Low Priority tag) and marked unread, all stored as room account data.
+// the Low Priority tag) and marked unread. Mute also honors room push rules.
 
 var (
 	accountDataInboxDone    = event.Type{Type: "com.beeper.inbox.done", Class: event.AccountDataEventType}
@@ -144,10 +144,13 @@ func (s *Dispatcher) loadRoomAccountDataStates(ctx context.Context, roomIDs ...i
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("room account data query failed: %w", err)
 	}
+	if err = s.applyRoomMuteRules(ctx, states, roomIDs); err != nil {
+		return nil, err
+	}
 	return states, nil
 }
 
-// muteChat toggles the mute state of a chat via the com.beeper.mute room account data.
+// muteChat updates both Beeper's mute state and the homeserver's room rule.
 func (s *Dispatcher) muteChat(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID string `json:"chatID,omitempty"`
@@ -172,7 +175,15 @@ func (s *Dispatcher) muteChat(ctx context.Context, input json.RawMessage) (any, 
 	// arrive before that echo. Update the local view before Swift exports the
 	// new mute preferences to the notification gateway.
 	s.cacheRoomAccountData(ctx, roomID, event.AccountDataBeeperMute, content)
-	return wire.Success, nil
+	ruleErr := s.setRoomMuteRule(ctx, roomID, content.IsMuted())
+	refreshErr := s.refreshRoomMuteRules(ctx)
+	if ruleErr != nil {
+		return nil, fmt.Errorf("failed to update chat notification rule: %w", ruleErr)
+	}
+	if refreshErr != nil {
+		return nil, fmt.Errorf("chat setting saved, but notification state could not be refreshed: %w", refreshErr)
+	}
+	return s.getChat(ctx, input)
 }
 
 func (s *Dispatcher) archiveChat(ctx context.Context, input json.RawMessage) (any, error) {

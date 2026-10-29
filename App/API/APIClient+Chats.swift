@@ -28,9 +28,9 @@ extension APIClient {
         try await executeRaw("archive-chat", arguments: Arguments(chatID: chatID, archived: archived))
     }
 
-    static func muteChat(chatID: String, muted: Bool) async throws {
+    static func muteChat(chatID: String, muted: Bool) async throws -> Chat {
         struct Arguments: Encodable { let chatID: String; let muted: Bool }
-        try await executeRaw("mute-chat", arguments: Arguments(chatID: chatID, muted: muted))
+        return try await execute("mute-chat", arguments: Arguments(chatID: chatID, muted: muted))
     }
 
     static func pinChat(chatID: String, pinned: Bool) async throws {

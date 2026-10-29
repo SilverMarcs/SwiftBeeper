@@ -27,6 +27,8 @@ final class ChatStore {
     var chats: [Chat] = []
     var pinnedChats: [Chat] = []
     var pinningChatIDs: Set<String> = []
+    var mutingChatIDs: Set<String> = []
+    var muteError: String?
     var pinError: String?
     var hasMoreChats = false
     var isLoadingMoreChats = false
@@ -197,6 +199,8 @@ final class ChatStore {
     }
 
     private func clearState() {
+        mutingChatIDs = []
+        muteError = nil
         resolvingMediaIDs = []
         failedMediaIDs = []
         notificationChatTask?.cancel()

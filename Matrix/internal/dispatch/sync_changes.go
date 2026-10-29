@@ -29,6 +29,11 @@ type receiptUpdate struct {
 }
 
 func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
+	if syncComplete.AccountData[event.AccountDataPushRules] != nil {
+		// A rule can change without any room events, including in another client.
+		h.signal(realtimeSignalPushPreferencesChanged)
+		h.signal(realtimeSignalResyncRequired)
+	}
 	for _, room := range syncComplete.Rooms {
 		if room != nil && (room.AccountData[event.AccountDataBeeperMute] != nil ||
 			room.AccountData[event.AccountDataRoomTags] != nil ||

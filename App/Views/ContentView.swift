@@ -24,6 +24,14 @@ struct ContentView: View {
                 }
             }
         }
+        .alert("Could Not Update Notifications", isPresented: Binding(
+            get: { chatStore.muteError != nil },
+            set: { if !$0 { chatStore.muteError = nil } }
+        )) {
+            Button("OK") { chatStore.muteError = nil }
+        } message: {
+            Text(chatStore.muteError ?? "")
+        }
     }
 }
 

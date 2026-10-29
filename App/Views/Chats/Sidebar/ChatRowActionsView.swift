@@ -73,6 +73,7 @@ struct ChatRowActionsView: View {
                 }
             }
             .tint(.purple)
+            .disabled(chatStore.mutingChatIDs.contains(chat.id))
         }
     }
 }

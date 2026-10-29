@@ -240,18 +240,39 @@ extension ChatStore {
     func unmuteChat(_ chatID: String) async { await setChatMuted(chatID, muted: false) }
 
     private func setChatMuted(_ chatID: String, muted: Bool) async {
+        guard mutingChatIDs.insert(chatID).inserted else { return }
+        let session = session
+        defer { if self.session == session { mutingChatIDs.remove(chatID) } }
+        muteError = nil
         let previous = chat(byID: chatID)
         updateChat(chatID) { $0.isMuted = muted }
 
         do {
-            try await APIClient.muteChat(chatID: chatID, muted: muted)
+            let updated = try await APIClient.muteChat(chatID: chatID, muted: muted)
+            guard self.session == session else { return }
+            applyChatUpsert(updated)
         } catch {
-            if let previous { updateChat(chatID) { $0 = previous } }
-            chatsError = error.localizedDescription
+            guard self.session == session else { return }
+            let message = error.localizedDescription
+            // One of the two server writes may have succeeded. Show the actual
+            // state instead of restoring a snapshot that can hide a saved mute.
+            let actual = try? await APIClient.getChat(chatID: chatID)
+            guard self.session == session else { return }
+            if let actual {
+                applyChatUpsert(actual)
+            } else if let previous {
+                updateChat(chatID) { $0.isMuted = previous.isMuted }
+            }
+            try? await notificationService.syncNotificationPreferences()
+            guard self.session == session else { return }
+            muteError = message
             return
         }
         do { try await notificationService.syncNotificationPreferences() }
-        catch { chatsError = "Mute setting saved, but the notification filter could not be updated. Reopen Relay to retry." }
+        catch {
+            guard self.session == session else { return }
+            muteError = "Mute setting saved, but notification delivery could not be updated. Reopen Relay to retry."
+        }
     }
 
     func markChatAsRead(_ chatID: String) async {
