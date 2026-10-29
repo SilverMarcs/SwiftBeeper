@@ -4,12 +4,14 @@ import SwiftUI
 struct TypingDotsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @ScaledMetric(relativeTo: .body) private var minimumWidth = 32.0
     @State private var isVisible = false
 
     var body: some View {
         // Reserve the exact line box used by message text, including its pixel rounding.
         MessageTextView(text: "•••", isOutgoing: false)
             .hidden()
+            .frame(minWidth: minimumWidth)
             .overlay {
                 if isVisible && scenePhase == .active && !reduceMotion {
                     PhaseAnimator([0, 1, 2, 3]) { phase in

@@ -2,8 +2,8 @@ import SwiftUI
 
 struct TypingDotsPhaseView: View {
     let highlightedDot: Int?
-    @ScaledMetric(relativeTo: .body) private var diameter = 4.0
-    @ScaledMetric(relativeTo: .body) private var spacing = 3.0
+    @ScaledMetric(relativeTo: .body) private var diameter = 7.0
+    @ScaledMetric(relativeTo: .body) private var spacing = 4.0
 
     var body: some View {
         HStack(spacing: spacing) {
