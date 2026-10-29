@@ -19,7 +19,7 @@ struct MentionSuggestionRow: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
