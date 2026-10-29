@@ -86,8 +86,9 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	defer cancel()
 	var roomName event.RoomNameEventContent
 	var roomAvatar event.RoomAvatarEventContent
+	var ownMembership event.MemberEventContent
 	var roomMetadata sync.WaitGroup
-	roomMetadata.Add(2)
+	roomMetadata.Add(3)
 	go func() {
 		defer roomMetadata.Done()
 		err := cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomName, "", &roomName)
@@ -97,6 +98,11 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 		defer roomMetadata.Done()
 		err := cli.StateEvent(metadataCtx, req.RoomID, event.StateRoomAvatar, "", &roomAvatar)
 		store.remember("room-avatars", req.RoomID.String(), &roomAvatar, err)
+	}()
+	go func() {
+		defer roomMetadata.Done()
+		err := cli.StateEvent(metadataCtx, req.RoomID, event.StateMember, req.UserID.String(), &ownMembership)
+		store.remember("room-memberships", req.RoomID.String(), &ownMembership, err)
 	}()
 	// Most chats are encrypted, so look up the key backup alongside too.
 	var backupVersion *mautrix.RespRoomKeysVersion[backup.MegolmAuthData]
@@ -159,7 +165,7 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	senderProfile.Wait()
 	title := sender
 	name := strings.TrimSpace(roomName.Name)
-	isGroup := name != "" && name != sender
+	isGroup := name != "" && name != sender && !ownMembership.IsDirect
 	if name != "" {
 		title = name
 	}

@@ -32,7 +32,8 @@ type roomPosition struct {
 }
 
 type chatSummary struct {
-	members []wire.User
+	members  []wire.User
+	isDirect bool
 	// The shown members plus the first bridge ghost, for account inference.
 	accountMembers []wire.User
 	total          int
@@ -123,6 +124,7 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 		if json.Unmarshal(content, &member) != nil {
 			continue
 		}
+		summary.isDirect = summary.isDirect || member.IsDirect
 		user := userFromMemberEvent(userID, member, self)
 		if rank <= limit {
 			summary.members = append(summary.members, user)

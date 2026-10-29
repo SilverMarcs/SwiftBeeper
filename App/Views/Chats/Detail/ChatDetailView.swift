@@ -63,6 +63,12 @@ struct ChatDetailView: View {
 
                     ToolbarItem(placement: .primaryAction) {
                         Menu("Chat Actions", systemImage: "ellipsis") {
+                            Button("Chat Info", systemImage: "info.circle") {
+                                showingChatInfo = true
+                            }
+
+                            Divider()
+
                             ChatRowActionsView(chat: selectedChat, placement: .contextMenu)
                         }
                         .menuOrder(.fixed)
