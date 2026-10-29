@@ -4,6 +4,7 @@ import SwiftUI
 struct MessageContextMenu: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(\.saveAttachment) private var saveAttachment
+    @Environment(\.saveAttachmentToPhotos) private var saveAttachmentToPhotos
 
     let message: Message
     let chat: Chat
@@ -62,6 +63,11 @@ struct MessageContextMenu: View {
         if let attachments = message.attachments, !attachments.isEmpty {
             Divider()
             ForEach(attachments) { attachment in
+                if attachment.photoLibraryContentType != nil {
+                    Button("Save to Photos", systemImage: "photo.on.rectangle.angled") {
+                        saveAttachmentToPhotos(attachment)
+                    }
+                }
                 #if os(macOS)
                 Button("Save to Downloads", systemImage: "arrow.down") { saveAttachment(attachment) }
                 #else

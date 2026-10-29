@@ -1,9 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Saves an attachment where the user can find it. macOS copies it straight
-/// into Downloads. On iOS the app's Downloads folder sits inside its sandbox,
-/// so the user picks a location in Files instead.
+/// Invokes an attachment save flow supplied by the timeline.
 struct SaveAttachmentAction {
     let action: (Attachment) -> Void
 
@@ -13,7 +11,9 @@ struct SaveAttachmentAction {
 }
 
 extension EnvironmentValues {
+    /// Saves to Downloads on macOS, or lets the user choose a location in Files on iOS.
     @Entry var saveAttachment = SaveAttachmentAction { _ in }
+    @Entry var saveAttachmentToPhotos = SaveAttachmentAction { _ in }
 }
 
 extension View {
@@ -21,6 +21,7 @@ extension View {
     /// here rather than in the context menu, which dismisses on tap.
     func savesAttachments() -> some View {
         modifier(AttachmentSaver())
+            .modifier(PhotoAttachmentSaver())
     }
 }
 
