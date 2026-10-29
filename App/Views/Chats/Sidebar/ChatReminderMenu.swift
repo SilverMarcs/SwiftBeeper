@@ -5,7 +5,7 @@ struct ChatReminderMenu: View {
     let chat: Chat
 
     var body: some View {
-        Menu("Remind Me to Reply", systemImage: "clock") {
+        Menu("Remind Me", systemImage: "clock") {
             ForEach(ChatReminderDelay.allCases, id: \.self) { delay in
                 Button {
                     Task { await notificationService.remindToReply(to: chat, after: delay) }

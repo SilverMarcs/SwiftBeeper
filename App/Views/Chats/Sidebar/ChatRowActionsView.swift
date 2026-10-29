@@ -33,7 +33,7 @@ struct ChatRowActionsView: View {
                     }
                 }
             }
-            .tint(.blue)
+            .if(placement == .leadingSwipe) { $0.tint(.blue) }
         }
 
         if placement != .trailingSwipe {
@@ -41,7 +41,7 @@ struct ChatRowActionsView: View {
             Button(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin") {
                 Task { await chatStore.setChatPinned(chat.id, pinned: !isPinned) }
             }
-            .tint(.yellow)
+            .if(placement == .leadingSwipe) { $0.tint(.yellow) }
             .disabled(chatStore.pinningChatIDs.contains(chat.id))
         }
 
@@ -58,7 +58,7 @@ struct ChatRowActionsView: View {
                     }
                 }
             }
-            .tint(isArchived ? .blue : .orange)
+            .if(placement == .trailingSwipe) { $0.tint(isArchived ? .blue : .orange) }
 
             Button(
                 isMuted ? "Unmute" : "Mute",
@@ -72,11 +72,13 @@ struct ChatRowActionsView: View {
                     }
                 }
             }
-            .tint(.purple)
+            .if(placement == .trailingSwipe) { $0.tint(.purple) }
             .disabled(chatStore.mutingChatIDs.contains(chat.id))
         }
 
         if placement == .contextMenu {
+            Divider()
+
             ChatReminderMenu(chat: chat)
         }
     }

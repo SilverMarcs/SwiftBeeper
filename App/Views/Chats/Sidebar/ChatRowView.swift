@@ -84,5 +84,6 @@ struct ChatRowView: View {
         .contextMenu {
             ChatRowActionsView(chat: chat, placement: .contextMenu)
         }
+        .menuOrder(.fixed)
     }
 }
