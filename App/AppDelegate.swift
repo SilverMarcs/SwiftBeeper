@@ -47,8 +47,12 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
         await MainActor.run {
             // Stay quiet for the chat already on screen.
             let content = notification.request.content
+            #if os(macOS)
+            guard Self.notificationService?.isAppActive == true else { return [.banner, .sound] }
+            #endif
+            // iOS calls willPresent for foreground delivery. Do not depend on
+            // a separate scene-phase update arriving before the notification.
             if content.replyDraft == nil,
-               Self.notificationService?.isAppActive == true,
                !content.chatID.isEmpty, Self.chatStore?.visibleChatID == content.chatID {
                 return []
             }

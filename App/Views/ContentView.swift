@@ -14,7 +14,7 @@ struct ContentView: View {
                     ChatSidebarView()
                         .navigationSplitViewColumnWidth(min: 280, ideal: 340)
                 } detail: {
-                    ChatDetailView()
+                    ChatDetailView(chatID: chatStore.selectedChatID)
                         #if os(iOS)
                         .id(chatStore.selectedChatID)
                         #endif

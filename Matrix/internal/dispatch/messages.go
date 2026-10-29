@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
@@ -70,6 +71,7 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage) (an
 	if err != nil {
 		return nil, fmt.Errorf("failed to send message: %w", err)
 	}
+	s.clearUnreadMarkerAfterSend(ctx, roomID)
 	pendingMessageID := dbEvent.TransactionID
 	if pendingMessageID == "" {
 		pendingMessageID = string(dbEvent.ID)
@@ -105,7 +107,22 @@ func (s *Dispatcher) NotificationReply(ctx context.Context, roomID id.RoomID, ev
 	}
 	sent.SendError = ""
 	cli.EventHandler(&jsoncmd.SendComplete{Event: sent})
+	s.clearUnreadMarkerAfterSend(ctx, roomID)
 	return wire.Success, nil
+}
+
+// Sending dismisses a saved unread reminder without publishing a read
+// receipt. Viewing a room intentionally leaves its read state unchanged.
+func (s *Dispatcher) clearUnreadMarkerAfterSend(ctx context.Context, roomID id.RoomID) {
+	states, err := s.loadRoomAccountDataStates(ctx, roomID)
+	if err == nil && states[roomID].IsMarkedUnread {
+		err = s.setChatMarkedUnread(ctx, roomID, false)
+	}
+	if err != nil {
+		// The message is already queued or sent. A marker update failure must
+		// not report a send failure and invite a duplicate message.
+		log.Printf("failed to clear unread marker after sending to %s: %v", roomID, err)
+	}
 }
 
 func (s *Dispatcher) editMessage(ctx context.Context, input json.RawMessage) (any, error) {

@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Owns navigation independently of the timeline viewport and tracks the visible chat.
 struct ChatDetailView: View {
+    /// Keep lifecycle callbacks tied to this detail's navigation identity.
+    let chatID: String?
+
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var input
     @State private var isVisible = false
@@ -9,7 +12,6 @@ struct ChatDetailView: View {
     @State private var profileSheetParticipant: ChatParticipant?
 
     var body: some View {
-        let chatID = chatStore.selectedChatID
         let selectedChat = chatStore.selectedChat
         ChatTimelineView()
             #if os(macOS)
