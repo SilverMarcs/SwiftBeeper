@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+    <key>RelayAppGroup</key><string>$(RELAY_APP_GROUP)</string>
     <key>RelayNotificationKeychainGroup</key><string>$(AppIdentifierPrefix)com.SilverMarcs.RelayEmbedded</string>
     <key>NSCameraUsageDescription</key><string>Take photos and videos to attach to messages.</string>
     <key>NSPhotoLibraryAddUsageDescription</key><string>Save photos and videos from messages to your photo library.</string>

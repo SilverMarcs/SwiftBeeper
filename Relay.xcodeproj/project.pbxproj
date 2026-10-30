@@ -7,15 +7,25 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		EA5DB29634D72B6B9B10F9FF /* ShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DBB80B6C3C148CA8B4BF14BB /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6879865E0DF3E47F68F9A939 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8B64CF2963A5AF17C253A2E0 /* Security.framework */; };
+		9CB0E18FAC90542D6AA43798 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 165F56065505330E1C017B3A /* SystemConfiguration.framework */; };
 		4900F6EF78F8F5B2F3228ECA /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = FA828B92661D73409A155297 /* SwiftMediaViewer */; };
 		65E043351D7771289EF3323C /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 7A21AB7F64A017C4E07D2E60 /* SwiftOGG */; };
 		83EED2CC0BBF097DADEFEA72 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A83D128B2CDFDD7CC54624BF /* Foundation.framework */; };
 		AEE3943A528DF64BF01F17E1 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8B64CF2963A5AF17C253A2E0 /* Security.framework */; };
-		DF86C09A0A3F1D1EC466A44C /* NotificationService.appex in Embed notification extension */ = {isa = PBXBuildFile; fileRef = 11FC9977EF4CDE3788CA600F /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DF86C09A0A3F1D1EC466A44C /* NotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 11FC9977EF4CDE3788CA600F /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E53ABCC329726B7AC4D841B1 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 165F56065505330E1C017B3A /* SystemConfiguration.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		D65AEC2E44D8EC2BFF260A19 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 00400E7BA46B4893DB3DAE46 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E9BCBE19ADD1AD32E82CC01C;
+			remoteInfo = ShareExtension;
+		};
 		986D97DA1C51E480D8AB14D8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 00400E7BA46B4893DB3DAE46 /* Project object */;
@@ -26,20 +36,22 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		0B4F0A1F522E48CA320E829D /* Embed notification extension */ = {
+		0B4F0A1F522E48CA320E829D /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				DF86C09A0A3F1D1EC466A44C /* NotificationService.appex in Embed notification extension */,
+				DF86C09A0A3F1D1EC466A44C /* NotificationService.appex in Embed App Extensions */,
+				EA5DB29634D72B6B9B10F9FF /* ShareExtension.appex in Embed App Extensions */,
 			);
-			name = "Embed notification extension";
+			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DBB80B6C3C148CA8B4BF14BB /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		11FC9977EF4CDE3788CA600F /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		165F56065505330E1C017B3A /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		8B64CF2963A5AF17C253A2E0 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
@@ -48,6 +60,20 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		BA374D52FB53E9EDAE0D9393 /* SharedCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = SharedCore;
+			sourceTree = "<group>";
+		};
+		44AA7D5B968D44072FE62E27 /* ShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = ShareExtension;
+			sourceTree = "<group>";
+		};
 		36FCB1C56E88A291993D8217 /* SharedNotifications */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -76,6 +102,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		B4936CDBB47163F4486DB141 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6879865E0DF3E47F68F9A939 /* Security.framework in Frameworks */,
+				9CB0E18FAC90542D6AA43798 /* SystemConfiguration.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CB697BB9CFFCB4C67F51DA45 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -121,6 +156,7 @@
 			children = (
 				B2640FB004F58617990C7498 /* Relay.app */,
 				11FC9977EF4CDE3788CA600F /* NotificationService.appex */,
+				DBB80B6C3C148CA8B4BF14BB /* ShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -133,6 +169,8 @@
 				8108792C7BDAA099F962E116 /* Products */,
 				36FCB1C56E88A291993D8217 /* SharedNotifications */,
 				CCB59896EA7C9AEB6D06EC6A /* NotificationService */,
+				BA374D52FB53E9EDAE0D9393 /* SharedCore */,
+				44AA7D5B968D44072FE62E27 /* ShareExtension */,
 			);
 			sourceTree = "<group>";
 		};
@@ -147,16 +185,18 @@
 				EC79C452CC5E84280E112945 /* Sources */,
 				B2BD664DAF308B86A7FDF1AC /* Resources */,
 				EF50208E6B06E9FF6A31ED33 /* Frameworks */,
-				0B4F0A1F522E48CA320E829D /* Embed notification extension */,
+				0B4F0A1F522E48CA320E829D /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				BC67BB75192C7E693F0A6567 /* PBXTargetDependency */,
+				936202471DE4860934DD0E51 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				78BB05CD62210B19973414DB /* App */,
 				36FCB1C56E88A291993D8217 /* SharedNotifications */,
+				BA374D52FB53E9EDAE0D9393 /* SharedCore */,
 			);
 			name = Relay;
 			packageProductDependencies = (
@@ -187,6 +227,28 @@
 			name = NotificationService;
 			productName = NotificationService;
 			productReference = 11FC9977EF4CDE3788CA600F /* NotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		E9BCBE19ADD1AD32E82CC01C /* ShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C701075FBDF065D74FFE55E5 /* Build configuration list for PBXNativeTarget "ShareExtension" */;
+			buildPhases = (
+				A33A56D0E030C567A3DCD273 /* Build Matrix core */,
+				983F1B74BF0E964DDB76DE19 /* Sources */,
+				B4936CDBB47163F4486DB141 /* Frameworks */,
+				FDD29CC06AA6F9544888544F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				44AA7D5B968D44072FE62E27 /* ShareExtension */,
+				BA374D52FB53E9EDAE0D9393 /* SharedCore */,
+			);
+			name = ShareExtension;
+			productName = ShareExtension;
+			productReference = DBB80B6C3C148CA8B4BF14BB /* ShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -231,11 +293,19 @@
 			targets = (
 				00CC2921912F47FC3C6615F8 /* Relay */,
 				C2C1AAD9A02D55B972D9B8F9 /* NotificationService */,
+				E9BCBE19ADD1AD32E82CC01C /* ShareExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		FDD29CC06AA6F9544888544F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		619C189903FC218152D0BB06 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -253,7 +323,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		289A1F1A72C327EFB788F0AD /* Build Matrix core */ = {
+		A33A56D0E030C567A3DCD273 /* Build Matrix core */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -270,6 +340,25 @@
 				"$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/libRelayCore.a",
 				"$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers/libRelayCore.h",
 				"$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers/module.modulemap",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\ncase \"$PLATFORM_NAME\" in\n  macosx) core_platform=macos ;;\n  iphoneos) core_platform=ios ;;\n  iphonesimulator) core_platform=simulator ;;\nesac\npython3 \"$SRCROOT/Matrix/BuildTools/build.py\" \"$core_platform\"\n";
+		};
+		289A1F1A72C327EFB788F0AD /* Build Matrix core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Matrix core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -300,6 +389,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		983F1B74BF0E964DDB76DE19 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		752B80EA68AB993CC6609C10 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -317,6 +413,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		936202471DE4860934DD0E51 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShareExtension;
+			target = E9BCBE19ADD1AD32E82CC01C /* ShareExtension */;
+			targetProxy = D65AEC2E44D8EC2BFF260A19 /* PBXContainerItemProxy */;
+		};
 		BC67BB75192C7E693F0A6567 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = NotificationService;
@@ -326,6 +428,91 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		EFCE223C87A5D72E03F50C10 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Configuration/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J52QUTREBS;
+				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
+				"ENABLE_OUTGOING_NETWORK_CONNECTIONS[sdk=macosx*]" = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
+				INFOPLIST_FILE = "Configuration/ShareExtension-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Relay;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/libRelayCore.a",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				RELAY_CORE_PLATFORM = macos;
+				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;
+				"RELAY_CORE_PLATFORM[sdk=iphonesimulator*]" = simulator;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E2F988C9938F22DBCE83465B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Configuration/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J52QUTREBS;
+				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
+				"ENABLE_OUTGOING_NETWORK_CONNECTIONS[sdk=macosx*]" = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
+				INFOPLIST_FILE = "Configuration/ShareExtension-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Relay;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/libRelayCore.a",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				RELAY_CORE_PLATFORM = macos;
+				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;
+				"RELAY_CORE_PLATFORM[sdk=iphonesimulator*]" = simulator;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		1B7DFA80FC9F22DEC5958398 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -444,6 +631,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				RELAY_APP_GROUP = group.com.SilverMarcs.RelayEmbedded;
+				"RELAY_APP_GROUP[sdk=macosx*]" = "$(TeamIdentifierPrefix)com.SilverMarcs.RelayEmbedded";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -564,6 +753,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				RELAY_APP_GROUP = group.com.SilverMarcs.RelayEmbedded;
+				"RELAY_APP_GROUP[sdk=macosx*]" = "$(TeamIdentifierPrefix)com.SilverMarcs.RelayEmbedded";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -668,6 +859,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		C701075FBDF065D74FFE55E5 /* Build configuration list for PBXNativeTarget "ShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EFCE223C87A5D72E03F50C10 /* Debug */,
+				E2F988C9938F22DBCE83465B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		123F6CBD015F52CA68038BCE /* Build configuration list for PBXNativeTarget "Relay" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

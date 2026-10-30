@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 
+	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
+
 	"relay/core/internal/gomuksruntime"
 )
 
@@ -18,13 +20,23 @@ import (
 type Dispatcher struct {
 	rt     *gomuksruntime.Runtime
 	events *eventHub
+	sends  *sendWaiters
 }
 
 func New(rt *gomuksruntime.Runtime) *Dispatcher {
-	s := &Dispatcher{rt: rt}
+	s := &Dispatcher{rt: rt, sends: newSendWaiters()}
 	s.events = newEventHub(s)
-	rt.SetEventHandler(s.events.enqueue)
+	rt.SetEventHandler(s.receive)
 	return s
+}
+
+// receive takes every SDK event: send results go to their waiters, the rest
+// to the realtime hub.
+func (s *Dispatcher) receive(evt any) {
+	if complete, ok := evt.(*jsoncmd.SendComplete); ok {
+		s.sends.finish(complete)
+	}
+	s.events.enqueue(evt)
 }
 
 // Execute runs one command. Login commands work without a session; every
@@ -73,7 +85,9 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 	case "resolve-media":
 		return s.resolveMedia(ctx, input)
 	case "send-message":
-		return s.sendMessage(ctx, input)
+		return s.sendMessage(ctx, input, false)
+	case "share-message":
+		return s.sendMessage(ctx, input, true)
 	case "edit-message":
 		return s.editMessage(ctx, input)
 	case "add-reaction":

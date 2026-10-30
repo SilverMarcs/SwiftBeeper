@@ -31,6 +31,12 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
     #else
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         prepareNotificationCenter()
+        // A launch straight into the background, such as for a notification
+        // reply, may never show a scene to close the Matrix store before iOS
+        // suspends the app. Close it after each command until a scene is active.
+        if application.applicationState == .background {
+            Task { await MatrixRuntime.shared.setKeepsOpen(false) }
+        }
         return true
     }
     #endif

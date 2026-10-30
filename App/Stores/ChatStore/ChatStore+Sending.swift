@@ -93,6 +93,7 @@ extension ChatStore {
                 )
                 recordPendingMessageID(response.pendingMessageID, for: outgoing.id)
             }
+            donateSentMessage(to: outgoing.chatID)
         } catch {
             guard !isCancellationLikeError(error) else { return }
             updateOutgoingMessage(outgoing.id) { message in

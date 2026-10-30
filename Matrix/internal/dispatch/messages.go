@@ -32,7 +32,10 @@ func messageTarget(chatID, messageID string) (id.RoomID, id.EventID, error) {
 	return id.RoomID(chatID), id.EventID(messageID), nil
 }
 
-func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage) (any, error) {
+// sendMessage sends optimistically, returning the local echo's ID. With
+// waitUntilSent it returns once the server has the message, for the share
+// extension, which closes as soon as this returns.
+func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage, waitUntilSent bool) (any, error) {
 	var req struct {
 		ChatID string `json:"chatID"`
 		wire.SendMessageInput
@@ -78,6 +81,11 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage) (an
 	dbEvent, err := cli.SendMessage(ctx, roomID, base, nil, text, relatesTo, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send message: %w", err)
+	}
+	if waitUntilSent {
+		if err = s.sends.wait(ctx, cli, dbEvent); err != nil {
+			return nil, err
+		}
 	}
 	s.clearUnreadMarkerAfterSend(ctx, roomID)
 	pendingMessageID := dbEvent.TransactionID

@@ -45,12 +45,6 @@ extension APIClient {
     static func deleteMessage(chatID: String, messageID: String) async throws {
         try await executeRaw("delete-message", arguments: MessageArguments(chatID: chatID, messageID: messageID))
     }
-
-    /// Stages an attachment with the core; send it with `sendMessage(…attachment:)`.
-    static func uploadAsset(fileData: Data, fileName: String, mimeType: String) async throws -> UploadAssetOutput {
-        let data = try await MatrixRuntime.shared.stageUpload(fileData, fileName: fileName, mimeType: mimeType)
-        return try JSONDecoder.beeper.decode(UploadAssetOutput.self, from: data)
-    }
 }
 
 private struct MessageArguments: Encodable {

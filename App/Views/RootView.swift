@@ -40,8 +40,27 @@ struct RootView: View {
     /// The core syncs eagerly only while Relay is open and signed in.
     private func syncCoreActivity() async {
         let signedIn = sessionStore.isSignedIn
+        let inBackground = scenePhase == .background
+        #if os(iOS)
+        if !inBackground { await MatrixRuntime.shared.setKeepsOpen(true) }
+        #endif
         await MatrixRuntime.shared.setActive(signedIn && scenePhase == .active)
-        guard scenePhase != .background else { return }
+        #if os(iOS)
+        if inBackground { await closeCoreForSuspension() }
+        #endif
+        guard !inBackground else { return }
         await notificationService.configure(signedIn: signedIn)
     }
+
+    #if os(iOS)
+    /// iOS terminates an app suspended with a database open in the app group,
+    /// and the share extension can only open the store once the app closes it.
+    /// Commands still running get background time to finish first.
+    private func closeCoreForSuspension() async {
+        let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Close Matrix Store")
+        await MatrixRuntime.shared.setKeepsOpen(false)
+        await MatrixRuntime.shared.waitUntilClosed()
+        if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
+    }
+    #endif
 }

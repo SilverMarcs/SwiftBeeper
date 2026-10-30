@@ -26,6 +26,7 @@ struct RelayApp: App {
         _notificationService = State(initialValue: notificationService)
         _chatStore = State(initialValue: chatStore)
         _inputManager = State(initialValue: inputManager)
+        Task { await chatStore.observeShareExtension() }
     }
 
     var body: some Scene {

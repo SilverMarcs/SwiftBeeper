@@ -86,6 +86,14 @@ func RelayCoreStart(handle C.RelayCoreHandle) C.int {
 	return 0
 }
 
+// RelayCoreStop pauses sync and closes the database, so another process can
+// open it. RelayCoreStart reopens it on the same handle.
+//
+//export RelayCoreStop
+func RelayCoreStop(handle C.RelayCoreHandle) {
+	runtimeFromHandle(handle).runtime.Stop()
+}
+
 //export RelayCoreDestroy
 func RelayCoreDestroy(handle C.RelayCoreHandle) {
 	h := cgo.Handle(handle)
@@ -104,7 +112,7 @@ func RelayCoreCommand(handle C.RelayCoreHandle, input *C.char) *C.char {
 		return errorResult("Invalid local command")
 	}
 	timeout := 20 * time.Second
-	if command.Action == "login-custom" || command.Action == "verify" {
+	if command.Action == "login-custom" || command.Action == "verify" || command.Action == "share-message" {
 		timeout = 2 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

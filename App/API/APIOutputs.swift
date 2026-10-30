@@ -63,9 +63,3 @@ struct SendMessageOutput: Decodable {
     let chatID: String
     let pendingMessageID: String
 }
-
-struct UploadAssetOutput: Decodable {
-    let uploadID: String
-    let width: Int?
-    let height: Int?
-}

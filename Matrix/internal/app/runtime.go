@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"runtime/debug"
 	"time"
 
 	"maunium.net/go/mautrix/id"
@@ -16,6 +17,8 @@ import (
 
 type Config struct {
 	StateDir string `json:"stateDir"`
+	// MemoryLimitMB caps the Go heap for app extensions; zero leaves it unset.
+	MemoryLimitMB int64 `json:"memoryLimitMB"`
 }
 
 type Runtime struct {
@@ -26,6 +29,9 @@ type Runtime struct {
 }
 
 func New(cfg Config) (*Runtime, error) {
+	if cfg.MemoryLimitMB > 0 {
+		debug.SetMemoryLimit(cfg.MemoryLimitMB << 20)
+	}
 	rt, err := gomuksruntime.New(cfg.StateDir)
 	if err != nil {
 		return nil, err

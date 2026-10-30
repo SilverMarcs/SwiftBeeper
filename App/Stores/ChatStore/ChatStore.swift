@@ -198,6 +198,37 @@ final class ChatStore {
         loadPendingNotificationChat()
     }
 
+    /// Hands the Matrix store to the share extension whenever it asks, and
+    /// resumes local updates once it's done. Runs for the app's lifetime.
+    func observeShareExtension() async {
+        await withDiscardingTaskGroup { group in
+            group.addTask {
+                for await _ in CoreHandoff.requested.notifications() {
+                    await self.yieldToShareExtension()
+                }
+            }
+            group.addTask {
+                for await _ in CoreHandoff.released.notifications() {
+                    await self.resumeAfterShareExtension()
+                }
+            }
+        }
+    }
+
+    private func yieldToShareExtension() async {
+        realtimeService.stop()
+        await MatrixRuntime.shared.yield()
+    }
+
+    /// The next command reopens the store; reconnecting resyncs what changed.
+    private func resumeAfterShareExtension() async {
+        await MatrixRuntime.shared.endYield()
+        #if os(iOS)
+        guard notificationService.isAppActive else { return }
+        #endif
+        if isSignedIn { realtimeService.start() }
+    }
+
     private func clearState() {
         mutingChatIDs = []
         muteError = nil
