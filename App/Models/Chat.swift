@@ -87,8 +87,9 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
     }
 
     var previewSenderPrefix: String {
-        guard isGroupChat, let preview else { return "" }
-        return "\(preview.senderDisplayName): "
+        guard isGroupChat, let preview,
+              let firstName = preview.senderDisplayName.split(whereSeparator: \.isWhitespace).first else { return "" }
+        return "\(firstName): "
     }
 
     var otherParticipant: ChatParticipant? {
