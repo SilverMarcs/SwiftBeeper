@@ -57,15 +57,22 @@ async function updateNotificationPreferences(request, env) {
         !Number.isSafeInteger(room.blockedUntil) || room.blockedUntil === 0) throw new HTTPError(400, "Invalid blocked room");
     rooms.set(room.roomID, room.blockedUntil);
   }
-  const statements = [env.DEVICES.prepare("DELETE FROM notification_blocks")];
-  const entries = [...rooms];
-  // D1 batches are atomic. Keep each insert below SQLite's parameter limit.
-  for (let i = 0; i < entries.length; i += 40) {
-    const chunk = entries.slice(i, i + 40);
-    statements.push(env.DEVICES.prepare(`INSERT INTO notification_blocks (room_id, blocked_until) VALUES ${chunk.map(() => "(?, ?)").join(",")}`)
-      .bind(...chunk.flat()));
-  }
-  await env.DEVICES.batch(statements);
+  const entries = JSON.stringify([...rooms]);
+  // Apply the whole snapshot atomically, writing only changed rooms. JSON keeps
+  // both statements within D1's parameter limit even for large suppression lists.
+  await env.DEVICES.batch([
+    env.DEVICES.prepare(`
+      DELETE FROM notification_blocks
+      WHERE room_id NOT IN (SELECT json_extract(value, '$[0]') FROM json_each(?))
+    `).bind(entries),
+    env.DEVICES.prepare(`
+      INSERT INTO notification_blocks (room_id, blocked_until)
+      SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]')
+      FROM json_each(?) WHERE true
+      ON CONFLICT(room_id) DO UPDATE SET blocked_until = excluded.blocked_until
+        WHERE notification_blocks.blocked_until <> excluded.blocked_until
+    `).bind(entries),
+  ]);
   return json({ ok: true });
 }
 

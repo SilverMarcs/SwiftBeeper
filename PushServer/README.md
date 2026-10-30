@@ -96,6 +96,10 @@ within that launch. Changes made in another app reach the Worker when Relay
 next receives them through Matrix sync. Existing Matrix push rules still apply
 upstream. No Matrix credentials are sent to the Worker.
 
+The Worker applies each suppression list atomically, inserting new rooms, updating
+changed expiries, and deleting removed rooms. Unchanged rooms produce no row
+writes, including when another device or app launch uploads the same list.
+
 Relay installs the account-level `com.silvermarcs.relay.mention` override ahead
 of room mutes, below the global master switch. It uses `m.mentions.user_ids`,
 requests the normal message push, and adds an exact mention tweak. Matrix push
