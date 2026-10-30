@@ -1,17 +1,41 @@
 import SwiftUI
 
-private final class AttributedStringBox {
-    let value: AttributedString
-    init(_ value: AttributedString) { self.value = value }
+/// `NSCache` stores objects, so values are boxed.
+private final class CacheBox<Value> {
+    let value: Value
+    init(_ value: Value) { self.value = value }
 }
 
 /// Markdown parsing and link detection are costly enough to hitch scrolling,
 /// and rows rebuild as they scroll into view, so cache by source text.
-private let messageTextCache: NSCache<NSString, AttributedStringBox> = {
-    let cache = NSCache<NSString, AttributedStringBox>()
+private let messageTextCache: NSCache<NSString, CacheBox<AttributedString>> = {
+    let cache = NSCache<NSString, CacheBox<AttributedString>>()
     cache.countLimit = 2000
     return cache
 }()
+
+/// Block splitting is cached separately; most messages skip it entirely.
+private let messageBlocksCache: NSCache<NSString, CacheBox<[MessageBlock]>> = {
+    let cache = NSCache<NSString, CacheBox<[MessageBlock]>>()
+    cache.countLimit = 500
+    return cache
+}()
+
+/// Chat list previews churn less than timeline rows but rebuild on every
+/// list update, so they get their own smaller cache.
+private let previewTextCache: NSCache<NSString, CacheBox<AttributedString>> = {
+    let cache = NSCache<NSString, CacheBox<AttributedString>>()
+    cache.countLimit = 500
+    return cache
+}()
+
+/// Characters that can start inline Markdown. Text without any of them
+/// renders identically as plain text, so it skips parsing entirely.
+private let inlineMarkdownMarkers: Set<Character> = ["*", "_", "~", "`", "[", "\\", "<", "&"]
+
+/// A chat row shows at most two lines, so longer sources are cut before
+/// parsing; anything past this is never visible.
+private let previewSourceLimit = 400
 
 private let sharedLinkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
@@ -26,7 +50,37 @@ extension String {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(self)
         attributed.condenseAndStyleLinks()
-        messageTextCache.setObject(AttributedStringBox(attributed), forKey: key)
+        messageTextCache.setObject(CacheBox(attributed), forKey: key)
+        return attributed
+    }
+
+    /// The message body split into blocks such as quotes. Each block's text
+    /// goes through `messageAttributed`, so it shares that cache.
+    var messageBlocks: [MessageBlock] {
+        guard MessageBlockParser.mayContainBlocks(self) else { return [.text(messageAttributed)] }
+        let key = self as NSString
+        if let cached = messageBlocksCache.object(forKey: key) { return cached.value }
+        var blocks = MessageBlockParser.blocks(in: self)
+        // A body of bare markers (just ">") has no content; show it as typed.
+        if blocks.isEmpty { blocks = [.text(messageAttributed)] }
+        messageBlocksCache.setObject(CacheBox(blocks), forKey: key)
+        return blocks
+    }
+
+    /// Inline Markdown for a chat list preview. Links keep their label but
+    /// lose their destination so a tap selects the row instead of opening it.
+    var previewAttributed: AttributedString {
+        let source = utf8.count > previewSourceLimit ? String(prefix(previewSourceLimit)) : self
+        guard source.contains(where: inlineMarkdownMarkers.contains) else { return AttributedString(source) }
+
+        let key = source as NSString
+        if let cached = previewTextCache.object(forKey: key) { return cached.value }
+        var attributed = (try? AttributedString(
+            markdown: source,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(source)
+        attributed.link = nil
+        previewTextCache.setObject(CacheBox(attributed), forKey: key)
         return attributed
     }
 }

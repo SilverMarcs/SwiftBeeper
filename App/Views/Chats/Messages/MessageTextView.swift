@@ -8,7 +8,7 @@ struct MessageTextView: View {
 
     var body: some View {
         MessageTextLayout(displayScale: displayScale) {
-            Text(text.messageAttributed)
+            MessageBlocksView(blocks: text.messageBlocks)
                 .font(.body)
                 .foregroundStyle(isOutgoing ? .white : .primary)
                 // Links follow the tint; white keeps contrast on the accent fill.

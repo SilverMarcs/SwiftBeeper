@@ -76,8 +76,14 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
         title.isEmpty ? "Untitled Chat" : title
     }
 
+    /// Preview source, preferring the formatted body so the row can render
+    /// the same inline Markdown as the timeline.
     var previewText: String? {
-        preview?.displayText
+        guard let preview else { return nil }
+        if preview.hasText, let formattedText = preview.formattedText, !formattedText.isEmpty {
+            return formattedText
+        }
+        return preview.displayText
     }
 
     var otherParticipant: ChatParticipant? {
