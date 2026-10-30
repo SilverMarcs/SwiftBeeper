@@ -10,6 +10,12 @@ extension ChatStore {
         return messages.filter { !shownByOutgoingRows.contains($0.id) }
     }
 
+    /// Whether to offer server history: local pages are exhausted and the
+    /// server has not reported the start of the chat.
+    var canLoadServerHistory: Bool {
+        hasLoadedTimeline && !hasMoreOlderMessages && hasMoreServerHistory
+    }
+
     /// Reloads the open chat's newest page on open, reconnect, or resync.
     /// Steady-state changes arrive as events.
     func loadMessages() async {
@@ -28,6 +34,7 @@ extension ChatStore {
             reconcileOutgoingMessages(with: response.items, chatID: chatID)
             upsertMessages(response.items)
             hasLoadedTimeline = true
+            hasMoreServerHistory = response.hasServerHistory
             if olderMessagesCursor == nil {
                 olderMessagesCursor = response.oldestCursor
                 hasMoreOlderMessages = response.hasMore
@@ -54,6 +61,7 @@ extension ChatStore {
                 let countBefore = messages.count
                 upsertMessages(response.items)
                 hasMoreOlderMessages = response.hasMore && response.oldestCursor != cursor
+                hasMoreServerHistory = response.hasServerHistory
                 olderMessagesCursor = response.oldestCursor
                 // A local page can contain only hidden events. Continue until a
                 // visible row or the database boundary, without a retry button.
@@ -65,6 +73,33 @@ extension ChatStore {
             guard generation == timelineGeneration else { return }
             handleMessageError(error)
         }
+    }
+
+    /// Fetches one page of older history from the server into the local
+    /// database, then shows it through local paging. This is the only path
+    /// from the timeline to the network, and runs only on an explicit request.
+    func loadServerHistory() async {
+        guard let chatID = selectedChatID, canLoadServerHistory,
+              !isLoadingOlderMessages, !isLoadingServerHistory else { return }
+
+        let generation = timelineGeneration
+        isLoadingServerHistory = true
+        defer { if generation == timelineGeneration { isLoadingServerHistory = false } }
+
+        do {
+            let response = try await APIClient.loadServerHistory(chatID: chatID)
+            guard generation == timelineGeneration else { return }
+
+            messagesError = nil
+            hasMoreServerHistory = response.hasMore
+            // The fetched rows sit before the local cursor.
+            hasMoreOlderMessages = true
+        } catch {
+            guard generation == timelineGeneration else { return }
+            handleMessageError(error)
+            return
+        }
+        await loadOlderMessages()
     }
 
     /// Inserts or replaces messages by ID. Every copy the core sends is
@@ -93,7 +128,9 @@ extension ChatStore {
         hasLoadedTimeline = false
         olderMessagesCursor = nil
         hasMoreOlderMessages = false
+        hasMoreServerHistory = false
         isLoadingOlderMessages = false
+        isLoadingServerHistory = false
         isLoadingMessages = false
         lastReadByOtherSortKey = nil
         replyingToMessage = nil

@@ -11,6 +11,13 @@ extension APIClient {
         return try await execute("list-messages", arguments: Arguments(chatID: chatID, cursor: cursor))
     }
 
+    /// Fetches older history from the server into the local database, where
+    /// `listMessages` pages it.
+    static func loadServerHistory(chatID: String) async throws -> LoadServerHistoryOutput {
+        struct Arguments: Encodable { let chatID: String }
+        return try await execute("load-server-history", arguments: Arguments(chatID: chatID))
+    }
+
     static func sendMessage(chatID: String, text: String?, replyToMessageID: String? = nil, attachment: MessageAttachmentInput? = nil, mentions: [ComposerMention] = []) async throws -> SendMessageOutput {
         struct Arguments: Encodable {
             let chatID: String

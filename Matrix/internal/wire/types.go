@@ -147,6 +147,14 @@ type ListMessagesOutput struct {
 	// one other participant has read. Outgoing messages with sortKey <= this value
 	// have been seen by the other side. Empty string if no read receipt exists.
 	LastReadByOtherSortKey string `json:"lastReadByOtherSortKey,omitempty"`
+	// HasServerHistory is false once the homeserver has returned the start of
+	// the room; until then older history may exist beyond the local timeline.
+	HasServerHistory bool `json:"hasServerHistory"`
+}
+
+type LoadServerHistoryOutput struct {
+	// HasMore is false once the homeserver has returned the start of the room.
+	HasMore bool `json:"hasMore"`
 }
 
 type SendMessageOutput struct {

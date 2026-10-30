@@ -33,9 +33,11 @@ struct ChatTimelineView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         LazyVStack(spacing: 0) {
-                            if chatStore.isLoadingOlderMessages {
+                            if chatStore.isLoadingOlderMessages || chatStore.isLoadingServerHistory {
                                 ProgressView()
                                     .frame(maxWidth: .infinity)
+                            } else if chatStore.canLoadServerHistory {
+                                LoadServerHistoryButton()
                             }
 
                             ForEach(timelineItems) { item in

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.mau.fi/gomuks/pkg/hicli/database"
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
@@ -29,7 +31,8 @@ const timelineSelectBase = `
 `
 
 // listMessages reads one page of the local timeline, newest first. Matrix sync
-// owns ingestion; paging never touches the network.
+// owns ingestion; paging never touches the network. Older history arrives only
+// through loadServerHistory, which the user asks for explicitly.
 func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID string `json:"chatID"`
@@ -51,7 +54,8 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 		}
 	}
 
-	if room, err := s.rt.Client().DB.Room.Get(ctx, roomID); err != nil {
+	room, err := s.rt.Client().DB.Room.Get(ctx, roomID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to get room: %w", err)
 	} else if room == nil {
 		return nil, errors.New("Chat not found")
@@ -93,12 +97,54 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 		Items:        messages,
 		HasMore:      hasMore,
 		OldestCursor: strconv.FormatInt(oldest, 10),
+		// Unknown until the server reports the start of the room, so an
+		// unpaginated room offers history.
+		HasServerHistory: room.PrevBatch != database.PrevBatchPaginationComplete,
 	}
 	// The app reads the other side's position only with the newest page.
 	if before == 0 {
 		output.LastReadByOtherSortKey = s.loadLastReadByOther(ctx, roomID)
 	}
 	return output, nil
+}
+
+// loadServerHistory fetches older history from the homeserver into the local
+// timeline, where listMessages pages it like any other row. It requests pages
+// until one holds a message, or the room's start, so a press never yields only
+// state events.
+func (s *Dispatcher) loadServerHistory(ctx context.Context, input json.RawMessage) (any, error) {
+	var req struct {
+		ChatID string `json:"chatID"`
+	}
+	if err := decodeJSON(input, &req); err != nil {
+		return nil, err
+	}
+	chatID, err := required(req.ChatID, "chatID")
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for {
+		resp, err := s.rt.Client().PaginateServer(ctx, id.RoomID(chatID), messagePageSize, false)
+		if err != nil {
+			return nil, err
+		}
+		if !resp.HasMore || slices.ContainsFunc(resp.Events, isHistoryMessage) {
+			return wire.LoadServerHistoryOutput{HasMore: resp.HasMore}, nil
+		}
+	}
+}
+
+// isHistoryMessage reports a message or sticker, excluding edits. Encrypted
+// events count even before their keys arrive, so missing keys cannot keep
+// pagination running through the whole room.
+func isHistoryMessage(evt *database.Event) bool {
+	switch evt.Type {
+	case event.EventMessage.Type, event.EventSticker.Type, event.EventEncrypted.Type:
+		return evt.RelationType != event.RelReplace
+	}
+	return false
 }
 
 // loadTimelineEvents reads up to one page plus one event older than before

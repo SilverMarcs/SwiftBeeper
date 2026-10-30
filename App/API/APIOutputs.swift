@@ -57,6 +57,14 @@ struct ListMessagesOutput: Decodable {
     /// The sortKey of the furthest message that at least one other participant has read.
     /// Outgoing messages with sortKey <= this value have been seen by the other side.
     let lastReadByOtherSortKey: String?
+    /// False once the server has returned the start of the chat. Until then,
+    /// older history may exist beyond the local database.
+    let hasServerHistory: Bool
+}
+
+struct LoadServerHistoryOutput: Decodable {
+    /// False once the server has returned the start of the chat.
+    let hasMore: Bool
 }
 
 struct SendMessageOutput: Decodable {

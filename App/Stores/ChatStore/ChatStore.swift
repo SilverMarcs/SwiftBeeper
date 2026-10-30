@@ -95,7 +95,11 @@ final class ChatStore {
     var messages: [Message] = []
     /// Whether the open chat's first page has arrived.
     var hasLoadedTimeline = false
+    /// Whether the local database has older pages; these load on scroll.
     var hasMoreOlderMessages = false
+    /// Whether the server may hold history older than the local database.
+    /// These pages load only on an explicit request.
+    var hasMoreServerHistory = false
     /// Furthest sortKey another participant has read in the open chat.
     var lastReadByOtherSortKey: String?
     var typingParticipants: [ChatParticipant] = []
@@ -104,6 +108,7 @@ final class ChatStore {
     var typingMessageRowIDs: [Message.ID: String] = [:]
     @ObservationIgnored var typingExpirationTask: Task<Void, Never>?
     var isLoadingOlderMessages = false
+    var isLoadingServerHistory = false
     var isLoadingMessages = false
     var resolvingMediaIDs: Set<String> = []
     var failedMediaIDs: Set<String> = []
