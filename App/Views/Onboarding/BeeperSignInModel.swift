@@ -40,6 +40,32 @@ final class BeeperSignInModel {
         recoveryKey.trimmed.count >= 16 && !isWorking
     }
 
+    var actionTitle: String {
+        if isWorking { return progressMessage }
+        return switch step {
+        case .email: "Send Code"
+        case .code: "Verify"
+        case .recoveryKey: "Verify and Continue"
+        }
+    }
+
+    var canSubmit: Bool {
+        switch step {
+        case .email: canSendCode
+        case .code: canSubmitCode
+        case .recoveryKey: canSubmitRecoveryKey
+        }
+    }
+
+    func submit() async {
+        guard canSubmit else { return }
+        switch step {
+        case .email: await sendCode()
+        case .code: await submitCode()
+        case .recoveryKey: await submitRecoveryKey()
+        }
+    }
+
     func sendCode() async {
         await run("Sending your sign-in code…") {
             requestID = try await APIClient.beeperStartLogin(domain: domain)

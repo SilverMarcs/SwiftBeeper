@@ -4,35 +4,22 @@ struct BeeperCodeStepView: View {
     @Bindable var model: BeeperSignInModel
 
     var body: some View {
-        VStack {
-            Text("Enter the six-digit code sent to **\(model.email)**.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-
-            TextField("123456", text: $model.code)
-                .textFieldStyle(.roundedBorder)
-                .font(.title3.monospacedDigit())
-                .multilineTextAlignment(.center)
+        Section {
+            TextField("Verification code", text: $model.code, prompt: Text("123456"))
+                .textContentType(.oneTimeCode)
+                .monospacedDigit()
                 #if os(iOS)
                 .keyboardType(.numberPad)
                 #endif
+                .disabled(model.step != .code)
                 .onSubmit {
                     guard model.canSubmitCode else { return }
                     Task { await model.submitCode() }
                 }
-
-            Button("Verify") {
-                Task { await model.submitCode() }
+        } footer: {
+            if model.step == .code {
+                Text("Enter the six-digit code sent to your email.")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-            .disabled(!model.canSubmitCode)
-
-            Button("Use a Different Email") {
-                model.useDifferentEmail()
-            }
-            .buttonStyle(.plain)
         }
     }
 }
