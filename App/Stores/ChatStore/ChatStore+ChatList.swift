@@ -48,7 +48,7 @@ extension ChatStore {
         }
     }
 
-    /// Which chat to fall back to when the current selection becomes invalid.
+    /// Which chat to open when a list first loads.
     /// macOS and iPad auto-select the first chat; iPhone stays manual (nil).
     private var autoSelectedChatID: String? {
         Device.isIPhone ? nil : displayedChats.first?.id
@@ -116,9 +116,9 @@ extension ChatStore {
             chatsError = nil
             lastLoadedFilterID = requestedFilter.id
 
-            // Preserve the selection while refreshing; choose the first chat
-            // on macOS/iPad when the current selection is no longer present.
-            if selectedChat == nil {
+            // A fresh list opens its first chat on macOS/iPad. Refreshes leave
+            // the selection alone, including an empty one.
+            if selectedChat == nil, !shouldPreserveExistingChats {
                 selectedChatID = autoSelectedChatID
             }
         } catch {
@@ -336,7 +336,7 @@ extension ChatStore {
             searchResults = results
         }
 
-        guard chatBelongsToCurrentFilter(incoming) else {
+        guard chatBelongsToCurrentFilter(incoming) || isOpenUnreadListChat(incoming) else {
             removeChatLocally(incoming.id)
             return
         }
@@ -360,8 +360,8 @@ extension ChatStore {
         setChats(Array(updated.prefix(chatWindowSize)))
     }
 
-    /// Removes a chat from the sidebar and search results, moving the
-    /// selection on if it was open.
+    /// Removes a chat from the sidebar and search results, closing it if it
+    /// was open rather than jumping to another chat.
     func removeChatLocally(_ chatID: String) {
         pinnedChats.removeAll { $0.id == chatID }
         setChats(chats.filter { $0.id != chatID })
@@ -370,8 +370,22 @@ extension ChatStore {
             searchResults = results
         }
         if selectedChatID == chatID {
-            selectedChatID = autoSelectedChatID
+            selectedChatID = nil
         }
+    }
+
+    /// Drops a chat that stayed listed only while it was open, such as a chat
+    /// read from the Unread list.
+    func removeChatIfFilteredOut(_ chatID: String) {
+        guard let chat = chats.first(where: { $0.id == chatID }) ?? pinnedChats.first(where: { $0.id == chatID }),
+              !chatBelongsToCurrentFilter(chat) else { return }
+        removeChatLocally(chatID)
+    }
+
+    /// Reading the open chat keeps it in the Unread list until another chat
+    /// is selected, so the selection doesn't vanish mid-read.
+    private func isOpenUnreadListChat(_ chat: Chat) -> Bool {
+        selectedInboxFilter == .unread && chat.id == selectedChatID && chat.isArchived != true
     }
 
     /// Mirrors the core's inbox and exact account filtering for chat events.

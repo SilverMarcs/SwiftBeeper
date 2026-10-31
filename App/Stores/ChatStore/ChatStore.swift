@@ -74,6 +74,7 @@ final class ChatStore {
         didSet {
             guard oldValue != selectedChatID else { return }
             selectedChat = selectedChatID.flatMap { chat(byID: $0) }
+            if let oldValue { removeChatIfFilteredOut(oldValue) }
             resetTimeline()
             updateMessageSubscriptions()
 
