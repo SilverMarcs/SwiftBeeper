@@ -1,6 +1,6 @@
 import Foundation
 
-struct ChatParticipant: Identifiable, Codable, Equatable, Sendable {
+struct ChatParticipant: Identifiable, Codable, Hashable, Sendable {
     let id: String
     let username: String?
     let fullName: String?

@@ -159,6 +159,11 @@ final class ChatStore {
             ?? searchResults?.first { $0.id == chatID }
     }
 
+    /// The bridged network name for a connected account, such as "WhatsApp".
+    func networkName(forAccountID accountID: String?) -> String? {
+        connectedAccounts.first { $0.accountID == accountID }?.network
+    }
+
     // MARK: - Lifecycle
 
     func setSignedIn(_ signedIn: Bool) async {

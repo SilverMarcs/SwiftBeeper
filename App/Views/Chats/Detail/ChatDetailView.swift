@@ -9,15 +9,15 @@ struct ChatDetailView: View {
     @Environment(InputManager.self) private var input
     @State private var isVisible = false
     @State private var showingChatInfo = false
-    @State private var profileSheetParticipant: ChatParticipant?
     @State private var pendingDirectChat: Chat?
 
     var body: some View {
         let selectedChat = chatStore.selectedChat
         ChatTimelineView()
             #if os(macOS)
+            // Names the window for the Window menu; the toolbar shows ChatTitleButton instead.
             .navigationTitle(selectedChat?.displayTitle ?? "")
-            .navigationSubtitle(navigationSubtitle(for: selectedChat))
+            .toolbar(removing: .title)
             #else
             // Keep the header outside the viewport identity used for initial scrolling.
             .toolbarTitleDisplayMode(.inline)
@@ -26,15 +26,8 @@ struct ChatDetailView: View {
                 if let selectedChat {
                     #if os(macOS)
                     ToolbarItem(placement: .navigation) {
-                        if selectedChat.isSingleChat, let other = selectedChat.otherParticipant {
-                            Button {
-                                profileSheetParticipant = other
-                            } label: {
-                                ChatAvatarView(chat: selectedChat, dimension: 28)
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            ChatAvatarView(chat: selectedChat, dimension: 28)
+                        ChatTitleButton(chat: selectedChat) {
+                            showingChatInfo = true
                         }
                     }
                     .sharedBackgroundVisibility(.hidden)
@@ -44,11 +37,7 @@ struct ChatDetailView: View {
                     // iPhone: stays centered in the title slot.
                     ToolbarItem(placement: isIPad ? .navigation : .principal) {
                         Button {
-                            if selectedChat.isSingleChat, let other = selectedChat.otherParticipant {
-                                profileSheetParticipant = other
-                            } else {
-                                showingChatInfo = true
-                            }
+                            showingChatInfo = true
                         } label: {
                             HStack {
                                 ChatAvatarView(chat: selectedChat, dimension: 28)
@@ -64,12 +53,6 @@ struct ChatDetailView: View {
 
                     ToolbarItem(placement: .primaryAction) {
                         Menu("Chat Actions", systemImage: "ellipsis") {
-                            Button("Chat Info", systemImage: "info.circle") {
-                                showingChatInfo = true
-                            }
-
-                            Divider()
-
                             ChatRowActionsView(chat: selectedChat, placement: .contextMenu)
                         }
                         .menuOrder(.fixed)
@@ -79,14 +62,9 @@ struct ChatDetailView: View {
             }
             .sheet(isPresented: $showingChatInfo, onDismiss: openPendingDirectChat) {
                 if let selectedChat {
-                    ChatInfoSheet(chat: selectedChat) { chat in
+                    ChatInfoView(chat: selectedChat) { chat in
                         pendingDirectChat = chat
                     }
-                }
-            }
-            .sheet(item: $profileSheetParticipant) { participant in
-                if let selectedChat {
-                    ParticipantProfileSheet(participant: participant, sourceChat: selectedChat)
                 }
             }
             .onAppear {
@@ -101,23 +79,15 @@ struct ChatDetailView: View {
             .onChange(of: chatID) { _, newValue in
                 input.sendAnimator.cancelAll()
                 if isVisible { chatStore.visibleChatID = newValue }
+                // An archived or deleted chat closes; don't leave its info open.
+                if newValue == nil { showingChatInfo = false }
             }
     }
 
+    /// Opens a member's DM once the info sheet has finished dismissing.
     private func openPendingDirectChat() {
         guard let chat = pendingDirectChat else { return }
         pendingDirectChat = nil
         chatStore.openChat(chat)
     }
-
-    #if os(macOS)
-    private func navigationSubtitle(for chat: Chat?) -> Text {
-        guard let chat, chat.isGroupChat else { return Text("") }
-
-        let participantCount = chat.participants?.total ?? chat.participants?.items.count ?? 0
-        guard participantCount > 0 else { return Text("") }
-
-        return Text("^[\(participantCount) member](inflect: true)")
-    }
-    #endif
 }

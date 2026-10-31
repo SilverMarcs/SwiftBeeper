@@ -4,18 +4,25 @@ import SwiftUI
 struct ChatAvatarView: View {
     let chat: Chat
     let dimension: CGFloat
+    var allowsFullscreen: Bool = false
 
     var body: some View {
         Group {
             if let chatImageURL {
-                ProfileAvatarView(name: chat.displayTitle, imageURLString: chatImageURL, dimension: dimension)
+                ProfileAvatarView(
+                    name: chat.displayTitle,
+                    imageURLString: chatImageURL,
+                    dimension: dimension,
+                    allowsFullscreen: allowsFullscreen
+                )
             } else if chat.isGroupChat {
                 GroupChatAvatarView(title: chat.displayTitle, participants: groupParticipants, dimension: dimension)
             } else {
                 ProfileAvatarView(
                     name: primaryParticipantName,
                     imageURLString: chat.otherParticipant?.imgURL,
-                    dimension: dimension
+                    dimension: dimension,
+                    allowsFullscreen: allowsFullscreen
                 )
             }
         }

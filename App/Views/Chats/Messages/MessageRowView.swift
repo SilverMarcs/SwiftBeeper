@@ -63,7 +63,7 @@ struct MessageRowView: View {
             }
         }
         .sheet(item: $profileSheetParticipant, onDismiss: openPendingDirectChat) { participant in
-            ParticipantProfileSheet(participant: participant, sourceChat: chat) { chat in
+            ParticipantInfoSheet(participant: participant, sourceChat: chat) { chat in
                 pendingDirectChat = chat
             }
         }

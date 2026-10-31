@@ -1,29 +1,24 @@
 import SwiftUI
 
-/// A chat member in the info sheet; tapping it opens their profile.
+/// A chat member's avatar and name, used as a members list row label.
 struct ParticipantRow: View {
     let participant: ChatParticipant
-    let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                ProfileAvatarView(participant: participant, dimension: 32)
+        HStack(spacing: 10) {
+            ProfileAvatarView(participant: participant, dimension: 32)
 
-                Text(participant.displayName)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
+            Text(participant.displayName)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
 
-                Spacer()
+            Spacer()
 
-                if participant.isSelf == true {
-                    Text("You")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            if participant.isSelf == true {
+                Text("You")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
     }
 }
