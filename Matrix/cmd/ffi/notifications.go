@@ -1,5 +1,3 @@
-// Command notifications builds libRelayNotifications, the C archive the
-// notification service extension links to preview one pushed event.
 package main
 
 /*
@@ -11,20 +9,24 @@ import (
 	"context"
 	"encoding/json"
 	"runtime/debug"
+	"sync"
 	"time"
 	"unsafe"
 
 	"relay/core/internal/notifications"
 )
 
-// Notification service extensions run under a tight memory limit.
-func init() { debug.SetMemoryLimit(18 << 20) }
+// Only the notification service extension calls RelayNotificationPreview, and
+// it runs under a tight memory limit. The app shares this library, so the
+// limit applies on first use rather than at load.
+var limitMemory = sync.OnceFunc(func() { debug.SetMemoryLimit(18 << 20) })
 
 // RelayNotificationPreview takes a JSON notifications.Request and returns a
 // JSON preview, or NULL when there is none.
 //
 //export RelayNotificationPreview
 func RelayNotificationPreview(input *C.char) *C.char {
+	limitMemory()
 	var request notifications.Request
 	if input == nil || json.Unmarshal([]byte(C.GoString(input)), &request) != nil {
 		return nil
@@ -44,5 +46,3 @@ func RelayNotificationPreview(input *C.char) *C.char {
 
 //export RelayNotificationFree
 func RelayNotificationFree(value *C.char) { C.free(unsafe.Pointer(value)) }
-
-func main() {}

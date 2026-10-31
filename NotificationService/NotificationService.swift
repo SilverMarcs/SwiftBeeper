@@ -1,5 +1,5 @@
 import Foundation
-import RelayNotifications
+import RelayCore
 import OSLog
 import UserNotifications
 

@@ -1,6 +1,6 @@
-// Command ffi builds libRelayCore, the C archive the app links to run the
-// Matrix core in process. Commands and results are JSON strings; changes
-// stream to a callback.
+// Command ffi builds libRelayCore, the C archive linked into RelayCore.framework,
+// which the app and its extensions share to run the Matrix core in process.
+// Commands and results are JSON strings; changes stream to a callback.
 package main
 
 /*

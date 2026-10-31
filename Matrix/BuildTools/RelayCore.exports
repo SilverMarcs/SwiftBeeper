@@ -1,0 +1,2 @@
+# Symbols RelayCore.framework exports: the cgo entry points in Matrix/cmd/ffi.
+_Relay*

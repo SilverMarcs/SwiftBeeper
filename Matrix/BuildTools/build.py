@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the app's Matrix core for an Apple target."""
+"""Build the Matrix core archive that RelayCore.framework links for an Apple target."""
 import fcntl
 import hashlib
 import os
@@ -12,9 +12,6 @@ import tempfile
 tools = Path(__file__).resolve().parent
 matrix = tools.parent
 platform = sys.argv[1] if len(sys.argv) > 1 else "macos"
-component = sys.argv[2] if len(sys.argv) > 2 else "core"
-if component not in ("core", "notifications"):
-    raise SystemExit("Expected core or notifications")
 targets = {
     "macos": ("macosx", "arm64-apple-macos26.2", "darwin"),
     "ios": ("iphoneos", "arm64-apple-ios26.2", "ios"),
@@ -67,12 +64,11 @@ with (build / "core.lock").open("w") as lock:
         finally:
             shutil.rmtree(temporary)
     destination = build / platform
-    library = "RelayCore" if component == "core" else "RelayNotifications"
-    package = "ffi" if component == "core" else "notifications"
-    headers = destination / ("Headers" if component == "core" else "NotificationHeaders")
+    library = "RelayCore"
+    headers = destination / "Headers"
     archive = destination / ("lib" + library + ".a")
     # Xcode runs this phase on every build. Skip the Go link, and Xcode's relink
-    # of the app, when nothing changed since the last one: no source file or
+    # of the framework, when nothing changed since the last one: no source file or
     # directory (catching deletions and renames), and the same toolchain and SDK.
     sdk_path = output(["xcrun", "--sdk", sdk, "--show-sdk-path"])
     stamp_file = destination / (library + ".stamp")
@@ -84,7 +80,7 @@ with (build / "core.lock").open("w") as lock:
     if archive.exists() and (headers / ("lib" + library + ".h")).exists() and \
             stamp_file.exists() and stamp_file.read_text() == stamp_text and \
             archive.stat().st_mtime >= max(path.stat().st_mtime for path in inputs):
-        print("Relay " + component + " for " + platform + " is up to date")
+        print("Relay core for " + platform + " is up to date")
         sys.exit(0)
     clang = output(["xcrun", "--sdk", sdk, "--find", "clang"])
     clangxx = output(["xcrun", "--sdk", sdk, "--find", "clang++"])
@@ -98,7 +94,7 @@ with (build / "core.lock").open("w") as lock:
         environment.update({"CGO_ENABLED": "1", "GOOS": go_os, "GOARCH": go_architectures[architecture],
             "CC": clang + " " + flags, "CXX": clangxx + " " + flags,
             "CGO_CFLAGS": flags, "CGO_CXXFLAGS": flags, "CGO_LDFLAGS": flags})
-        subprocess.run(["go", "build", "-tags", "goolm", "-trimpath", "-buildmode=c-archive", "-o", str(architecture_archive), "./cmd/" + package], cwd=matrix, env=environment, check=True)
+        subprocess.run(["go", "build", "-tags", "goolm", "-trimpath", "-buildmode=c-archive", "-o", str(architecture_archive), "./cmd/ffi"], cwd=matrix, env=environment, check=True)
         archives.append(architecture_archive)
     if len(archives) == 1:
         shutil.copyfile(archives[0], archive)
@@ -108,4 +104,4 @@ with (build / "core.lock").open("w") as lock:
     shutil.copyfile(archives[0].with_suffix(".h"), headers / ("lib" + library + ".h"))
     stamp_file.write_text(stamp_text)
     (headers / "module.modulemap").write_text('module ' + library + ' {\n    header "lib' + library + '.h"\n    export *\n}\n')
-print("Built Relay " + component + " for " + platform)
+print("Built Relay core for " + platform)
