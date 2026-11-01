@@ -1,9 +1,10 @@
+import ImageIO
 import Photos
 import UniformTypeIdentifiers
 
 enum PhotoLibrarySaver {
     static func save(_ attachment: Attachment) async throws {
-        guard let contentType = attachment.photoLibraryContentType else {
+        guard let declaredType = attachment.photoLibraryContentType else {
             throw PhotoLibrarySaveError.unsupportedMedia
         }
 
@@ -12,7 +13,17 @@ enum PhotoLibrarySaver {
             throw PhotoLibrarySaveError.permissionDenied
         }
         guard let source = attachment.resolvedURL,
-              let file = await MatrixMedia.localFile(for: source) else {
+              let cached = await MatrixMedia.localFile(for: source) else {
+            throw PhotoLibrarySaveError.unavailableMedia
+        }
+
+        // Photos rejects a file whose extension doesn't match its contents
+        // (PHPhotosErrorDomain 3302). Cache files have no extension, or
+        // `.decrypted` for encrypted media, so hand Photos a copy named for
+        // the media's real type.
+        let contentType = concreteType(for: declaredType, cachedFile: cached)
+        guard let fileExtension = contentType.preferredFilenameExtension,
+              let file = await MatrixMedia.temporaryFile(for: source, fileExtension: fileExtension) else {
             throw PhotoLibrarySaveError.unavailableMedia
         }
 
@@ -21,12 +32,27 @@ enum PhotoLibrarySaver {
         try await PHPhotoLibrary.shared().performChanges {
             let options = PHAssetResourceCreationOptions()
             options.originalFilename = fileName
-            // Cache paths can lack an extension. Give Photos the sender's type
-            // when known, and otherwise let it infer the format from the media.
-            if contentType != .image && contentType != .movie {
-                options.contentType = contentType
-            }
+            options.contentType = contentType
             PHAssetCreationRequest.forAsset().addResource(with: resourceType, fileURL: file, options: options)
+        }
+    }
+
+    /// Narrows the generic image and movie fallbacks to a concrete format.
+    /// Images are identified from their bytes; videos default to MPEG-4,
+    /// which is what Matrix clients send.
+    private static func concreteType(for declaredType: UTType, cachedFile: URL) -> UTType {
+        switch declaredType {
+        case .image:
+            guard let imageSource = CGImageSourceCreateWithURL(cachedFile as CFURL, nil),
+                  let identifier = CGImageSourceGetType(imageSource) as String?,
+                  let sniffedType = UTType(identifier) else {
+                return .jpeg
+            }
+            return sniffedType
+        case .movie:
+            return .mpeg4Movie
+        default:
+            return declaredType
         }
     }
 }
