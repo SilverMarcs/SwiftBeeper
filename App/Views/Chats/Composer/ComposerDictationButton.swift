@@ -29,6 +29,9 @@ struct ComposerDictationButton: View {
                             if input.dictation.isBusy {
                                 ProgressView()
                                     .progressViewStyle(.circular)
+                                    #if os(macOS)
+                                    .controlSize(.mini)
+                                    #endif
                             } else {
                                 Label(input.dictation.isRecording ? "Finish Dictation" : "Dictate", systemImage: "waveform")
                                     .labelStyle(.iconOnly)
@@ -38,7 +41,11 @@ struct ComposerDictationButton: View {
                     }
                     .frame(width: symbolSize, height: isInline ? nil : symbolSize)
                 .foregroundStyle(input.dictation.isRecording ? Color.accentColor : idleColor)
+                #if os(macOS)
+                .frame(width: isInline ? 36 : nil)
+                #else
                 .frame(width: isInline ? 44 : nil)
+                #endif
                 .padding(.vertical, isInline ? 8 : 0)
                 .contentShape(.rect)
             }
