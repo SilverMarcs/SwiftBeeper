@@ -15,12 +15,7 @@ struct ChatDetailView: View {
         let selectedChat = chatStore.selectedChat
         ChatTimelineView()
             #if os(macOS)
-            // Names the window for the Window menu; the toolbar shows ChatTitleButton instead.
-            .navigationTitle(selectedChat?.displayTitle ?? "")
-            .toolbar(removing: .title)
-            #else
-            // Keep the header outside the viewport identity used for initial scrolling.
-            .toolbarTitleDisplayMode(.inline)
+            .navigationTitle("")
             #endif
             .toolbar {
                 if let selectedChat {
@@ -29,6 +24,7 @@ struct ChatDetailView: View {
                         ChatTitleButton(chat: selectedChat) {
                             showingChatInfo = true
                         }
+                        .padding(.horizontal)
                     }
                     .sharedBackgroundVisibility(.hidden)
 
