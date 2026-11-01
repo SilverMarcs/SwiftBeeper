@@ -10,7 +10,7 @@ extension View {
         self
             // With the safe area gone, this alone keeps the avatar off the sheet's top edge,
             // roughly level with the bar's buttons.
-            .contentMargins(.top, 30, for: .scrollContent)
+            .contentMargins(.top, 40, for: .scrollContent)
             .ignoresSafeArea(.container, edges: .top)
             .navigationTitle(title)
             .toolbarTitleDisplayMode(.inline)
