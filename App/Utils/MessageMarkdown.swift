@@ -88,57 +88,112 @@ extension String {
 private extension AttributedString {
     /// Turns bare URLs into links without moving them into separate bubbles.
     /// Long destinations keep their full target while displaying a compact
-    /// host/path label. Existing Markdown links keep their authored label.
+    /// host/path label. Markdown links with an authored label keep it.
     mutating func condenseAndStyleLinks() {
-        guard let detector = sharedLinkDetector else { return }
+        condenseBareLinkLabels()
 
-        let plainText = String(characters)
-        let fullRange = NSRange(plainText.startIndex..., in: plainText)
-        let matches = detector.matches(in: plainText, range: fullRange)
+        if let detector = sharedLinkDetector {
+            let plainText = String(characters)
+            let fullRange = NSRange(plainText.startIndex..., in: plainText)
+            let matches = detector.matches(in: plainText, range: fullRange)
 
-        for match in matches.reversed() {
-            guard let destination = match.url,
-                  let stringRange = Range(match.range, in: plainText),
-                  let lowerBound = AttributedString.Index(stringRange.lowerBound, within: self),
-                  let upperBound = AttributedString.Index(stringRange.upperBound, within: self) else {
-                continue
+            for match in matches.reversed() {
+                guard let destination = match.url,
+                      let stringRange = Range(match.range, in: plainText),
+                      let lowerBound = AttributedString.Index(stringRange.lowerBound, within: self),
+                      let upperBound = AttributedString.Index(stringRange.upperBound, within: self) else {
+                    continue
+                }
+
+                let attributedRange = lowerBound..<upperBound
+                // Already a link, either authored or autolinked by the
+                // Markdown parser and condensed above.
+                if self[attributedRange].link != nil {
+                    continue
+                }
+
+                var replacement = AttributedString(destination.compactLinkLabel)
+                replacement.link = destination
+                replaceSubrange(attributedRange, with: replacement)
             }
-
-            let attributedRange = lowerBound..<upperBound
-            // A Markdown link already has an authored label and destination.
-            // Keep that label instead of replacing it with the detected text.
-            if self[attributedRange].link != nil {
-                continue
-            }
-
-            // A bare Matrix user link must retain its complete identity.
-            var replacement = AttributedString(MessageMentionLink(destination)?.userID ?? destination.inlineDisplayLabel)
-            replacement.link = destination
-            replacement.underlineStyle = .single
-            replaceSubrange(attributedRange, with: replacement)
         }
 
-        // Underline authored Markdown links too.
         for run in runs where run.link != nil {
             self[run.range].underlineStyle = .single
+        }
+    }
+
+    /// The Markdown parser autolinks bare URLs itself, labelling them with the
+    /// full URL. Those labels, and `[url](url)` links, get the compact label;
+    /// links with a distinct authored label are left alone.
+    mutating func condenseBareLinkLabels() {
+        var bareLinks: [(range: Range<AttributedString.Index>, url: URL)] = []
+        for (link, range) in runs[\.link] {
+            guard let link else { continue }
+            let label = String(self[range].characters)
+            if link.isLabelledByItself(label) {
+                bareLinks.append((range, link))
+            }
+        }
+
+        for bareLink in bareLinks.reversed() {
+            let attributes = self[bareLink.range].runs.first?.attributes ?? AttributeContainer()
+            var replacement = AttributedString(bareLink.url.compactLinkLabel, attributes: attributes)
+            replacement.link = bareLink.url
+            replaceSubrange(bareLink.range, with: replacement)
         }
     }
 }
 
 private extension URL {
-    /// A compact presentation label; the `link` attribute still retains the
-    /// complete URL, including query parameters and fragments.
-    var inlineDisplayLabel: String {
-        var label = absoluteString.removingPercentEncoding ?? absoluteString
-        if let scheme, label.lowercased().hasPrefix("\(scheme.lowercased())://") {
-            label.removeFirst(scheme.count + 3)
+    /// The label shown for a link whose text is just its URL. A Matrix user
+    /// link keeps its complete user ID; anything else gets a compact form.
+    var compactLinkLabel: String {
+        MessageMentionLink(self)?.userID ?? inlineDisplayLabel
+    }
+
+    /// Whether `label` is this URL written out, with or without its scheme
+    /// or percent-encoding, as opposed to an authored description.
+    func isLabelledByItself(_ label: String) -> Bool {
+        let trimmed = label.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        let candidates = [absoluteString, absoluteString.removingPercentEncoding].compactMap(\.self)
+        return candidates.contains { candidate in
+            candidate == trimmed || candidate.withoutScheme == trimmed.withoutScheme
         }
-        if label.lowercased().hasPrefix("www.") {
-            label.removeFirst(4)
+    }
+
+    /// A compact presentation label: host and path, without the scheme,
+    /// `www.`, query or fragment. The `link` attribute still retains the
+    /// complete URL, so tapping opens the original destination.
+    var inlineDisplayLabel: String {
+        guard let host = host(), scheme == "http" || scheme == "https" else {
+            return truncatedLinkLabel(absoluteString.removingPercentEncoding ?? absoluteString)
         }
 
-        let maximumLength = 48
+        var label = host.lowercased().hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        let decodedPath = path(percentEncoded: false)
+        if decodedPath != "/" {
+            label += decodedPath
+        }
+        if label.hasSuffix("/") {
+            label.removeLast()
+        }
+        return truncatedLinkLabel(label)
+    }
+
+    private func truncatedLinkLabel(_ label: String) -> String {
+        let maximumLength = 40
         guard label.count > maximumLength else { return label }
         return "\(label.prefix(maximumLength - 1))…"
+    }
+}
+
+private extension String {
+    /// The string with any leading `scheme://` removed, for comparing a link
+    /// label to its URL.
+    var withoutScheme: Substring {
+        guard let separator = range(of: "://") else { return self[...] }
+        return self[separator.upperBound...]
     }
 }
