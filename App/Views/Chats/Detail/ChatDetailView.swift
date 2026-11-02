@@ -17,6 +17,12 @@ struct ChatDetailView: View {
             #if os(macOS)
             .navigationTitle("")
             #endif
+            // The chat list uses a large title, which a pushed chat otherwise
+            // starts with. Its bar then collapses to inline right after the
+            // timeline's bottom-anchored first layout, and the scroll view
+            // keeps its offset from the top, leaving the newest message 52pt
+            // above the composer until the next touch.
+            .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 if let selectedChat {
                     #if os(macOS)
