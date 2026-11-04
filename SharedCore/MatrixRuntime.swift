@@ -8,33 +8,37 @@ import Darwin
 /// The app and its share extension open the same store, one process at a time,
 /// under an exclusive file lock. The store opens on the first command and can
 /// close again so the other process can take it: while the iOS app is in the
-/// background, and while the app yields to the share extension.
+/// background, and while a share is underway.
+///
+/// `share.lock` decides which process may open the store. The share extension
+/// holds it from before it asks for the store until after it hands it back.
+/// While it's held only the extension may open the store; otherwise only the app.
 actor MatrixRuntime {
     static let shared = MatrixRuntime()
     /// The core's database and media cache, plus uploads staged for it.
     private static let directory = MatrixStore.directory
-    /// How long a yield keeps the store closed. It only has to cover the gap
-    /// until the share extension takes the lock, which then keeps the app out
-    /// on its own; a suspended app may never hear that the extension finished.
-    private static let yieldTimeout = Duration.seconds(10)
+    private static let isShareExtension = Bundle.main.bundleURL.pathExtension == "appex"
     /// The core's handle, which outlives closing and reopening the store.
     private(set) var handle: UInt = 0
     private(set) var isOpen = false
     private var lockFile: Int32 = -1
+    /// The share extension's hold on `share.lock` while a share is underway.
+    private var shareLockFile: Int32 = -1
     private var keepsOpen = true
+    /// Closes the store once, as soon as commands still running finish.
+    private var closesWhenIdle = false
     private var runningCommands = 0
     private var closeWaiters: [CheckedContinuation<Void, Never>] = []
-    /// Until when the store belongs to the share extension.
-    private var yieldDeadline: ContinuousClock.Instant?
     /// What the app last asked for, reapplied whenever the store reopens.
     private var isActive = false
     private var openedRoomID = ""
 
     func start() throws {
         guard !isOpen else { return }
-        if let yieldDeadline {
-            guard .now >= yieldDeadline else { throw MatrixError.storeInUse }
-            self.yieldDeadline = nil
+        if Self.isShareExtension {
+            guard shareLockFile >= 0 else { throw MatrixError.storeInUse }
+        } else {
+            guard !Self.isShareUnderway else { throw MatrixError.storeInUse }
         }
         umask(0o077)
         try Self.createPrivateDirectory(Self.directory)
@@ -58,6 +62,7 @@ actor MatrixRuntime {
             throw error
         }
         isOpen = true
+        closesWhenIdle = false
         if isActive { run("active", ["active": true]) }
         if !openedRoomID.isEmpty { run("opened-room", ["roomID": openedRoomID]) }
     }
@@ -114,16 +119,49 @@ actor MatrixRuntime {
         await withCheckedContinuation { closeWaiters.append($0) }
     }
 
-    /// Closes the store for the share extension, and keeps it closed until
-    /// `endYield()` or the timeout.
-    func yield() {
-        yieldDeadline = .now + Self.yieldTimeout
+    /// Closes the store for the other process once commands still running
+    /// finish. The share lock keeps it closed for as long as that matters.
+    func closeWhenIdle() {
+        closesWhenIdle = true
         closeIfIdle()
     }
 
-    /// Lets the next command reopen the store.
-    func endYield() {
-        yieldDeadline = nil
+    /// Marks a share as underway, from before the share extension asks for the
+    /// store until after it hands it back. Returns false while another share
+    /// extension process has one underway. The system drops the lock if the
+    /// extension dies, and the extension ends it before it can be suspended.
+    func beginShare() throws -> Bool {
+        guard shareLockFile < 0 else { return true }
+        umask(0o077)
+        try Self.createPrivateDirectory(Self.directory)
+        let file = Darwin.open(Self.shareLockPath, O_CREAT | O_RDWR, 0o600)
+        guard file >= 0 else { throw MatrixError.cannotStart }
+        guard flock(file, LOCK_EX | LOCK_NB) == 0 else {
+            Darwin.close(file)
+            return false
+        }
+        shareLockFile = file
+        return true
+    }
+
+    func endShare() {
+        guard shareLockFile >= 0 else { return }
+        Darwin.close(shareLockFile)
+        shareLockFile = -1
+    }
+
+    /// Whether a share extension has a share underway.
+    nonisolated static var isShareUnderway: Bool {
+        let file = Darwin.open(shareLockPath, O_RDONLY)
+        guard file >= 0 else { return false }
+        defer { Darwin.close(file) }
+        guard flock(file, LOCK_SH | LOCK_NB) == 0 else { return errno == EWOULDBLOCK }
+        flock(file, LOCK_UN)
+        return false
+    }
+
+    private nonisolated static var shareLockPath: String {
+        directory.appending(path: "share.lock").path
     }
 
     /// Closes the store now, so the other process can open it.
@@ -166,7 +204,7 @@ actor MatrixRuntime {
     }
 
     private func closeIfIdle() {
-        guard runningCommands == 0, !keepsOpen || yieldDeadline != nil else { return }
+        guard runningCommands == 0, !keepsOpen || closesWhenIdle else { return }
         close()
     }
 

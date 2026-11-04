@@ -226,14 +226,17 @@ final class ChatStore {
         }
     }
 
+    /// The share lock keeps the store closed until the share is over.
     private func yieldToShareExtension() async {
+        // A suspended app hears the request only once it resumes, usually
+        // after the share is over, and possibly after the release.
+        guard MatrixRuntime.isShareUnderway else { return }
         realtimeService.stop()
-        await MatrixRuntime.shared.yield()
+        await MatrixRuntime.shared.closeWhenIdle()
     }
 
     /// The next command reopens the store; reconnecting resyncs what changed.
-    private func resumeAfterShareExtension() async {
-        await MatrixRuntime.shared.endYield()
+    private func resumeAfterShareExtension() {
         #if os(iOS)
         guard notificationService.isAppActive else { return }
         #endif

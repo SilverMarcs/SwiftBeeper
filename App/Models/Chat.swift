@@ -96,6 +96,17 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
         participants?.items.first(where: { $0.isSelf != true })
     }
 
+    /// The chat's own image, if it has one.
+    var ownImageURL: String? {
+        guard let url = imgURL?.trimmed, !url.isEmpty else { return nil }
+        return url
+    }
+
+    /// The chat's own image, or the other person's outside group chats.
+    var avatarURL: String? {
+        ownImageURL ?? (isGroupChat ? nil : otherParticipant?.imgURL)
+    }
+
     func participant(with id: String) -> ChatParticipant? {
         participants?.items.first(where: { $0.id == id })
     }

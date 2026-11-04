@@ -148,19 +148,12 @@ final class ShareModel {
     /// Lets iOS suggest this chat in the share sheet next time. Runs before
     /// the store closes, since the avatar comes from its cache.
     private func donateSentMessage(to chat: ShareChat) async {
-        var imageData: Data?
-        if let source = chat.avatarURL, let file = try? await MatrixRuntime.shared.localAsset(source) {
-            imageData = try? Data(contentsOf: file)
-        }
-        let others = chat.otherParticipants
         await SentMessageDonation.donate(
             chatID: chat.id,
             title: chat.displayTitle,
             isGroup: chat.isGroup,
-            recipients: others.isEmpty
-                ? [(id: chat.id, name: chat.displayTitle)]
-                : others.map { (id: $0.id, name: $0.displayName) },
-            imageData: imageData
+            photo: chat.avatarURL,
+            recipients: chat.otherParticipants.map { (id: $0.id, name: $0.displayName) }
         )
     }
 

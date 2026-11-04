@@ -7,18 +7,25 @@ import Foundation
 /// extension when one is picked. It's one call per sent message; the system
 /// does the rest.
 nonisolated enum SentMessageDonation {
+    /// - Parameters:
+    ///   - photo: The chat's Matrix avatar source, as its avatar shows it.
+    ///   - recipients: Everyone but the user, as far as the chat lists them.
     static func donate(
         chatID: String,
         title: String,
         isGroup: Bool,
-        recipients: [(id: String, name: String)],
-        imageData: Data?
+        photo: String?,
+        recipients: [(id: String, name: String)]
     ) async {
+        let imageData = await ConversationImage.make(photo: photo)
         let image = imageData.map(INImage.init(imageData:))
-        let people = recipients.map { recipient in
-            INPerson(personHandle: INPersonHandle(value: recipient.id, type: .unknown),
-                     nameComponents: nil, displayName: recipient.name, image: isGroup ? nil : image,
-                     contactIdentifier: nil, customIdentifier: recipient.id)
+        var people = recipients.map { recipient in
+            person(id: recipient.id, name: recipient.name, image: isGroup ? nil : image)
+        }
+        // iOS treats a conversation as a group only with more than one
+        // recipient; the chat stands in for members it doesn't list.
+        if people.isEmpty || (isGroup && people.count < 2) {
+            people.append(person(id: chatID, name: title, image: isGroup ? nil : image))
         }
         let intent = INSendMessageIntent(
             recipients: people, outgoingMessageType: .outgoingMessageText, content: nil,
@@ -32,5 +39,11 @@ nonisolated enum SentMessageDonation {
         let interaction = INInteraction(intent: intent, response: nil)
         interaction.direction = .outgoing
         try? await interaction.donate()
+    }
+
+    private static func person(id: String, name: String, image: INImage?) -> INPerson {
+        INPerson(personHandle: INPersonHandle(value: id, type: .unknown),
+                 nameComponents: nil, displayName: name, image: image,
+                 contactIdentifier: nil, customIdentifier: id)
     }
 }
