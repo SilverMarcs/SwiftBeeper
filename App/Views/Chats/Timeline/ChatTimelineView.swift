@@ -68,8 +68,10 @@ struct ChatTimelineView: View {
                 }
                 .scrollDisabled(activeComposerMessageID != nil)
                 .environment(\.scrollToMessage, ScrollToMessageAction { messageID in
+                    // A reply to a folded-in photo jumps to its gallery row.
+                    let rowID = TimelineEntry.rowID(for: messageID, in: timelineEntries)
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo(messageID, anchor: .center)
+                        proxy.scrollTo(rowID, anchor: .center)
                     }
                 })
                 .savesAttachments()

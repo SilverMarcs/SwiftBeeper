@@ -48,10 +48,14 @@ struct MessageRowView: View {
                         .modifier(TypingBubbleContentReveal())
                 }
 
-                MessageContentView(message: message, chat: chat)
-                    .environment(\.openURL, OpenURLAction { url in
-                        openMention(url, in: message)
-                    })
+                if entry.galleryMessages.isEmpty {
+                    MessageContentView(message: message, chat: chat)
+                        .environment(\.openURL, OpenURLAction { url in
+                            openMention(url, in: message)
+                        })
+                } else {
+                    GalleryMessageContentView(messages: entry.messages, chat: chat)
+                }
 
                 if isOutgoing && entry.showsReadIndicator {
                     MessageDeliveryStatusView(status: .read)

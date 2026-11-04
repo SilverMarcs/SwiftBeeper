@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Reactions, reply, copy, edit, save, and delete for one message.
+/// Reactions, reply, copy, edit, save, and delete for one message. For a photo
+/// gallery, save and delete also cover the photos folded in after it.
 struct MessageContextMenu: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(\.saveAttachment) private var saveAttachment
@@ -8,6 +9,7 @@ struct MessageContextMenu: View {
 
     let message: Message
     let chat: Chat
+    var galleryMessages: [Message] = []
 
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
@@ -60,7 +62,18 @@ struct MessageContextMenu: View {
             #endif
         }
 
-        if let attachments = message.attachments, !attachments.isEmpty {
+        if !galleryMessages.isEmpty {
+            let attachments = ([message] + galleryMessages).flatMap { $0.attachments ?? [] }
+            Divider()
+            Button("Save All to Photos", systemImage: "photo.on.rectangle.angled") {
+                saveAttachmentToPhotos(attachments)
+            }
+            #if os(macOS)
+            Button("Save All to Downloads", systemImage: "arrow.down") { saveAttachment(attachments) }
+            #else
+            Button("Save All to Files", systemImage: "folder") { saveAttachment(attachments) }
+            #endif
+        } else if let attachments = message.attachments, !attachments.isEmpty {
             Divider()
             ForEach(attachments) { attachment in
                 if attachment.photoLibraryContentType != nil {
@@ -80,7 +93,9 @@ struct MessageContextMenu: View {
             Divider()
             Button("Delete", systemImage: "trash", role: .destructive) {
                 Task {
-                    await chatStore.deleteMessage(message.id, in: message.chatID)
+                    for message in [message] + galleryMessages {
+                        await chatStore.deleteMessage(message.id, in: message.chatID)
+                    }
                 }
             }
         }

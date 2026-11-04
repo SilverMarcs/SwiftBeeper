@@ -991,8 +991,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SilverMarcs/SwiftMediaViewer";
 			requirement = {
-				kind = revision;
-				revision = 6b18c8fb0d04e8ddb6cf773ccaec281ea5c7dc90;
+				branch = main;
+				kind = branch;
 			};
 		};
 		8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */ = {

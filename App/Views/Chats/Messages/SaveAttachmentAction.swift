@@ -3,10 +3,15 @@ import UniformTypeIdentifiers
 
 /// Invokes an attachment save flow supplied by the timeline.
 struct SaveAttachmentAction {
-    let action: (Attachment) -> Void
+    let action: ([Attachment]) -> Void
 
     func callAsFunction(_ attachment: Attachment) {
-        action(attachment)
+        action([attachment])
+    }
+
+    /// Saves several attachments as one operation, such as a photo gallery.
+    func callAsFunction(_ attachments: [Attachment]) {
+        action(attachments)
     }
 }
 
@@ -27,18 +32,18 @@ extension View {
 
 private struct AttachmentSaver: ViewModifier {
     #if os(iOS)
-    /// A named copy of the cached media for the Files picker to move.
-    @State private var exportedFile: URL?
+    /// Named copies of the cached media for the Files picker to move.
+    @State private var exportedFiles: [URL] = []
     @State private var isExporting = false
     #endif
 
     func body(content: Content) -> some View {
         content
-            .environment(\.saveAttachment, SaveAttachmentAction { attachment in
-                Task { await save(attachment) }
+            .environment(\.saveAttachment, SaveAttachmentAction { attachments in
+                Task { await save(attachments) }
             })
             #if os(iOS)
-            .fileMover(isPresented: $isExporting, file: exportedFile) { _ in
+            .fileMover(isPresented: $isExporting, files: exportedFiles) { _ in
                 discardExport()
             } onCancellation: {
                 discardExport()
@@ -46,34 +51,45 @@ private struct AttachmentSaver: ViewModifier {
             #endif
     }
 
-    private func save(_ attachment: Attachment) async {
-        guard let source = attachment.resolvedURL,
-              let file = await MatrixMedia.localFile(for: source) else { return }
+    private func save(_ attachments: [Attachment]) async {
         // File copies clone on APFS instead of reading the media into memory.
         // Failures are silently ignored; the user can retry.
         #if os(macOS)
-        try? FileManager.default.copyItem(at: file, to: uniqueDownloadsURL(named: attachment.suggestedFileName))
+        for attachment in attachments {
+            guard let source = attachment.resolvedURL,
+                  let file = await MatrixMedia.localFile(for: source) else { continue }
+            try? FileManager.default.copyItem(at: file, to: uniqueDownloadsURL(named: attachment.suggestedFileName))
+        }
         #else
         discardExport()
-        let directory = URL.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        let copy = directory.appending(path: attachment.suggestedFileName)
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: file, to: copy)
-            exportedFile = copy
-            isExporting = true
-        } catch {
-            try? FileManager.default.removeItem(at: directory)
+        var copies: [URL] = []
+        for attachment in attachments {
+            guard let source = attachment.resolvedURL,
+                  let file = await MatrixMedia.localFile(for: source) else { continue }
+            // One folder per copy, so attachments sharing a file name don't collide.
+            let directory = URL.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+            let copy = directory.appending(path: attachment.suggestedFileName)
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try FileManager.default.copyItem(at: file, to: copy)
+                copies.append(copy)
+            } catch {
+                try? FileManager.default.removeItem(at: directory)
+            }
         }
+        guard !copies.isEmpty else { return }
+        exportedFiles = copies
+        isExporting = true
         #endif
     }
 
     #if os(iOS)
-    /// Removes the copy's folder; after a successful move only the folder remains.
+    /// Removes the copies' folders; after a successful move only the folders remain.
     private func discardExport() {
-        guard let exportedFile else { return }
-        try? FileManager.default.removeItem(at: exportedFile.deletingLastPathComponent())
-        self.exportedFile = nil
+        for file in exportedFiles {
+            try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+        }
+        exportedFiles = []
     }
     #endif
 
