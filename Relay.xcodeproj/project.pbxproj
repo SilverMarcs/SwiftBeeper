@@ -496,7 +496,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RELAY_CORE_PLATFORM = macos;
 				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;
@@ -534,7 +534,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RELAY_CORE_PLATFORM = macos;
 				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;
@@ -576,7 +576,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.NotificationService;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay.NotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RELAY_CORE_PLATFORM = macos;
 				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;
@@ -661,10 +661,10 @@
 					"-lresolv",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				RELAY_APP_GROUP = group.com.SilverMarcs.RelayEmbedded;
-				"RELAY_APP_GROUP[sdk=macosx*]" = "$(TeamIdentifierPrefix)com.SilverMarcs.RelayEmbedded";
+				RELAY_APP_GROUP = group.com.SilverMarcs.Relay;
+				"RELAY_APP_GROUP[sdk=macosx*]" = "$(TeamIdentifierPrefix)com.SilverMarcs.Relay";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -699,7 +699,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.NotificationService;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay.NotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RELAY_CORE_PLATFORM = macos;
 				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;
@@ -779,10 +779,10 @@
 					"-lresolv",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				RELAY_APP_GROUP = group.com.SilverMarcs.RelayEmbedded;
-				"RELAY_APP_GROUP[sdk=macosx*]" = "$(TeamIdentifierPrefix)com.SilverMarcs.RelayEmbedded";
+				RELAY_APP_GROUP = group.com.SilverMarcs.Relay;
+				"RELAY_APP_GROUP[sdk=macosx*]" = "$(TeamIdentifierPrefix)com.SilverMarcs.Relay";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -804,8 +804,6 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphoneos*]" = audio;
-				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphonesimulator*]" = audio;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -843,8 +841,6 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphoneos*]" = audio;
-				"INFOPLIST_KEY_UIBackgroundModes[sdk=iphonesimulator*]" = audio;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -886,7 +882,7 @@
 					"-force_load",
 					"$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/libRelayCore.a",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.RelayCore;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay.RelayCore;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RELAY_CORE_PLATFORM = macos;
 				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;
@@ -920,7 +916,7 @@
 					"-force_load",
 					"$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/libRelayCore.a",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.RelayEmbedded.RelayCore;
+				PRODUCT_BUNDLE_IDENTIFIER = com.SilverMarcs.Relay.RelayCore;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RELAY_CORE_PLATFORM = macos;
 				"RELAY_CORE_PLATFORM[sdk=iphoneos*]" = ios;

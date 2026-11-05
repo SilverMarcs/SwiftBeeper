@@ -22,7 +22,7 @@ nonisolated enum MatrixStore {
     /// Earlier builds kept the store in the app's own container.
     private static var legacyDirectory: URL {
         URL.applicationSupportDirectory
-            .appending(path: "com.SilverMarcs.RelayEmbedded/matrix", directoryHint: .isDirectory)
+            .appending(path: "com.SilverMarcs.Relay/matrix", directoryHint: .isDirectory)
     }
 
     private static func database(in directory: URL) -> URL {

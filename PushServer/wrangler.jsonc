@@ -5,7 +5,7 @@
   "compatibility_date": "2026-10-12",
   "workers_dev": true,
   "vars": {
-    "APNS_TOPIC": "com.SilverMarcs.RelayEmbedded",
+    "APNS_TOPIC": "com.SilverMarcs.Relay",
     "APNS_ENVIRONMENT": "sandbox"
   },
   "d1_databases": [

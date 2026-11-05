@@ -10,7 +10,7 @@
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)com.SilverMarcs.RelayEmbedded</string>
+		<string>$(AppIdentifierPrefix)com.SilverMarcs.Relay</string>
 	</array>
 	<key>com.apple.developer.usernotifications.communication</key>
 	<true/>

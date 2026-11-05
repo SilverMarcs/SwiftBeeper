@@ -4,9 +4,9 @@ import Foundation
 /// share extension, which can't both have it open.
 nonisolated enum CoreHandoff: String {
     /// The share extension wants the store; a running app closes it.
-    case requested = "com.SilverMarcs.RelayEmbedded.core.requested"
+    case requested = "com.SilverMarcs.Relay.core.requested"
     /// The share extension has closed the store again.
-    case released = "com.SilverMarcs.RelayEmbedded.core.released"
+    case released = "com.SilverMarcs.Relay.core.released"
 
     func post() {
         CFNotificationCenterPostNotification(

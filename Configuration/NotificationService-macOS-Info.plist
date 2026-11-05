@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>RelayNotificationKeychainGroup</key>
-	<string>$(AppIdentifierPrefix)com.SilverMarcs.RelayEmbedded</string>
+	<string>$(AppIdentifierPrefix)com.SilverMarcs.Relay</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

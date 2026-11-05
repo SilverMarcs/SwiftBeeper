@@ -10,7 +10,7 @@ final class DictationSettings {
 
     private let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "com.SilverMarcs.RelayEmbedded.dictation",
+        kSecAttrService as String: "com.SilverMarcs.Relay.dictation",
         kSecAttrAccount as String: "openai-api-key",
     ]
 
