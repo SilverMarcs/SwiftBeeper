@@ -74,6 +74,7 @@ struct ChatTimelineView: View {
                         proxy.scrollTo(rowID, anchor: .center)
                     }
                 })
+                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: selectedChat.accountID).outgoingBubbleColor)
                 .savesAttachments()
                 // Recreate only the viewport when a chat opens or its first database page arrives
                 .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline)")

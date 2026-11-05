@@ -22,9 +22,10 @@ enum ChatVisualStyle {
         return AnyShapeStyle(.quinary)
     }
 
-    static func replyPreviewFill(isOutgoing: Bool) -> AnyShapeStyle {
+    /// Outgoing replies take a wash of the bubble color they sit above.
+    static func replyPreviewFill(isOutgoing: Bool, outgoingBubbleColor: Color) -> AnyShapeStyle {
         if isOutgoing {
-            return AnyShapeStyle(.tint.quaternary)
+            return AnyShapeStyle(outgoingBubbleColor.quaternary)
         }
         return AnyShapeStyle(.quinary)
     }
@@ -46,13 +47,8 @@ extension View {
         modifier(SubtleBackgroundModifier())
     }
 
-    @ViewBuilder
     func bubbleBackground(isOutgoing: Bool) -> some View {
-        if isOutgoing {
-            background(Color.accentColor.gradient)
-        } else {
-            subtleBackground()
-        }
+        modifier(BubbleBackgroundModifier(isOutgoing: isOutgoing))
     }
 
     /// Padding + background + clip shape for a text message bubble.
