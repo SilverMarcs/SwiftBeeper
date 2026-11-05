@@ -26,7 +26,7 @@ struct TimelineEntryRow: View {
 
             MessageRowView(entry: entry, chat: chat)
                 .timelineFocus(isComposerIdle || activeComposerMessageID == entry.message.id)
-                .padding(.vertical, 2)
+                .timelineRowPadding(startsSenderRun: entry.startsSenderRun)
         }
     }
 }

@@ -16,7 +16,7 @@ struct OutgoingTimelineEntryRow: View {
             }
 
             OutgoingMessageRowView(entry: entry)
-                .padding(.vertical, 2)
+                .timelineRowPadding(startsSenderRun: entry.startsSenderRun)
         }
     }
 }

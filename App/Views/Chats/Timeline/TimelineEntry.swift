@@ -10,6 +10,9 @@ struct TimelineEntry: Identifiable, Equatable {
     let showsTimestamp: Bool
     let isFirstInGroup: Bool
     let isLastInGroup: Bool
+    /// Whether the sender changed from the row directly above, with no divider
+    /// between them. The timeline widens the gap there to separate the two sides.
+    let startsSenderRun: Bool
     /// Whether this is the outgoing message that shows the "Read" indicator.
     let showsReadIndicator: Bool
     /// The message this one replies to, when it is loaded.
@@ -61,6 +64,8 @@ struct TimelineEntry: Identifiable, Equatable {
                 isFirstInGroup: previous?.senderID != message.senderID || showsTimestamp || message.id == firstUnreadID,
                 isLastInGroup: (next?.senderID ?? followingTypingSenderID) != message.senderID
                     || nextShowsTimestamp || (next.map { $0.id == firstUnreadID } ?? false),
+                startsSenderRun: previous.map { $0.senderID != message.senderID } == true
+                    && !showsTimestamp && message.id != firstUnreadID,
                 showsReadIndicator: row.contains { $0.id == readIndicatorID },
                 linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] }
             )

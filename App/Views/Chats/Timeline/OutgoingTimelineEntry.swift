@@ -6,6 +6,9 @@ import Foundation
 struct OutgoingTimelineEntry: Identifiable, Equatable {
     let message: OutgoingMessage
     let showsTimestamp: Bool
+    /// Matches `TimelineEntry.startsSenderRun`: only the first optimistic row can
+    /// follow someone else's message.
+    let startsSenderRun: Bool
     /// The quoted message for a reply, resolved from the canonical timeline.
     let linkedMessage: Message?
 
@@ -16,12 +19,16 @@ struct OutgoingTimelineEntry: Identifiable, Equatable {
     /// send after a long quiet period gets its divider immediately.
     static func entries(for outgoingMessages: [OutgoingMessage], following messages: [Message]) -> [OutgoingTimelineEntry] {
         var previousTimestamp = messages.last?.timestamp
+        var followsOtherSender = messages.last.map { !$0.isSender } == true
         return outgoingMessages.map { message in
             let showsTimestamp = TimelineEntry.showsTimestamp(before: message.createdAt, previous: previousTimestamp)
+            let startsSenderRun = followsOtherSender && !showsTimestamp
             previousTimestamp = message.createdAt
+            followsOtherSender = false
             return OutgoingTimelineEntry(
                 message: message,
                 showsTimestamp: showsTimestamp,
+                startsSenderRun: startsSenderRun,
                 linkedMessage: message.replyToMessageID.flatMap { replyID in messages.first { $0.id == replyID } }
             )
         }

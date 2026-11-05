@@ -28,7 +28,7 @@ struct TimelineItemRow: View {
             case .typing(let bubble, let isFirstInGroup):
                 TypingIndicatorView(participant: bubble.participant, chat: chat, isFirstInGroup: isFirstInGroup)
                     .timelineFocus(activeComposerMessageID == nil)
-                    .padding(.vertical, 2)
+                    .timelineRowPadding(startsSenderRun: isFirstInGroup)
                     .transition(.opacity)
             }
         }
