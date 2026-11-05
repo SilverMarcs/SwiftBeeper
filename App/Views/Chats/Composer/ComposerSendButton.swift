@@ -4,6 +4,7 @@ import SwiftUI
 struct ComposerSendButton: View {
     @Environment(InputManager.self) private var input
     @Environment(ChatStore.self) private var chatStore
+    @Environment(\.outgoingBubbleColor) private var outgoingBubbleColor
 
     let submit: () -> Void
 
@@ -26,6 +27,7 @@ struct ComposerSendButton: View {
         .controlSize(.large)
         #endif
         .buttonStyle(.glassProminent)
+        .tint(outgoingBubbleColor)
         .buttonBorderShape(.circle)
         .allowsHitTesting(!input.sendButtonDisabled)
         .offset(y: -2)

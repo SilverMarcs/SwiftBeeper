@@ -74,7 +74,6 @@ struct ChatTimelineView: View {
                         proxy.scrollTo(rowID, anchor: .center)
                     }
                 })
-                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: selectedChat.accountID).outgoingBubbleColor)
                 .savesAttachments()
                 // Recreate only the viewport when a chat opens or its first database page arrives
                 .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline)")
@@ -178,6 +177,8 @@ struct ChatTimelineView: View {
                         MessageInputView()
                     }
                 }
+                // Covers the composer too, so Send matches the bubbles it sends.
+                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: selectedChat.accountID).outgoingBubbleColor)
                 .onDrop(of: [.item], isTargeted: nil) { providers in
                     inputManager.handleDrop(providers)
                 }
