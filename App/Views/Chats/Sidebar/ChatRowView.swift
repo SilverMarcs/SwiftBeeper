@@ -50,6 +50,10 @@ struct ChatRowView: View {
 
                     Spacer()
 
+                    if chat.hasUnreadMention == true {
+                        ChatMentionBadgeView()
+                    }
+
                     if chat.unreadCount > 0 {
                         let isMuted = chat.isMuted == true
                         Text(chat.unreadCount > 99 ? "99+" : "\(chat.unreadCount)")

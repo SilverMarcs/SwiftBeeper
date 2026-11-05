@@ -215,6 +215,7 @@ func (s *Dispatcher) mapRoomToChat(room *database.Room, summary *chatSummary, lo
 			Total:   int64(summary.total),
 		},
 		UnreadCount:            int64(room.UnreadMessages),
+		HasUnreadMention:       room.UnreadHighlights > 0,
 		IsArchived:             state.InArchive(),
 		IsMuted:                state.IsMuted,
 		IsPinned:               state.IsPinned,

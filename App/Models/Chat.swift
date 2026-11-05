@@ -56,6 +56,8 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
     let id: String
     var title: String
     var unreadCount: Int
+    /// Whether an unread message mentions the user.
+    var hasUnreadMention: Bool?
     var participants: ChatParticipants?
     var preview: Message?
     var isMuted: Bool?

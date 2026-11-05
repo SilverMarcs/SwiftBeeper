@@ -131,6 +131,9 @@ type Chat struct {
 	Preview *Message `json:"preview,omitempty"`
 	// Marked unread is separate from unreadCount.
 	IsMarkedUnread bool `json:"isMarkedUnread"`
+	// Whether an unread message highlights the user, which is how push rules
+	// mark a mention of them.
+	HasUnreadMention bool `json:"hasUnreadMention"`
 }
 
 type ListChatsOutput struct {

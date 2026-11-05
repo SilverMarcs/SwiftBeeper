@@ -294,6 +294,7 @@ extension ChatStore {
         let previous = chat(byID: chatID)
         updateChat(chatID) {
             $0.unreadCount = 0
+            $0.hasUnreadMention = false
             $0.isMarkedUnread = false
         }
 
