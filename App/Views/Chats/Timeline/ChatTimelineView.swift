@@ -6,7 +6,6 @@ struct ChatTimelineView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
     @State private var firstUnreadID: String?
     @State private var isNearBottom = true
     private let bottomAnchorID = "timeline-bottom"
@@ -179,7 +178,7 @@ struct ChatTimelineView: View {
                     }
                 }
                 // Covers the composer too, so Send matches the bubbles it sends.
-                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: selectedChat.accountID).outgoingBubbleColor(for: colorScheme))
+                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: selectedChat.accountID).outgoingBubbleColor)
                 .onDrop(of: [.item], isTargeted: nil) { providers in
                     inputManager.handleDrop(providers)
                 }

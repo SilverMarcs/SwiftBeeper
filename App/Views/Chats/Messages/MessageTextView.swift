@@ -10,9 +10,9 @@ struct MessageTextView: View {
         MessageTextLayout(displayScale: displayScale) {
             MessageBlocksView(blocks: text.messageBlocks)
                 .font(.body)
-                .foregroundStyle(isOutgoing ? .white : .primary)
-                // Links follow the tint; white keeps contrast on the accent fill.
-                .tint(isOutgoing ? .white : .blue)
+                .foregroundStyle(.primary)
+                // Both sides sit on light washes, so links stay blue.
+                .tint(.blue)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
