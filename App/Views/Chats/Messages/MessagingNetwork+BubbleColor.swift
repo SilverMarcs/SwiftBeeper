@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension MessagingNetwork {
-    /// Each network's brand color, used as a translucent wash behind the user's
-    /// own bubbles and as the Send button's tint.
+    /// The fill for the user's own bubbles and the Send button's tint, after each
+    /// network's brand color. Shades are deepened where needed so white text stays legible.
     var outgoingBubbleColor: Color {
         switch self {
         case .whatsApp: Color(red: 0.08, green: 0.62, blue: 0.36)

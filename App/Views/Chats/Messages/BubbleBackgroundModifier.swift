@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// Washes outgoing bubbles with a translucent tint of the chat network's color,
-/// drawn as a gradient, so primary text stays legible in both color schemes.
-/// Dark mode uses a much stronger wash, since a faint tint of a deep brand
-/// color vanishes on black. Incoming bubbles take the neutral subtle fill.
+/// Fills outgoing bubbles with the chat network's color and incoming ones subtly.
+/// In light mode the brand color is eased slightly toward gray, since a fully
+/// saturated fill reads harsh against a white timeline; white text stays legible.
 struct BubbleBackgroundModifier: ViewModifier {
     let isOutgoing: Bool
     @Environment(\.outgoingBubbleColor) private var outgoingBubbleColor
@@ -11,10 +10,14 @@ struct BubbleBackgroundModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if isOutgoing {
-            let gradient = outgoingBubbleColor.gradient
-            content.background(colorScheme == .dark ? AnyShapeStyle(gradient.secondary) : AnyShapeStyle(gradient.quinary))
+            content.background(fill.gradient)
         } else {
             content.subtleBackground()
         }
+    }
+
+    private var fill: Color {
+        guard colorScheme == .light else { return outgoingBubbleColor }
+        return outgoingBubbleColor.mix(with: Color(white: 0.55), by: 0.12)
     }
 }

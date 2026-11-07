@@ -77,7 +77,3 @@ If SwiftData is configured to use CloudKit:
 - Add code comments and documentation comments as needed.
 - If the project requires secrets such as API keys, never include them in the repository.
 
-
-## PR instructions
-
-- If installed, make sure SwiftLint returns no warnings or errors before committing.

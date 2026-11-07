@@ -22,13 +22,13 @@ struct MessageContentView: View {
                     if message.hasRetainedDeletedContent {
                         Text(message.displayFormattedText.messageAttributed)
                             .strikethrough()
-                            .tint(.blue)
+                            .tint(isOutgoing ? .white : .blue)
                     } else {
                         Label(message.displayText, systemImage: "trash")
                             .italic()
                     }
                 }
-                .foregroundStyle(.primary)
+                .foregroundStyle(isOutgoing ? .white : .primary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .messageBubbleChrome(isOutgoing: isOutgoing)

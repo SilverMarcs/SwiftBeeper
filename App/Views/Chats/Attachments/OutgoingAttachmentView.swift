@@ -24,6 +24,7 @@ struct OutgoingAttachmentView: View {
                         .lineLimit(2)
                         .truncationMode(.middle)
                 }
+                .foregroundStyle(.white)
                 .padding()
                 .frame(maxWidth: 275, minHeight: 64)
                 .bubbleBackground(isOutgoing: true)
