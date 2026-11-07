@@ -95,12 +95,11 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
         return preview.attachmentSymbol
     }
 
-    /// The sender label shown before the preview: "You: " for the user's own
-    /// messages in any chat, otherwise the sender's first name in group chats.
+    /// The group-chat sender label shown before the preview: "You: " for the
+    /// user's own messages, otherwise the sender's first name.
     var previewSenderPrefix: String {
-        guard let preview else { return "" }
+        guard isGroupChat, let preview else { return "" }
         if preview.isSender { return "You: " }
-        guard isGroupChat else { return "" }
         guard let firstName = preview.senderDisplayName.split(whereSeparator: \.isWhitespace).first else { return "" }
         return "\(firstName): "
     }
