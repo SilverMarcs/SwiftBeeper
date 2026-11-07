@@ -38,7 +38,7 @@ struct ChatRowView: View {
 
                 HStack {
                     if let previewText = chat.previewText {
-                        Text("\(Text(chat.previewSenderPrefix).bold())\(previewText.previewAttributed)")
+                        ChatRowPreviewText(chat: chat, previewText: previewText)
                             #if os(iOS)
                             .font(.callout)
                             #else

@@ -76,4 +76,35 @@ struct Attachment: Identifiable, Codable, Equatable, Sendable {
         case .unknown, .none: "file"
         }
     }
+
+    /// Short, title-case name for previews, such as "Photo" or "GIF".
+    var previewLabel: String {
+        switch type {
+        case .image: isGif == true ? "GIF" : "Photo"
+        case .video, .reel: "Video"
+        case .audio: "Audio"
+        case .unknown, .none:
+            if let fileName = fileName?.trimmed, !fileName.isEmpty { fileName } else { "File" }
+        }
+    }
+
+    /// Plural preview name for several attachments of this kind.
+    var pluralPreviewLabel: String {
+        switch type {
+        case .image: "Photos"
+        case .video, .reel: "Videos"
+        case .audio: "Audio Files"
+        case .unknown, .none: "Files"
+        }
+    }
+
+    /// SF Symbol shown beside the preview label.
+    var previewSymbol: String {
+        switch type {
+        case .image: "photo"
+        case .video, .reel: "video"
+        case .audio: "waveform"
+        case .unknown, .none: "doc"
+        }
+    }
 }

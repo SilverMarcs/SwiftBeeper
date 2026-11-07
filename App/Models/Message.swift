@@ -39,10 +39,34 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         if let visibleText {
             return visibleText
         }
-        if let attachments, let first = attachments.first {
-            return "Sent \(attachments.count > 1 ? "\(attachments.count) attachments" : "an \(first.typeLabel)")"
+        if let attachmentSummary {
+            return attachmentSummary
         }
         return "Deleted message"
+    }
+
+    /// What the attachments are, for previews of messages without a caption:
+    /// "Photo", "3 Photos", "Audio · 0:12", a file's name, or "2 Attachments"
+    /// when the kinds are mixed.
+    var attachmentSummary: String? {
+        guard let attachments, let first = attachments.first else { return nil }
+        guard attachments.count > 1 else {
+            if first.type == .audio, let duration = first.duration, duration >= 1 {
+                let durationText = Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))
+                return "\(first.previewLabel) · \(durationText)"
+            }
+            return first.previewLabel
+        }
+        let isSameKind = attachments.allSatisfy { $0.previewSymbol == first.previewSymbol }
+        return "\(attachments.count) \(isSameKind ? first.pluralPreviewLabel : "Attachments")"
+    }
+
+    /// SF Symbol for the attachments: their shared kind's, or a paperclip
+    /// when the kinds are mixed.
+    var attachmentSymbol: String? {
+        guard let attachments, let first = attachments.first else { return nil }
+        let isSameKind = attachments.allSatisfy { $0.previewSymbol == first.previewSymbol }
+        return isSameKind ? first.previewSymbol : "paperclip"
     }
 
     /// Redacted, or with nothing left to show (an empty body and no attachments).
