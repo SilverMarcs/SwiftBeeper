@@ -93,6 +93,8 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 		}
 	}
 
+	s.applyThreadSummaries(ctx, roomID, events, messages)
+
 	output := wire.ListMessagesOutput{
 		Items:        messages,
 		HasMore:      hasMore,
@@ -136,13 +138,14 @@ func (s *Dispatcher) loadServerHistory(ctx context.Context, input json.RawMessag
 	}
 }
 
-// isHistoryMessage reports a message or sticker, excluding edits. Encrypted
-// events count even before their keys arrive, so missing keys cannot keep
-// pagination running through the whole room.
+// isHistoryMessage reports a message or sticker the main timeline shows,
+// excluding edits and thread replies. Encrypted events count even before their
+// keys arrive, so missing keys cannot keep pagination running through the
+// whole room.
 func isHistoryMessage(evt *database.Event) bool {
 	switch evt.Type {
 	case event.EventMessage.Type, event.EventSticker.Type, event.EventEncrypted.Type:
-		return evt.RelationType != event.RelReplace
+		return evt.RelationType != event.RelReplace && !isHiddenThreadReply(evt)
 	}
 	return false
 }
@@ -151,8 +154,9 @@ func isHistoryMessage(evt *database.Event) bool {
 // (or the newest when before is 0), newest first.
 func (s *Dispatcher) loadTimelineEvents(ctx context.Context, roomID id.RoomID, before int64) ([]*database.Event, bool, error) {
 	const limit = messagePageSize + 1
-	// SQLite skips state/reaction/edit rows before materializing the local page.
-	query := timelineSelectBase + ` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker')) AND (relation_type IS NULL OR relation_type<>'m.replace')` +
+	// SQLite skips state/reaction/edit rows, and thread replies not sent to
+	// the chat, before materializing the local page.
+	query := timelineSelectBase + ` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker')) AND (relation_type IS NULL OR relation_type<>'m.replace') AND NOT ` + hiddenThreadReplySQL +
 		` AND (?=0 OR timeline.rowid<?) ORDER BY timeline.rowid DESC LIMIT ?`
 	events, err := s.queryEvents(ctx, query, roomID, before, before, limit)
 	if err != nil {

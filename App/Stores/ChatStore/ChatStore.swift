@@ -74,7 +74,10 @@ final class ChatStore {
         didSet {
             guard oldValue != selectedChatID else { return }
             selectedChat = selectedChatID.flatMap { chat(byID: $0) }
-            if let oldValue { removeChatIfFilteredOut(oldValue) }
+            if let oldValue {
+                removeChatIfFilteredOut(oldValue)
+                onChatClosed?(oldValue)
+            }
             resetTimeline()
             updateMessageSubscriptions()
 
@@ -92,8 +95,19 @@ final class ChatStore {
         }
     }
 
-    /// The open chat's messages, oldest first.
+    /// The open chat's main timeline, oldest first. Thread replies kept to
+    /// their thread live in `activeThread` instead.
     var messages: [Message] = []
+    /// The latest thread opened from the timeline. It outlives its
+    /// presentation, so the inspector keeps its content while it hides.
+    var activeThread: ThreadStore?
+    var isThreadPresented = false {
+        didSet {
+            guard !isThreadPresented, let activeThread else { return }
+            activeThread.cancel()
+            onThreadClosed?(ComposerTarget(chatID: activeThread.chatID, threadRootID: activeThread.rootID))
+        }
+    }
     /// Whether the open chat's first page has arrived.
     var hasLoadedTimeline = false
     /// Whether the local database has older pages; these load on scroll.
@@ -120,19 +134,20 @@ final class ChatStore {
     @ObservationIgnored var olderMessagesCursor: String?
     @ObservationIgnored var loadMessagesTask: Task<Void, Never>?
 
-    // MARK: Composer / outbox
+    // MARK: Outbox
 
-    var replyingToMessage: Message?
-    var editingMessage: Message?
-    /// New messages use independent optimistic outbox items; edits still use a
-    /// blocking request and temporarily lock the composer.
-    var isSavingEdit = false
+    /// New messages use independent optimistic outbox items.
     var outgoingMessagesByChatID: [String: [OutgoingMessage]] = [:] {
         didSet { updateMessageSubscriptions() }
     }
     @ObservationIgnored var outgoingSendTasks: [OutgoingMessage.ID: Task<Void, Never>] = [:]
     /// Carries exact outbox identity across the local-to-canonical handoff.
     @ObservationIgnored var onOutgoingMessageConfirmed: ((OutgoingMessage.ID, Message) -> Void)?
+    /// Called with a chat as it closes, so its composers end their replies and edits.
+    @ObservationIgnored var onChatClosed: ((String) -> Void)?
+    /// Called with a thread's composer as the thread closes. The inspector
+    /// keeps the thread's views while hidden, so the composer must let go.
+    @ObservationIgnored var onThreadClosed: ((ComposerTarget) -> Void)?
 
     @ObservationIgnored private var resyncTask: Task<Void, Never>?
 
@@ -259,6 +274,7 @@ final class ChatStore {
         resyncTask = nil
         // Clearing the selection also resets the open timeline.
         resetChatList()
+        activeThread = nil
         connectedAccounts = []
         currentUserProfile = nil
         searchQuery = ""
@@ -344,8 +360,9 @@ final class ChatStore {
         case .messagesUpserted(let chatID, let incoming):
             // Reconcile first so a confirmed send never renders twice.
             reconcileOutgoingMessages(with: incoming, chatID: chatID)
+            if isThreadPresented, chatID == activeThread?.chatID { activeThread?.upsert(incoming) }
             // Background chats read their timeline from the database on open.
-            if chatID == selectedChatID { upsertMessages(incoming) }
+            if chatID == selectedChatID { upsertMessages(incoming.filter { !$0.isHiddenThreadReply }) }
         case .receiptUpdated(let chatID, let readKey):
             if chatID == selectedChatID { lastReadByOtherSortKey = readKey }
         case .typingUpdated(let chatID, let participants):
@@ -365,6 +382,7 @@ final class ChatStore {
             guard let self, !Task.isCancelled else { return }
             await loadChats()
             await loadMessages()
+            if isThreadPresented { activeThread?.load() }
         }
     }
 
@@ -374,6 +392,22 @@ final class ChatStore {
     func handleMessageError(_ error: any Error) {
         if isCancellationLikeError(error) { return }
         messagesError = error.localizedDescription
+    }
+
+    /// Clears the banner of the timeline a composer belongs to, after it succeeds.
+    func clearMessageError(in target: ComposerTarget) {
+        if target.isThread {
+            if activeThread?.rootID == target.threadRootID { activeThread?.error = nil }
+        } else {
+            messagesError = nil
+        }
+    }
+
+    /// Shows a composer failure in the banner of the timeline it came from.
+    func handleMessageError(_ error: any Error, in target: ComposerTarget) {
+        guard target.isThread else { return handleMessageError(error) }
+        guard !isCancellationLikeError(error), let activeThread, activeThread.rootID == target.threadRootID else { return }
+        activeThread.error = error.localizedDescription
     }
 
     /// Besides `CancellationError`, a cancelled core operation surfaces as an

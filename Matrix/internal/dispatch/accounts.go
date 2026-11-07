@@ -161,6 +161,7 @@ func capabilitiesForBridge(bridgeID string) wire.AccountCapabilities {
 	normalized := strings.TrimSuffix(strings.TrimPrefix(bridgeID, "local-"), "go")
 	return wire.AccountCapabilities{
 		UnlimitedMessageEdits: normalized == "telegram",
+		Threads:               normalized == "slack",
 	}
 }
 

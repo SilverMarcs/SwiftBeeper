@@ -71,14 +71,19 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage, wai
 			return nil, err
 		}
 	}
-	var relatesTo *event.RelatesTo
-	if replyTo := strings.TrimSpace(req.ReplyToMessageID); replyTo != "" {
-		relatesTo = &event.RelatesTo{InReplyTo: &event.InReplyTo{EventID: id.EventID(replyTo)}}
+	threadRoot := id.EventID(strings.TrimSpace(req.ThreadRootID))
+	relatesTo, err := s.outgoingRelation(ctx, roomID, id.EventID(strings.TrimSpace(req.ReplyToMessageID)), threadRoot)
+	if err != nil {
+		return nil, err
+	}
+	var extra map[string]any
+	if threadRoot != "" && req.AlsoSendToChat {
+		extra = map[string]any{broadcastOutsideThreadKey: true}
 	}
 
 	// The SDK derives m.mentions from these Matrix links, along with HTML and
 	// plain fallbacks. A link inside a code span remains ordinary code text.
-	dbEvent, err := cli.SendMessage(ctx, roomID, base, nil, text, relatesTo, nil, nil)
+	dbEvent, err := cli.SendMessage(ctx, roomID, base, extra, text, relatesTo, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send message: %w", err)
 	}
@@ -106,11 +111,18 @@ func (s *Dispatcher) NotificationReply(ctx context.Context, roomID id.RoomID, ev
 	if roomID == "" || text == "" {
 		return nil, errors.New("a conversation and reply text are required")
 	}
+	cli := s.rt.Client()
 	content := &event.MessageEventContent{MsgType: event.MsgText, Body: text}
 	if eventID != "" {
 		content.RelatesTo = &event.RelatesTo{InReplyTo: &event.InReplyTo{EventID: eventID}}
+		// Answering a thread reply continues its thread, as it would in the
+		// network's own app.
+		if target, err := cli.DB.Event.GetByID(ctx, eventID); err == nil && target != nil {
+			if root := threadRootOf(target); root != "" {
+				content.RelatesTo = (&event.RelatesTo{}).SetThread(root, eventID)
+			}
+		}
 	}
-	cli := s.rt.Client()
 	if !cli.State().IsVerified {
 		return nil, errors.New("open Relay to finish signing in before replying")
 	}

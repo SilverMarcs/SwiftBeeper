@@ -128,6 +128,10 @@ func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID) []syncChang
 					targetID = string(evt.RelatesTo)
 				}
 				messageIDs[targetID] = struct{}{}
+				// A reply changes its thread root's summary.
+				if root := threadRootOf(evt); root != "" {
+					messageIDs[string(root)] = struct{}{}
+				}
 			case evtType == event.StateMember.Type ||
 				evtType == event.StateRoomName.Type ||
 				evtType == event.StateRoomAvatar.Type ||
@@ -169,12 +173,54 @@ func sortedNonBlankKeys(values map[string]struct{}) []string {
 }
 
 // loadMessagesByID maps the given message IDs to complete messages, in the
-// order given, skipping any that don't map to a message.
+// order given, skipping any that don't map to a message. The roots of thread
+// replies among them follow, since a reply, its edit or its deletion changes
+// the root's summary.
 func (s *Dispatcher) loadMessagesByID(chatID string, messageIDs []string) ([]wire.Message, error) {
 	ctx := context.Background()
-	cli := s.rt.Client()
 	roomID := id.RoomID(chatID)
 
+	events, err := s.loadRoomEventsByID(ctx, roomID, messageIDs)
+	if err != nil || len(events) == 0 {
+		return nil, err
+	}
+	requested := make(map[string]bool, len(messageIDs))
+	for _, messageID := range messageIDs {
+		requested[messageID] = true
+	}
+	var roots []string
+	for _, evt := range events {
+		if root := string(threadRootOf(evt)); root != "" && !requested[root] && !slices.Contains(roots, root) {
+			roots = append(roots, root)
+		}
+	}
+	if len(roots) > 0 {
+		rootEvents, err := s.loadRoomEventsByID(ctx, roomID, roots)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, rootEvents...)
+	}
+	messages, err := s.mapEvents(ctx, roomID, events)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]wire.Message, len(messages))
+	for _, message := range messages {
+		message.TransactionID = strings.TrimSpace(message.TransactionID)
+		byID[message.ID] = message
+	}
+	output := make([]wire.Message, 0, len(byID))
+	for _, messageID := range append(slices.Clone(messageIDs), roots...) {
+		if entry, ok := byID[messageID]; ok {
+			output = append(output, entry)
+		}
+	}
+	return output, nil
+}
+
+// loadRoomEventsByID reads the room's events with these IDs, in no order.
+func (s *Dispatcher) loadRoomEventsByID(ctx context.Context, roomID id.RoomID, messageIDs []string) ([]*database.Event, error) {
 	args := []any{roomID}
 	for _, messageID := range slices.Compact(slices.Sorted(slices.Values(messageIDs))) {
 		if messageID != "" {
@@ -188,33 +234,7 @@ func (s *Dispatcher) loadMessagesByID(chatID string, messageIDs []string) ([]wir
 	if err != nil || len(rowIDs) == 0 {
 		return nil, err
 	}
-	events, err := cli.DB.Event.GetByRowIDs(ctx, rowIDs...)
-	if err != nil {
-		return nil, err
-	}
-	if err = s.populateTimelinePositions(ctx, events); err != nil {
-		return nil, err
-	}
-	if err = s.populateLastEditRefs(ctx, events); err != nil {
-		return nil, err
-	}
-	names := s.loadNamesForEvents(ctx, events)[roomID]
-	reactions, _ := s.loadReactionMap(ctx, roomID, events)
-
-	byID := make(map[string]wire.Message, len(events))
-	for _, evt := range events {
-		if message, err := s.mapEventToMessage(evt, names, reactions); err == nil {
-			message.TransactionID = strings.TrimSpace(evt.TransactionID)
-			byID[message.ID] = message
-		}
-	}
-	output := make([]wire.Message, 0, len(byID))
-	for _, messageID := range messageIDs {
-		if entry, ok := byID[messageID]; ok {
-			output = append(output, entry)
-		}
-	}
-	return output, nil
+	return s.rt.Client().DB.Event.GetByRowIDs(ctx, rowIDs...)
 }
 
 func (s *Dispatcher) queryEventRowIDs(ctx context.Context, query string, args ...any) ([]database.EventRowID, error) {

@@ -1,35 +1,36 @@
 import SwiftUI
 
-/// The inline composer's Send button, which saves instead while editing.
+/// The inline composers' Send button, which saves instead while editing.
 struct ComposerSendButton: View {
-    @Environment(InputManager.self) private var input
-    @Environment(ChatStore.self) private var chatStore
     @Environment(\.outgoingBubbleColor) private var outgoingBubbleColor
 
+    let isEditing: Bool
+    let isSaving: Bool
+    let isDisabled: Bool
     let submit: () -> Void
 
     var body: some View {
         Button(action: submit) {
-            if chatStore.isSavingEdit {
+            if isSaving {
                 ProgressView()
                     #if os(macOS)
                     .controlSize(.small)
                     #endif
             } else {
-                Label(input.isEditing ? "Save" : "Send", systemImage: input.isEditing ? "checkmark" : "arrow.up")
+                Label(isEditing ? "Save" : "Send", systemImage: isEditing ? "checkmark" : "arrow.up")
                     .labelStyle(.iconOnly)
                     .font(.title3)
                     .bold()
             }
         }
-        .opacity(input.sendButtonDisabled ? 0.35 : 0.85)
+        .opacity(isDisabled ? 0.35 : 0.85)
         #if os(macOS)
         .controlSize(.large)
         #endif
         .buttonStyle(.glassProminent)
         .tint(outgoingBubbleColor)
         .buttonBorderShape(.circle)
-        .allowsHitTesting(!input.sendButtonDisabled)
+        .allowsHitTesting(!isDisabled)
         .offset(y: -2)
     }
 }

@@ -444,13 +444,29 @@ final class TimelineKeyboardFollower {
         // Search presentation swaps visible fields without necessarily
         // removing the previous one from its window. Resolve the current
         // composer for this commit instead of retaining a stale clone.
-        guard let window = scrollView?.window, let composer = findComposer(in: window) else { return nil }
+        guard let scrollView, let window = scrollView.window,
+              let composer = composerContainer(of: scrollView).flatMap({ findComposer(in: $0, window: window) })
+                ?? findComposer(in: window, window: window) else { return nil }
         return composer.convert(composer.bounds, to: window).minY
+    }
+
+    /// The navigation controller's view holding this timeline and its bottom
+    /// bar. A thread's sheet and the chat beneath it each have a composer, so
+    /// searching the whole window could find the other one.
+    private func composerContainer(of scrollView: UIScrollView) -> UIView? {
+        var responder: UIResponder? = scrollView
+        while let current = responder {
+            if let controller = current as? UIViewController, let navigationController = controller.navigationController {
+                return navigationController.view
+            }
+            responder = current.next
+        }
+        return nil
     }
 
     /// The lowest visible search field: the composer UIKit draws in the
     /// bottom bar, which follows the keyboard.
-    private func findComposer(in window: UIWindow) -> UIView? {
+    private func findComposer(in container: UIView, window: UIWindow) -> UIView? {
         var best: (view: UIView, maxY: CGFloat)?
         func visit(_ view: UIView) {
             guard !view.isHidden, view.alpha > 0.01 else { return }
@@ -464,7 +480,7 @@ final class TimelineKeyboardFollower {
             }
             view.subviews.forEach(visit)
         }
-        visit(window)
+        visit(container)
         return best?.view
     }
 }

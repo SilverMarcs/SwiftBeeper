@@ -7,9 +7,6 @@ import SwiftUI
 final class MessageSendAnimator {
     private(set) var flights: [MessageSendFlight] = []
 
-    // Read at submission, before clearing the draft can shrink the composer.
-    @ObservationIgnored var sourceFrame: (() -> CGRect?)?
-    @ObservationIgnored var searchReferenceFrame = CGRect.zero
     @ObservationIgnored private var expiryTasks: [UUID: Task<Void, Never>] = [:]
 
     func begin(_ message: OutgoingMessage, from frame: CGRect?) {

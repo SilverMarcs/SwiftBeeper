@@ -22,13 +22,6 @@ struct ImageGalleryLayout {
         }
     }
 
-    /// Every tile's side. Fixed up front so the row keeps its height while
-    /// the images load, and the timeline doesn't jump.
-    var tileSide: CGFloat {
-        let gaps = Self.spacing * CGFloat(columns - 1)
-        return (MediaBubbleSize.maxWidth - gaps) / CGFloat(columns)
-    }
-
     /// The number shown over `index`, or zero when it shows none.
     func hiddenCount(onTile index: Int) -> Int {
         index == visibleCount - 1 ? hiddenCount : 0

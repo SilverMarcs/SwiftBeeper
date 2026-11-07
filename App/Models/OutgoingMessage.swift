@@ -15,6 +15,10 @@ struct OutgoingMessage: Identifiable, Equatable {
     let mentions: [ComposerMention]
     let attachments: [PendingAttachment]
     let replyToMessageID: String?
+    /// The thread this message replies in, if any.
+    let threadRootID: String?
+    /// Whether a thread reply also goes to the main timeline.
+    let alsoSendToChat: Bool
     let createdAt: Date
     var state: OutgoingMessageState = .sending
     var uploadFileNameByAttachmentID: [PendingAttachment.ID: String] = [:]
@@ -29,6 +33,8 @@ struct OutgoingMessage: Identifiable, Equatable {
         mentions: [ComposerMention] = [],
         attachments: [PendingAttachment],
         replyToMessageID: String?,
+        threadRootID: String? = nil,
+        alsoSendToChat: Bool = false,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -37,10 +43,16 @@ struct OutgoingMessage: Identifiable, Equatable {
         self.mentions = mentions
         self.attachments = attachments
         self.replyToMessageID = replyToMessageID
+        self.threadRootID = threadRootID
+        self.alsoSendToChat = alsoSendToChat
         self.createdAt = createdAt
     }
 
     var timelineKey: String { "outgoing-\(id.uuidString)" }
+
+    /// Whether the main timeline shows this row: anything but a thread reply
+    /// kept to its thread.
+    var showsInMainTimeline: Bool { threadRootID == nil || alsoSendToChat }
 
     /// One confirmed message per attachment, or one for a text-only send.
     var expectedConfirmationCount: Int {
@@ -61,6 +73,10 @@ struct OutgoingMessage: Identifiable, Equatable {
            pendingMessageIDs.contains(transactionID) {
             return true
         }
+
+        // Without a transaction ID, the same text in the main timeline and in
+        // a thread are different messages.
+        guard message.threadRootID == threadRootID else { return false }
 
         if attachments.isEmpty {
             return message.text?.trimmed == text

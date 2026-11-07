@@ -5,30 +5,30 @@ struct ComposerMentionPopover: ViewModifier {
     @Environment(InputManager.self) private var input
     @State private var isPresented = false
 
+    let composer: Composer
     let isFocused: Bool
     let restoreCursor: (Int) -> Void
 
     func body(content: Content) -> some View {
+        let suggestions = input.mentionSuggestions(in: composer)
         content
             .popover(isPresented: $isPresented, attachmentAnchor: .point(.bottom), arrowEdge: .bottom) {
-                MentionSuggestionsPopover(participants: input.mentionSuggestions, select: insertMention)
+                MentionSuggestionsPopover(participants: suggestions, select: insertMention)
             }
-            .task(id: input.mentionQuery == nil ? nil : input.mentionChatID) {
-                await input.loadMentionParticipants()
+            .task(id: input.mentionQuery(in: composer) == nil ? nil : input.mentionChatID(for: composer)) {
+                await input.loadMentionParticipants(for: composer)
             }
-            .onChange(of: input.mentionSuggestions, initial: true) { _, participants in
+            .onChange(of: suggestions, initial: true) { _, participants in
                 isPresented = !participants.isEmpty && (isFocused || isPresented)
             }
             .onChange(of: isFocused) { _, focused in
-                if focused { isPresented = !input.mentionSuggestions.isEmpty }
+                if focused { isPresented = !suggestions.isEmpty }
             }
             .onChange(of: isPresented) { _, presented in
-                if !presented { input.dismissedMentionQuery = input.mentionQuery }
+                if !presented { composer.dismissedMentionQuery = input.mentionQuery(in: composer) }
             }
-            .onChange(of: input.selectedChatID) {
+            .onChange(of: composer.target) {
                 isPresented = false
-                input.composerSelection = nil
-                input.dismissedMentionQuery = nil
             }
             .onDisappear {
                 isPresented = false
@@ -36,14 +36,14 @@ struct ComposerMentionPopover: ViewModifier {
     }
 
     private func insertMention(_ participant: ChatParticipant) {
-        guard let offset = input.insertMention(participant) else { return }
+        guard let offset = input.insertMention(participant, in: composer) else { return }
         isPresented = false
         restoreCursor(offset)
     }
 }
 
 extension View {
-    func composerMentionPopover(isFocused: Bool, restoreCursor: @escaping (Int) -> Void) -> some View {
-        modifier(ComposerMentionPopover(isFocused: isFocused, restoreCursor: restoreCursor))
+    func composerMentionPopover(_ composer: Composer, isFocused: Bool, restoreCursor: @escaping (Int) -> Void) -> some View {
+        modifier(ComposerMentionPopover(composer: composer, isFocused: isFocused, restoreCursor: restoreCursor))
     }
 }

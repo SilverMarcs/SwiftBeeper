@@ -2,44 +2,28 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 
-/// Drives everything composer-related: the per-chat draft text, the editing /
-/// reply lifecycle, attachment intake, and submitting. It sits on top of
-/// `ChatStore` (which owns the actual send/edit/outbox state) so that both
-/// the macOS/iPad inline composer (`MessageInputView`) and the iPhone
-/// `.searchable` input can drive the exact same state through one object.
+/// Drives every composer: one `Composer` per chat and thread, holding its
+/// draft, attachments, and reply or edit, plus what they share: dictation,
+/// mention suggestions, and the send animation. It sits on top of
+/// `ChatStore`, which owns sending, edits, and the outbox, so the inline
+/// composer (`MessageInputView`) and the iPhone `.searchable` composer drive
+/// the same state.
 @MainActor
 @Observable
 final class InputManager {
     let dictation = ComposerDictation()
     private(set) var isSubmittingDictation = false
-    private(set) var dictationFocusRequestID: UUID?
+    /// The composer the running dictation writes into.
+    private(set) var dictationTarget: ComposerTarget?
     let chatStore: ChatStore
     let sendAnimator = MessageSendAnimator()
 
-    /// Per-chat draft text, keyed by chat ID, so switching chats keeps drafts.
-    var draftsByChatID: [String: ComposerDraft] = [:]
-    var composerSelection: NSRange?
     var mentionParticipants: [ChatParticipant] = []
     var mentionParticipantsChatID: String?
-    var dismissedMentionQuery: ComposerMentionQuery?
-    /// Attachments belong to the chat where intake began. In particular, a
-    /// PhotosPicker transfer may finish after the user has navigated elsewhere.
-    private var pendingAttachmentsByChatID: [String: [PendingAttachment]] = [:]
-    var attachmentImportError: String?
-    /// Remembers which chat owns the draft being edited so an edit finishing
-    /// during navigation cannot clear the newly selected chat's draft.
-    private var editingDraftChatID: String?
 
-    /// Set true to request the inline composer grab focus on its next appear
-    /// (e.g. right after tapping "Edit"). Only the inline composer observes
-    /// this — the iPhone `.searchable` field manages its own presentation.
-    var pendingFocus = false
-
-    /// Mirrors the composer's `FocusState` (set by `MessageInputView` and
-    /// `SearchFieldComposer`) so the timeline, which owns the scroll proxy, can
-    /// scroll to the newest message, or the reply/edit target, when the
-    /// keyboard comes up.
-    var isComposerFocused = false
+    /// Created on first use. Composers are observable themselves, so adding
+    /// one from a view body doesn't invalidate anything.
+    @ObservationIgnored private var composers: [ComposerTarget: Composer] = [:]
 
     #if os(iOS)
     /// How long the composers wait before focusing for Reply or Edit. Both come
@@ -54,203 +38,201 @@ final class InputManager {
         chatStore.onOutgoingMessageConfirmed = { [sendAnimator] outgoingID, message in
             sendAnimator.confirm(outgoingID, as: message)
         }
-    }
-
-    // MARK: - Draft text
-
-    var selectedChatID: String? { chatStore.selectedChatID }
-
-    var draft: String {
-        get {
-            guard let selectedChatID else { return "" }
-            return draftsByChatID[selectedChatID]?.text ?? ""
+        // Leaving a chat ends its replies and edits, so none waits, dimming
+        // the timeline, for its return.
+        chatStore.onChatClosed = { [weak self] chatID in
+            guard let self else { return }
+            for composer in composers.values where composer.target.chatID == chatID {
+                composer.cancelAction()
+            }
         }
-        set {
-            guard let selectedChatID else { return }
-            guard newValue != draft else { return }
-            var snapshot = draftsByChatID[selectedChatID] ?? ComposerDraft()
-            snapshot.updateText(newValue)
-            composerSelection = nil
-            dismissedMentionQuery = nil
-            draftsByChatID[selectedChatID] = snapshot
+        chatStore.onThreadClosed = { [weak self] target in
+            guard let composer = self?.composers[target] else { return }
+            composer.cancelAction()
+            composer.isFocused = false
         }
     }
 
-    var trimmedDraft: String { draft.trimmed }
+    func composer(for target: ComposerTarget) -> Composer {
+        if let composer = composers[target] { return composer }
+        let composer = Composer(target: target)
+        composers[target] = composer
+        return composer
+    }
 
-    func toggleDictation(using settings: DictationSettings) {
-        guard !isSubmittingDictation, settings.isEnabled, let chatID = selectedChatID else { return }
-        let editingID = chatStore.editingMessage?.id
-        dictation.toggle(provider: OpenAITranscriber(apiKey: settings.apiKey)) { [weak self] text in
-            guard let self, selectedChatID == chatID,
-                  chatStore.editingMessage?.id == editingID else { return }
-            draft += (draft.isEmpty || draft.last?.isWhitespace == true ? "" : " ") + text
-            dictationFocusRequestID = UUID()
-        }
+    /// Whether any composer has the keyboard. Paste goes to the focused one,
+    /// or to the chat's when none is.
+    var isAnyComposerFocused: Bool {
+        composers.values.contains(where: \.isFocused)
     }
 
     /// Appends a reply that failed to send from a notification to that chat's
     /// draft, so it is ready to resend when the chat opens.
     func restoreNotificationDraft(_ text: String, for chatID: String) {
-        let existing = draftsByChatID[chatID]?.text ?? ""
-        draftsByChatID[chatID, default: ComposerDraft()].updateText(existing.isEmpty ? text : existing + "\n" + text)
-        pendingFocus = true
+        let composer = composer(for: ComposerTarget(chatID: chatID))
+        composer.text = composer.text.isEmpty ? text : composer.text + "\n" + text
+        composer.requestFocus()
     }
 
-    // MARK: - Derived composer state
+    // MARK: - Dictation
 
-    var isEditing: Bool { chatStore.editingMessage != nil }
-
-    var pendingAttachments: [PendingAttachment] {
-        guard let selectedChatID else { return [] }
-        return pendingAttachmentsByChatID[selectedChatID] ?? []
-    }
-
-    var messageFieldPrompt: String {
-        if isEditing { return "Edit message" }
-        if chatStore.replyingToMessage != nil { return "Reply message" }
-        return "Message"
-    }
-
-    var sendButtonDisabled: Bool {
-        if chatStore.selectedChat == nil || isSubmittingDictation { return true }
-        if isEditing && chatStore.isSavingEdit { return true }
-        return trimmedDraft.isEmpty && pendingAttachments.isEmpty && !dictation.isActive
-    }
-
-    // MARK: - Editing / reply lifecycle
-
-    /// Pull the message text into the draft when editing begins, and clear the
-    /// draft when the composer action ends. Call from an `.onChange` on
-    /// `chatStore.editingMessage?.id` so both platforms stay in sync.
-    func editingMessageDidChange() {
-        if let editingMessage = chatStore.editingMessage {
-            editingDraftChatID = editingMessage.chatID
-            draftsByChatID[editingMessage.chatID] = ComposerDraft(message: editingMessage)
-            composerSelection = nil
-        } else if let editingDraftChatID {
-            draftsByChatID[editingDraftChatID] = nil
-            self.editingDraftChatID = nil
+    func toggleDictation(in composer: Composer, using settings: DictationSettings) {
+        guard !isSubmittingDictation, settings.isEnabled else { return }
+        // One dictation at a time, finished by the composer that started it.
+        if dictation.isActive {
+            guard dictationTarget == composer.target else { return }
+        } else {
+            dictationTarget = composer.target
+        }
+        let editingID = composer.editing?.id
+        dictation.toggle(provider: OpenAITranscriber(apiKey: settings.apiKey)) { [weak composer] text in
+            guard let composer, composer.editing?.id == editingID else { return }
+            let draft = composer.text
+            composer.text = draft + (draft.isEmpty || draft.last?.isWhitespace == true ? "" : " ") + text
+            composer.requestDictationFocus()
         }
     }
 
-    func startEditing(_ message: Message, in chat: Chat) {
+    /// Cancels dictation when it belongs to `composer`.
+    func cancelDictation(for composer: Composer) {
+        guard dictationTarget == composer.target else { return }
+        dictation.cancel()
+    }
+
+    func isDictating(in composer: Composer) -> Bool {
+        dictationTarget == composer.target && dictation.isActive
+    }
+
+    func canSubmit(_ composer: Composer) -> Bool {
+        if isSubmittingDictation || composer.isSavingEdit { return false }
+        return composer.hasContent || isDictating(in: composer)
+    }
+
+    // MARK: - Reply and edit
+
+    func startEditing(_ message: Message, in composer: Composer) {
+        guard let chat = chatStore.chat(byID: message.chatID), chatStore.canEdit(message, in: chat) else { return }
         withAnimation {
-            chatStore.startEditing(message, in: chat)
+            composer.startEditing(message)
         }
-        pendingFocus = true
     }
 
     /// The Edit Last shortcut. Scans the timeline, so keep it out of view bodies.
-    func editMostRecentOutgoingMessage() {
+    func editMostRecentOutgoingMessage(in composer: Composer) {
         guard let chat = chatStore.selectedChat,
               let message = chatStore.timelineMessages.last(where: { chatStore.canEdit($0, in: chat) })
         else { return }
-        startEditing(message, in: chat)
+        startEditing(message, in: composer)
     }
 
-    func cancelComposerAction() {
-        withAnimation {
-            let editingChatID = chatStore.editingMessage?.chatID
-            chatStore.cancelComposerAction()
-            if let editingChatID {
-                draftsByChatID[editingChatID] = nil
-                editingDraftChatID = nil
+    /// Replies in `message`'s thread on networks that reply in threads, or
+    /// quotes it.
+    func reply(to message: Message, in composer: Composer) {
+        if !composer.target.isThread, let chat = chatStore.chat(byID: message.chatID), chatStore.repliesInThreads(in: chat) {
+            chatStore.showThread(for: message)
+            let rootID = message.threadRootID ?? message.id
+            self.composer(for: ComposerTarget(chatID: message.chatID, threadRootID: rootID)).requestFocus()
+        } else {
+            withAnimation {
+                composer.reply(to: message)
             }
+        }
+    }
+
+    func cancelAction(in composer: Composer) {
+        withAnimation {
+            composer.cancelAction()
         }
     }
 
     // MARK: - Submit
 
-    func handleSubmit(sourceFrame: CGRect? = nil) {
+    func submit(_ composer: Composer, sourceFrame: CGRect? = nil) {
         guard !isSubmittingDictation else { return }
-        if dictation.isActive {
+        if isDictating(in: composer) {
             let session = dictation.sessionID
-            let chatID = selectedChatID
-            let composerMessageID = chatStore.activeComposerMessage?.id
+            let composerMessageID = composer.activeMessage?.id
             isSubmittingDictation = true
             Task {
                 defer { isSubmittingDictation = false }
-                guard await dictation.finish(session: session), selectedChatID == chatID,
-                      chatStore.activeComposerMessage?.id == composerMessageID else { return }
-                submitDraft(sourceFrame: sourceFrame)
+                guard await dictation.finish(session: session),
+                      composer.activeMessage?.id == composerMessageID else { return }
+                submitDraft(of: composer, sourceFrame: sourceFrame)
             }
             return
         }
-        submitDraft(sourceFrame: sourceFrame)
+        submitDraft(of: composer, sourceFrame: sourceFrame)
     }
 
-    private func submitDraft(sourceFrame: CGRect?) {
-        if isEditing {
-            saveEdit()
+    private func submitDraft(of composer: Composer, sourceFrame: CGRect?) {
+        if let message = composer.editing {
+            saveEdit(of: message, in: composer)
         } else {
-            sendMessage(from: sourceFrame)
+            send(composer, from: sourceFrame)
         }
     }
 
-    private func sendMessage(from sourceFrame: CGRect?) {
-        guard let chatID = chatStore.selectedChatID else { return }
-        let snapshot = (draftsByChatID[chatID] ?? ComposerDraft()).trimmed
-        let text = snapshot.text
-        let attachments = pendingAttachments
-
-        guard !text.trimmed.isEmpty || !attachments.isEmpty else { return }
-        let animationSource = sourceFrame ?? sendAnimator.sourceFrame?()
-        draftsByChatID[chatID] = nil
-        pendingAttachmentsByChatID[chatID] = nil
-
-        if let outgoing = chatStore.sendMessage(text: text, mentions: snapshot.mentions, attachments: attachments, to: chatID) {
+    private func send(_ composer: Composer, from sourceFrame: CGRect?) {
+        let snapshot = composer.draft.trimmed
+        let attachments = composer.pendingAttachments
+        guard !snapshot.text.isEmpty || !attachments.isEmpty else { return }
+        let animationSource = sourceFrame ?? composer.sourceFrame?()
+        let outgoing = chatStore.sendMessage(
+            text: snapshot.text,
+            mentions: snapshot.mentions,
+            attachments: attachments,
+            to: composer.target,
+            replyingTo: composer.replyingTo?.id,
+            alsoSendToChat: composer.alsoSendToChat
+        )
+        composer.draft = ComposerDraft()
+        composer.pendingAttachments = []
+        composer.alsoSendToChat = false
+        composer.clearReply()
+        if let outgoing {
             sendAnimator.begin(outgoing, from: animationSource)
         }
     }
 
-    private func saveEdit() {
-        let editingChatID = chatStore.editingMessage?.chatID
-        let previousDraft = editingChatID.flatMap { draftsByChatID[$0] } ?? ComposerDraft()
+    /// Clears the draft while the save runs; a failed save restores it unless
+    /// something new was typed, and keeps the edit open.
+    private func saveEdit(of message: Message, in composer: Composer) {
+        let previousDraft = composer.draft
         let snapshot = previousDraft.trimmed
-        if let editingChatID {
-            draftsByChatID[editingChatID] = nil
-        }
-        // The draft is already clear, so the edit ending must not clear
-        // anything typed while the save runs.
-        editingDraftChatID = nil
-
+        guard !snapshot.text.isEmpty else { return }
+        composer.draft = ComposerDraft()
+        composer.isSavingEdit = true
         Task {
-            let didSave = await chatStore.saveEdit(newText: snapshot.text, mentions: snapshot.mentions)
-            guard !didSave, let editingChatID else { return }
-            // Still editing: restore the text unless something new was typed.
-            editingDraftChatID = editingChatID
-            if (draftsByChatID[editingChatID]?.text ?? "").isEmpty {
-                draftsByChatID[editingChatID] = previousDraft
+            defer { composer.isSavingEdit = false }
+            do {
+                try await APIClient.editMessage(
+                    chatID: message.chatID, messageID: message.id, text: snapshot.text, mentions: snapshot.mentions
+                )
+                composer.finishEditing(message)
+                chatStore.clearMessageError(in: composer.target)
+            } catch {
+                chatStore.handleMessageError(error, in: composer.target)
+                if composer.text.isEmpty { composer.draft = previousDraft }
             }
         }
     }
 
     // MARK: - Attachments
 
-    func removePendingAttachment(id: PendingAttachment.ID) {
-        guard let selectedChatID else { return }
-        pendingAttachmentsByChatID[selectedChatID]?.removeAll { $0.id == id }
+    func addAttachment(data: Data, fileName: String, mimeType: String, to composer: Composer) {
+        composer.pendingAttachments.append(PendingAttachment(fileData: data, fileName: fileName, mimeType: mimeType))
     }
 
-    func addAttachment(data: Data, fileName: String, mimeType: String, to chatID: String) {
-        pendingAttachmentsByChatID[chatID, default: []].append(PendingAttachment(
-            fileData: data,
-            fileName: fileName,
-            mimeType: mimeType
-        ))
-    }
-
-    func handleFileImport(_ result: Result<URL, Error>, for chatID: String) {
+    func handleFileImport(_ result: Result<URL, Error>, for composer: Composer) {
         guard case .success(let url) = result else { return }
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
 
         guard let data = try? Data(contentsOf: url) else { return }
-        addAttachment(data: data, fileName: url.lastPathComponent, mimeType: url.mimeType, to: chatID)
+        addAttachment(data: data, fileName: url.lastPathComponent, mimeType: url.mimeType, to: composer)
     }
 
-    func handlePhotoPick(_ item: PhotosPickerItem, for chatID: String) async {
+    func handlePhotoPick(_ item: PhotosPickerItem, for composer: Composer) async {
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
 
         let mimeType: String
@@ -265,23 +247,21 @@ final class InputManager {
             fileName = "photo.jpg"
         }
 
-        addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: chatID)
+        addAttachment(data: data, fileName: fileName, mimeType: mimeType, to: composer)
     }
 
-    func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard !providers.isEmpty, let targetChatID = selectedChatID else { return false }
+    func handleDrop(_ providers: [NSItemProvider], into composer: Composer) -> Bool {
+        guard !providers.isEmpty else { return false }
 
         let transfers = providers.map { DroppedAttachment.beginLoading(from: $0) }
         Task {
             for transfer in transfers {
                 do {
                     for try await attachment in transfer {
-                        pendingAttachmentsByChatID[targetChatID, default: []].append(attachment)
+                        composer.pendingAttachments.append(attachment)
                     }
                 } catch {
-                    if selectedChatID == targetChatID {
-                        attachmentImportError = error.localizedDescription
-                    }
+                    composer.attachmentImportError = error.localizedDescription
                 }
             }
         }

@@ -24,6 +24,9 @@ type Account struct {
 
 type AccountCapabilities struct {
 	UnlimitedMessageEdits bool `json:"unlimitedMessageEdits"`
+	// Threads means replies go into threads, as on Slack, which has no
+	// quoted replies.
+	Threads bool `json:"threads"`
 }
 
 type SessionOutput struct {
@@ -102,6 +105,21 @@ type Message struct {
 	// Text remains the plain body for previews, copying and editing.
 	FormattedText string           `json:"formattedText,omitempty"`
 	Mentions      *MessageMentions `json:"mentions,omitempty"`
+	// ThreadRootID is the message whose thread this one replies in. Thread
+	// replies stay out of the main timeline unless IsThreadBroadcast is set.
+	ThreadRootID string `json:"threadRootID,omitempty"`
+	// IsThreadBroadcast marks a thread reply also sent to the chat, like
+	// Slack's "Also send to channel".
+	IsThreadBroadcast bool `json:"isThreadBroadcast,omitempty"`
+	// Thread summarizes the replies to this message; nil when it has none.
+	Thread *ThreadSummary `json:"thread,omitempty"`
+}
+
+// ThreadSummary is what a thread root shows under its bubble.
+type ThreadSummary struct {
+	ReplyCount int `json:"replyCount"`
+	// The most recent repliers first, at most a few.
+	Participants []User `json:"participants"`
 }
 
 // MessageMentions preserves intentional notifications separately from visible
@@ -155,6 +173,12 @@ type ListMessagesOutput struct {
 	HasServerHistory bool `json:"hasServerHistory"`
 }
 
+// ListThreadOutput is one thread: its root and every local reply, oldest first.
+type ListThreadOutput struct {
+	Root  *Message  `json:"root,omitempty"`
+	Items []Message `json:"items"`
+}
+
 type LoadServerHistoryOutput struct {
 	// HasMore is false once the homeserver has returned the start of the room.
 	HasMore bool `json:"hasMore"`
@@ -170,6 +194,10 @@ type SendMessageInput struct {
 	ReplyToMessageID string                 `json:"replyToMessageID"`
 	Attachment       MessageAttachmentInput `json:"attachment"`
 	Mentions         []ComposerMention      `json:"mentions"`
+	// ThreadRootID sends the message as a reply in that message's thread.
+	ThreadRootID string `json:"threadRootID"`
+	// AlsoSendToChat shows a thread reply in the main timeline too.
+	AlsoSendToChat bool `json:"alsoSendToChat"`
 }
 
 // ComposerMention identifies an explicitly selected span, in UTF-16 units.

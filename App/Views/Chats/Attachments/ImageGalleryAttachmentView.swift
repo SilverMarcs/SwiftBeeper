@@ -18,7 +18,6 @@ struct ImageGalleryAttachmentView: View {
                                 url: urls[index],
                                 index: index,
                                 imageCount: urls.count,
-                                side: layout.tileSide,
                                 hiddenCount: layout.hiddenCount(onTile: index)
                             )
                         }
@@ -26,6 +25,9 @@ struct ImageGalleryAttachmentView: View {
                 }
             }
         }
+        // Columns share the width, up to the bubble's; a narrow column
+        // shrinks the squares instead of overflowing.
+        .frame(maxWidth: MediaBubbleSize.maxWidth)
         .clipShape(.rect(cornerRadius: 12))
         .contentShape(.rect(cornerRadius: 12))
     }

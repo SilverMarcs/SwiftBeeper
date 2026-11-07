@@ -5,6 +5,7 @@ import SwiftUI
 /// into pending attachments. Text pastes fall through to the text field.
 struct PasteHandler: ViewModifier {
     @Environment(InputManager.self) private var input
+    let composer: Composer
     @State private var eventMonitor: Any?
     @State private var hostingView: NSView?
 
@@ -16,18 +17,33 @@ struct PasteHandler: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onAppear {
-                eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                    let isPaste = event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "v"
-                    return isPaste && isKeyWindow() && handlePaste() ? nil : event
-                }
+            .onAppear(perform: installMonitor)
+            // The monitor captures this composer; another chat's replaces it.
+            .onChange(of: composer.target) {
+                removeMonitor()
+                installMonitor()
             }
-            .onDisappear {
-                if let eventMonitor {
-                    NSEvent.removeMonitor(eventMonitor)
-                }
-            }
+            .onDisappear(perform: removeMonitor)
             .background(HostingViewFinder(hostingView: $hostingView))
+    }
+
+    private func installMonitor() {
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let isPaste = event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "v"
+            return isPaste && isKeyWindow() && isPasteTarget && handlePaste() ? nil : event
+        }
+    }
+
+    private func removeMonitor() {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
+        eventMonitor = nil
+    }
+
+    /// The focused composer takes the paste, or the chat's when none is focused.
+    private var isPasteTarget: Bool {
+        composer.isFocused || (!composer.target.isThread && !input.isAnyComposerFocused)
     }
 
     /// The monitor is app-wide; only the composer's own window should react.
@@ -47,12 +63,10 @@ struct PasteHandler: ViewModifier {
     }
 
     private func addAttachment(from item: NSPasteboardItem) {
-        guard let chatID = input.selectedChatID else { return }
-
         if let fileURLData = item.data(forType: .fileURL),
            let fileURL = URL(dataRepresentation: fileURLData, relativeTo: nil) {
             guard let data = try? Data(contentsOf: fileURL) else { return }
-            input.addAttachment(data: data, fileName: fileURL.lastPathComponent, mimeType: fileURL.mimeType, to: chatID)
+            input.addAttachment(data: data, fileName: fileURL.lastPathComponent, mimeType: fileURL.mimeType, to: composer)
             return
         }
         for imageType in Self.imageTypes {
@@ -61,7 +75,7 @@ struct PasteHandler: ViewModifier {
                 data: data,
                 fileName: "Pasted_Image_\(UUID().uuidString.prefix(8)).\(imageType.fileExtension)",
                 mimeType: imageType.mimeType,
-                to: chatID
+                to: composer
             )
             return
         }
@@ -87,8 +101,8 @@ private struct HostingViewFinder: NSViewRepresentable {
 }
 
 extension View {
-    func pasteHandler() -> some View {
-        modifier(PasteHandler())
+    func pasteHandler(_ composer: Composer) -> some View {
+        modifier(PasteHandler(composer: composer))
     }
 }
 #endif

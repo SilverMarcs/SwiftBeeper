@@ -153,6 +153,23 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 	if err != nil {
 		return nil, err
 	}
+	byRoomPreview := make(map[id.RoomID]*database.Event, len(events))
+	for _, evt := range events {
+		byRoomPreview[evt.RoomID] = evt
+	}
+	// The SDK previews a room's newest message, which can be a thread reply
+	// the main timeline hides. Preview the newest message it shows instead.
+	for index, evt := range events {
+		if !isHiddenThreadReply(evt) {
+			continue
+		}
+		replacement, err := s.newestTimelineMessage(ctx, evt.RoomID)
+		if err != nil {
+			return nil, err
+		}
+		events[index] = replacement
+	}
+	events = slices.DeleteFunc(events, func(evt *database.Event) bool { return evt == nil })
 	if err = s.populateLastEditRefs(ctx, events); err != nil {
 		return nil, err
 	}
@@ -160,13 +177,16 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 		return nil, err
 	}
 	names := s.loadNamesForEvents(ctx, events)
-	byRowID := make(map[database.EventRowID]*database.Event, len(events))
+	byRoom := make(map[id.RoomID]*database.Event, len(events))
 	for _, evt := range events {
-		byRowID[evt.RowID] = evt
+		byRoom[evt.RoomID] = evt
 	}
 	for _, room := range rooms {
 		summary := result[room.ID]
-		summary.preview = byRowID[room.PreviewEventRowID]
+		if byRoomPreview[room.ID] == nil || byRoomPreview[room.ID].RowID != room.PreviewEventRowID {
+			continue
+		}
+		summary.preview = byRoom[room.ID]
 		if summary.preview != nil {
 			for key, name := range names[room.ID] {
 				summary.names[key] = name
@@ -216,4 +236,16 @@ func (s *Dispatcher) syncedChatSummaries(complete *jsoncmd.SyncComplete, upserte
 		}
 	}
 	return result
+}
+
+// newestTimelineMessage is the room's newest message the main timeline shows,
+// or nil when none is stored.
+func (s *Dispatcher) newestTimelineMessage(ctx context.Context, roomID id.RoomID) (*database.Event, error) {
+	events, err := s.queryEvents(ctx, timelineSelectBase+` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker'))
+		AND (relation_type IS NULL OR relation_type<>'m.replace') AND redacted_by IS NULL AND NOT `+hiddenThreadReplySQL+`
+		ORDER BY timeline.rowid DESC LIMIT 1`, roomID)
+	if err != nil || len(events) == 0 {
+		return nil, err
+	}
+	return events[0], nil
 }

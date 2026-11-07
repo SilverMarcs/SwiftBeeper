@@ -19,6 +19,7 @@ struct ContentView: View {
                         .id(chatStore.selectedChatID)
                         #endif
                 }
+                .presentsThreads()
                 .onChange(of: chatStore.chatNavigationID) {
                     preferredCompactColumn = .detail
                 }

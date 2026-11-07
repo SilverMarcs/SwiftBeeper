@@ -1,8 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Shared message layout and scrolling, with platform-specific navigation and composers.
-struct ChatTimelineView: View {
+/// A timeline and its composer: the open chat's, or one of its threads'.
+/// Message layout and scrolling are shared; the composer is the navigation
+/// search field on iPhone and the inline composer on macOS and iPad.
+struct ChatTimelineView<Source: TimelineSource>: View {
+    let source: Source
+
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -11,39 +15,43 @@ struct ChatTimelineView: View {
     private let bottomAnchorID = "timeline-bottom"
 
     var body: some View {
-        if let selectedChat = chatStore.selectedChat {
-            let messages = chatStore.timelineMessages
-            let outgoingMessages = chatStore.outgoingMessages
+        if let chat = source.timelineChat, let target = source.composerTarget {
+            let composer = inputManager.composer(for: target)
+            let messages = source.timelineMessages
+            let outgoingMessages = source.timelineOutgoingMessages
+            let typingBubble = source.typingBubble
             let timelineEntries = TimelineEntry.entries(
                 for: messages,
                 firstUnreadID: firstUnreadID,
-                lastReadByOtherSortKey: chatStore.lastReadByOtherSortKey,
-                followingTypingSenderID: outgoingMessages.isEmpty ? chatStore.typingBubble?.participant.id : nil
+                lastReadByOtherSortKey: source.lastReadByOtherSortKey,
+                followingTypingSenderID: outgoingMessages.isEmpty ? typingBubble?.participant.id : nil
             )
             let outgoingTimelineEntries = OutgoingTimelineEntry.entries(for: outgoingMessages, following: messages)
             let timelineItems = TimelineItem.items(
                 messages: timelineEntries,
                 outgoing: outgoingTimelineEntries,
-                typing: chatStore.hasLoadedTimeline ? chatStore.typingBubble : nil,
-                messageRowIDs: chatStore.typingMessageRowIDs
+                typing: source.hasLoadedTimeline ? typingBubble : nil,
+                messageRowIDs: source.typingMessageRowIDs
             )
-            let activeComposerMessageID = chatStore.activeComposerMessage?.id
+            let activeComposerMessageID = composer.activeMessage?.id
 
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
                         LazyVStack(spacing: 0) {
-                            if chatStore.isLoadingOlderMessages || chatStore.isLoadingServerHistory {
+                            if source.isLoadingOlderTimeline {
                                 ProgressView()
                                     .frame(maxWidth: .infinity)
-                            } else if chatStore.canLoadServerHistory {
-                                LoadServerHistoryButton()
+                            } else if source.canLoadServerHistory {
+                                LoadServerHistoryButton {
+                                    await source.loadServerHistory()
+                                }
                             }
 
                             ForEach(timelineItems) { item in
                                 TimelineItemRow(
                                     item: item,
-                                    chat: selectedChat,
+                                    chat: chat,
                                     firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
                                     activeComposerMessageID: activeComposerMessageID
                                 )
@@ -52,7 +60,7 @@ struct ChatTimelineView: View {
                         }
                         .animation(
                             reduceMotion ? nil : .easeInOut(duration: ChatVisualStyle.typingBubbleExpansionDuration),
-                            value: chatStore.typingBubble?.id
+                            value: typingBubble?.id
                         )
                         // Keep the scroll target available independently of lazy rows.
                         Color.clear
@@ -62,7 +70,7 @@ struct ChatTimelineView: View {
                     }
                     #if os(iOS)
                     .if(isIPhone) {
-                        $0.followsComposerOnKeyboard()
+                        $0.followsComposerOnKeyboard(composer)
                     }
                     #endif
                 }
@@ -75,8 +83,8 @@ struct ChatTimelineView: View {
                     }
                 })
                 .savesAttachments()
-                // Recreate only the viewport when a chat opens or its first database page arrives
-                .id("\(selectedChat.id)-\(chatStore.hasLoadedTimeline)")
+                // Recreate only the viewport when a timeline opens or its first database page arrives
+                .id("\(target.chatID)-\(target.threadRootID ?? "")-\(source.hasLoadedTimeline)")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.bottom, for: .alignment)
                 #if os(macOS)
@@ -88,7 +96,7 @@ struct ChatTimelineView: View {
                 .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
-                .scrollsOnComposerFocus(chatID: selectedChat.id) {
+                .scrollsOnComposerFocus(composer) {
                     scrollToLatest(with: proxy)
                 } scrollToComposerMessage: { messageID in
                     scrollAboveKeyboard(messageID, with: proxy)
@@ -98,30 +106,30 @@ struct ChatTimelineView: View {
                     geometry.contentOffset.y + geometry.contentInsets.top < 80
                 } action: { _, nearTop in
                     guard nearTop, !messages.isEmpty else { return }
-                    Task { await chatStore.loadOlderMessages() }
+                    Task { await source.loadOlderTimeline() }
                 }
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.visibleRect.maxY >= geometry.contentSize.height - 80
                 } action: { _, nearBottom in
                     isNearBottom = nearBottom
                 }
-                .onChange(of: chatStore.typingBubble?.id) { _, newValue in
+                .onChange(of: typingBubble?.id) { _, newValue in
                     guard newValue != nil, isNearBottom else { return }
                     scrollToLatest(with: proxy)
                 }
-                .onChange(of: selectedChat.id, initial: true) { _, _ in
+                .onChange(of: target, initial: true) { _, _ in
                     firstUnreadID = nil
                     isNearBottom = true
                 }
-                .onChange(of: chatStore.hasLoadedTimeline, initial: true) { _, loaded in
-                    guard loaded else { return }
-                    firstUnreadID = TimelineEntry.firstUnreadMessageID(in: messages, chat: selectedChat)
+                .onChange(of: source.hasLoadedTimeline, initial: true) { _, loaded in
+                    guard loaded, source.showsUnreadDivider else { return }
+                    firstUnreadID = TimelineEntry.firstUnreadMessageID(in: messages, chat: chat)
                 }
                 .onChange(of: MessageListTracker(
                     count: messages.count + outgoingMessages.count,
                     lastID: outgoingMessages.last?.timelineKey ?? messages.last?.id
                 )) { oldTracker, newTracker in
-                    guard chatStore.hasLoadedTimeline, oldTracker.lastID != nil else { return }
+                    guard source.hasLoadedTimeline, oldTracker.lastID != nil else { return }
                     // Scroll when the newest row changes and the count did not
                     // shrink: pagination keeps lastID stable and deletions shrink
                     // the count, so both are skipped.
@@ -143,7 +151,7 @@ struct ChatTimelineView: View {
                     // place the target now. Otherwise ScrollOnComposerFocus
                     // places it once the keyboard rises, leaving it untouched
                     // while the context menu dismisses.
-                    guard inputManager.isComposerFocused else { return }
+                    guard composer.isFocused else { return }
                     scrollAboveKeyboard(newValue, with: proxy)
                     #else
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -153,45 +161,47 @@ struct ChatTimelineView: View {
                 }
                 .animation(.default, value: activeComposerMessageID)
                 .overlay {
-                    if !chatStore.hasLoadedTimeline,
-                       let error = chatStore.messagesError, !chatStore.isLoadingMessages {
+                    if !source.hasLoadedTimeline,
+                       let error = source.timelineError, !source.isLoadingTimeline {
                         ContentUnavailableView {
                             Label("Couldn’t Load Messages", systemImage: "exclamationmark.bubble")
                         } description: {
                             Text(error)
                         } actions: {
                             Button("Try Again") {
-                                Task { await chatStore.loadMessages() }
+                                Task { await source.loadTimeline() }
                             }
                         }
                     }
                 }
                 #if os(iOS)
                 .if(isIPhone) {
-                    $0.searchFieldComposer()
+                    $0.searchFieldComposer(composer, chat: chat)
                 }
                 #endif
                 .if(isMacOrPad) {
                     // macOS and iPad share the inline composer.
                     $0.safeAreaBar(edge: .bottom, spacing: 0) {
-                        MessageInputView()
+                        MessageInputView(composer: composer, chat: chat, error: source.timelineError)
                     }
                 }
+                // The conversation's composer, for message actions such as Edit.
+                .environment(\.composer, composer)
                 // Covers the composer too, so Send matches the bubbles it sends.
-                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: selectedChat.accountID).outgoingBubbleColor)
+                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: chat.accountID).outgoingBubbleColor)
                 .onDrop(of: [.item], isTargeted: nil) { providers in
-                    inputManager.handleDrop(providers)
+                    inputManager.handleDrop(providers, into: composer)
                 }
                 .alert("Couldn’t Attach Item", isPresented: Binding(
-                    get: { inputManager.attachmentImportError != nil },
-                    set: { if !$0 { inputManager.attachmentImportError = nil } }
+                    get: { composer.attachmentImportError != nil },
+                    set: { if !$0 { composer.attachmentImportError = nil } }
                 )) {
-                    Button("OK") { inputManager.attachmentImportError = nil }
+                    Button("OK") { composer.attachmentImportError = nil }
                 } message: {
-                    Text(inputManager.attachmentImportError ?? "")
+                    Text(composer.attachmentImportError ?? "")
                 }
             }
-            .modifier(ComposerDictationLifecycle())
+            .modifier(ComposerDictationLifecycle(composer: composer))
         } else {
             ContentUnavailableView(
                 "Pick a Chat",

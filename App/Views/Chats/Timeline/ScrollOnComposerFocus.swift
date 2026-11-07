@@ -12,22 +12,18 @@ import SwiftUI
 /// timeline row in that turn delays the correction, so the timeline settles
 /// after the composer.
 struct ScrollOnComposerFocus: ViewModifier {
-    @Environment(ChatStore.self) private var chatStore
-    @Environment(InputManager.self) private var inputManager
     @State private var scrollTask: Task<Void, Never>?
 
-    let chatID: Chat.ID
+    let composer: Composer
     let scrollToLatest: () -> Void
     let scrollToComposerMessage: (Message.ID) -> Void
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: inputManager.isComposerFocused) { _, focused in
+            .onChange(of: composer.isFocused) { _, focused in
                 scrollTask?.cancel()
                 guard focused else { return }
-                let composerMessageID = chatStore.activeComposerMessage?.id
-                // Focus changes keep arriving after the viewport is recreated
-                // for another chat. Schedule from that event, not .task(id:).
+                let composerMessageID = composer.activeMessage?.id
                 // The wait lets the keyboard's safe area apply first.
                 scrollTask = Task { @MainActor in
                     do {
@@ -35,15 +31,17 @@ struct ScrollOnComposerFocus: ViewModifier {
                     } catch {
                         return
                     }
-                    guard !Task.isCancelled,
-                          chatStore.selectedChatID == chatID,
-                          chatStore.activeComposerMessage?.id == composerMessageID else { return }
+                    guard !Task.isCancelled, composer.activeMessage?.id == composerMessageID else { return }
                     if let composerMessageID {
                         scrollToComposerMessage(composerMessageID)
                     } else {
                         scrollToLatest()
                     }
                 }
+            }
+            // Another conversation's composer takes over this viewport.
+            .onChange(of: composer.target) {
+                scrollTask?.cancel()
             }
             .onDisappear {
                 scrollTask?.cancel()
@@ -55,12 +53,12 @@ extension View {
     /// Scrolls to the reply/edit target, or the newest message, when the
     /// search-field or inline composer gains focus.
     func scrollsOnComposerFocus(
-        chatID: Chat.ID,
+        _ composer: Composer,
         scrollToLatest: @escaping () -> Void,
         scrollToComposerMessage: @escaping (Message.ID) -> Void
     ) -> some View {
         modifier(ScrollOnComposerFocus(
-            chatID: chatID,
+            composer: composer,
             scrollToLatest: scrollToLatest,
             scrollToComposerMessage: scrollToComposerMessage
         ))

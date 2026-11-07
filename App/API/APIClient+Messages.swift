@@ -18,17 +18,41 @@ extension APIClient {
         return try await execute("load-server-history", arguments: Arguments(chatID: chatID))
     }
 
-    static func sendMessage(chatID: String, text: String?, replyToMessageID: String? = nil, attachment: MessageAttachmentInput? = nil, mentions: [ComposerMention] = []) async throws -> SendMessageOutput {
+    /// Sends a message, in `threadRootID`'s thread when given. `alsoSendToChat`
+    /// shows a thread reply in the main timeline too.
+    static func sendMessage(
+        chatID: String,
+        text: String?,
+        replyToMessageID: String? = nil,
+        threadRootID: String? = nil,
+        alsoSendToChat: Bool = false,
+        attachment: MessageAttachmentInput? = nil,
+        mentions: [ComposerMention] = []
+    ) async throws -> SendMessageOutput {
         struct Arguments: Encodable {
             let chatID: String
             let text: String?
             let replyToMessageID: String?
+            let threadRootID: String?
+            let alsoSendToChat: Bool
             let attachment: MessageAttachmentInput?
             let mentions: [ComposerMention]
         }
         return try await execute("send-message", arguments: Arguments(
-            chatID: chatID, text: text, replyToMessageID: replyToMessageID, attachment: attachment, mentions: mentions
+            chatID: chatID, text: text, replyToMessageID: replyToMessageID, threadRootID: threadRootID,
+            alsoSendToChat: alsoSendToChat, attachment: attachment, mentions: mentions
         ))
+    }
+
+    /// A thread's root and replies from the local database.
+    static func listThread(chatID: String, threadRootID: String) async throws -> ListThreadOutput {
+        try await execute("list-thread", arguments: ThreadArguments(chatID: chatID, threadRootID: threadRootID))
+    }
+
+    /// Fetches a thread's root and replies from the server into the local
+    /// database, where `listThread` reads them.
+    static func loadThreadHistory(chatID: String, threadRootID: String) async throws {
+        try await executeRaw("load-thread-history", arguments: ThreadArguments(chatID: chatID, threadRootID: threadRootID))
     }
 
     static func editMessage(chatID: String, messageID: String, text: String, mentions: [ComposerMention] = []) async throws {
@@ -52,6 +76,11 @@ extension APIClient {
     static func deleteMessage(chatID: String, messageID: String) async throws {
         try await executeRaw("delete-message", arguments: MessageArguments(chatID: chatID, messageID: messageID))
     }
+}
+
+private struct ThreadArguments: Encodable {
+    let chatID: String
+    let threadRootID: String
 }
 
 private struct MessageArguments: Encodable {

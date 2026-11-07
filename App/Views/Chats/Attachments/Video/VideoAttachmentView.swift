@@ -57,7 +57,7 @@ struct VideoAttachmentView: View {
                     }
             }
         }
-        .frame(width: size.width, height: size.height)
+        .mediaBubbleFrame(size)
         .clipShape(.rect(cornerRadius: 12))
         .onScrollVisibilityChange(threshold: 0.25) { isVisible = $0 }
         .task(id: loadRequest) {

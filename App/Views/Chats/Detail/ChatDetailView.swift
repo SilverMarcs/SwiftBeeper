@@ -13,7 +13,7 @@ struct ChatDetailView: View {
 
     var body: some View {
         let selectedChat = chatStore.selectedChat
-        ChatTimelineView()
+        ChatTimelineView(source: chatStore)
             #if os(macOS)
             .navigationTitle("")
             #endif

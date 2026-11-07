@@ -5,7 +5,7 @@ import Foundation
 extension ChatStore {
     /// The open timeline without server echoes that an outgoing row still shows.
     var timelineMessages: [Message] {
-        let shownByOutgoingRows = Set(outgoingMessages.flatMap(\.confirmedMessageIDs))
+        let shownByOutgoingRows = Set(timelineOutgoingMessages.flatMap(\.confirmedMessageIDs))
         guard !shownByOutgoingRows.isEmpty else { return messages }
         return messages.filter { !shownByOutgoingRows.contains($0.id) }
     }
@@ -133,8 +133,7 @@ extension ChatStore {
         isLoadingServerHistory = false
         isLoadingMessages = false
         lastReadByOtherSortKey = nil
-        replyingToMessage = nil
-        editingMessage = nil
+        closeThread()
         messagesError = nil
     }
 

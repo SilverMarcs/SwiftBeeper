@@ -6,12 +6,15 @@ struct MessageRowView: View {
     let entry: TimelineEntry
     let chat: Chat
     @Environment(ChatStore.self) private var chatStore
+    @Environment(\.composer) private var composer
 
     @State private var profileSheetParticipant: ChatParticipant?
     @State private var pendingDirectChat: Chat?
 
     var body: some View {
         let message = entry.message
+        // Rows in a thread drop the thread footer and the broadcast label.
+        let isInThread = composer?.target.isThread == true
         let isOutgoing = message.isSender
         let showsSenderIdentity = !isOutgoing && !chat.isSingleChat
         HStack(alignment: .bottom, spacing: 6) {
@@ -43,6 +46,10 @@ struct MessageRowView: View {
                         .bold()
                 }
 
+                if message.isThreadBroadcast == true && !isInThread {
+                    ThreadBroadcastLabel(message: message)
+                }
+
                 if message.linkedMessageID?.isEmpty == false {
                     ReplyPreviewView(linkedMessage: entry.linkedMessage, isOutgoing: isOutgoing)
                         .modifier(TypingBubbleContentReveal())
@@ -55,6 +62,14 @@ struct MessageRowView: View {
                         })
                 } else {
                     GalleryMessageContentView(messages: entry.messages, chat: chat)
+                }
+
+                if !isInThread, let thread = message.thread, thread.replyCount > 0 {
+                    ThreadSummaryButton(message: message, summary: thread)
+                } else if isInThread, message.isThreadBroadcast == true {
+                    Text(chat.isSingleChat ? "Also sent as direct message" : "Also sent to \(chat.displayTitle)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 if isOutgoing && entry.showsReadIndicator {

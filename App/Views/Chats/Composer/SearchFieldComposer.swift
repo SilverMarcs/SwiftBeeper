@@ -1,31 +1,30 @@
 #if os(iOS)
 import SwiftUI
 
-/// iPhone's composer: the navigation search field, with Return sending,
-/// Close keeping the draft, attachments in the bottom bar, and reply/edit
-/// state tied to the search session.
+/// iPhone's composer, for a chat or a thread: the navigation search field,
+/// with Return sending, Close keeping the draft, attachments in the bottom
+/// bar, and reply/edit state tied to the search session.
 struct SearchFieldComposer: ViewModifier {
     @Environment(DictationSettings.self) private var dictationSettings
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
+
+    let composer: Composer
+    let chat: Chat
 
     @FocusState private var isFocused: Bool
     @State private var isPresented = false
     @State private var delegateProxy: TextFieldDelegateProxy?
     @State private var searchBarDelegateProxy: SearchBarDelegateProxy?
     @State private var searchField = ComposerSearchFieldReference()
-    @State private var composerActionFocusTask: Task<Void, Never>?
     @State private var dictationFocusTask: Task<Void, Never>?
     @State private var attachmentFocusTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
             // The timeline's bottom edge sits just above the native composer.
-            .composerMentionPopover(isFocused: isFocused, restoreCursor: restoreMentionCursor)
-            .onChange(of: chatStore.editingMessage?.id) { _, _ in
-                inputManager.editingMessageDidChange()
-            }
-            .searchable(text: Bindable(inputManager).draft, isPresented: $isPresented, prompt: Text(inputManager.messageFieldPrompt))
+            .composerMentionPopover(composer, isFocused: isFocused, restoreCursor: restoreMentionCursor)
+            .searchable(text: Bindable(composer).text, isPresented: $isPresented, prompt: Text(composer.prompt))
             .autocorrectionDisabled(false)
             .textInputAutocapitalization(.sentences)
             .searchFocused($isFocused)
@@ -35,12 +34,12 @@ struct SearchFieldComposer: ViewModifier {
                     .onGeometryChange(for: CGRect.self) { geometry in
                         geometry.frame(in: .global)
                     } action: { frame in
-                        inputManager.sendAnimator.searchReferenceFrame = frame
+                        composer.searchReferenceFrame = frame
                     }
             )
             // A change, not the current value: the request is shared by every
             // chat, and the composer of a chat opened later must not replay it.
-            .onChange(of: inputManager.dictationFocusRequestID) {
+            .onChange(of: composer.dictationFocusRequestID) {
                 dictationFocusTask?.cancel()
                 // Not cancelled on disappear: the detail view can disappear and
                 // reappear while it settles, which would drop the request.
@@ -49,13 +48,13 @@ struct SearchFieldComposer: ViewModifier {
                 }
             }
             // Return is the Send key; keep it lit while attachments are pending.
-            .onChange(of: inputManager.pendingAttachments.isEmpty, initial: true) { _, isEmpty in
+            .onChange(of: composer.pendingAttachments.isEmpty, initial: true) { _, isEmpty in
                 SendableSearchTextField.hasPendingAttachments = !isEmpty
                 refreshReturnKey()
             }
             // Adding an attachment returns to the composer, so a caption can be
             // typed. Removing one leaves focus alone.
-            .onChange(of: inputManager.pendingAttachments.count) { oldCount, newCount in
+            .onChange(of: composer.pendingAttachments.count) { oldCount, newCount in
                 guard newCount > oldCount else { return }
                 attachmentFocusTask?.cancel()
                 attachmentFocusTask = Task {
@@ -70,54 +69,74 @@ struct SearchFieldComposer: ViewModifier {
                 }
             }
             .onSubmit(of: .search) {
-                inputManager.handleSubmit()
+                inputManager.submit(composer)
                 isFocused = true
             }
-            // Mirror focus into InputManager, where the timeline observes it to
+            // Mirror focus into the composer, where the timeline observes it to
             // scroll to the latest message (FocusState is view-local).
             .onChange(of: isFocused) { _, focused in
-                inputManager.isComposerFocused = focused
+                composer.isFocused = focused
+                // The Return key's attachment flag is shared with the other
+                // composer, such as a thread's sheet over the chat.
+                if focused {
+                    SendableSearchTextField.hasPendingAttachments = !composer.pendingAttachments.isEmpty
+                    refreshReturnKey()
+                }
+            }
+            // Another chat's composer can take over this field.
+            .onChange(of: composer.target) { oldTarget, _ in
+                let previous = inputManager.composer(for: oldTarget)
+                previous.isFocused = false
+                composer.isFocused = isFocused
+                composer.searchReferenceFrame = previous.searchReferenceFrame
             }
             // Leaving the chat can tear the field down while it still has
             // focus; the next chat's first focus must register as a change.
             .onDisappear {
-                composerActionFocusTask?.cancel()
                 attachmentFocusTask?.cancel()
-                inputManager.isComposerFocused = false
+                composer.isFocused = false
             }
-            .onChange(of: chatStore.isSavingEdit) { oldValue, newValue in
+            .onChange(of: composer.isSavingEdit) { oldValue, newValue in
                 if oldValue && !newValue {
                     isFocused = true
                 }
             }
-            .onChange(of: chatStore.activeComposerMessage?.id) { _, newValue in
-                composerActionFocusTask?.cancel()
-                // Entering reply/edit state. Focus after the context menu has
-                // dismissed, or its keyboard restore resigns the field while
-                // the search stays presented.
-                guard newValue != nil else { return }
-                composerActionFocusTask = Task {
-                    do {
-                        try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
-                    } catch {
-                        return
-                    }
-                    isFocused = true
+            // Reply and Edit come from a context menu. Focus after it has
+            // dismissed, or its keyboard restore resigns the field while the
+            // search stays presented. A thread's composer appears after its
+            // Reply, so this also runs for a request made before it existed.
+            .task(id: composer.focusRequestID) {
+                guard composer.focusRequestID != nil else { return }
+                do {
+                    try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
+                } catch {
+                    return
                 }
+                isPresented = true
+                await Task.yield()
+                isFocused = true
+                composer.didHandleFocusRequest()
             }
             .onChange(of: isPresented) { _, presented in
                 // Reply/edit and search are entered together, so Cancel leaves
                 // both. A bare keyboard dismissal keeps the search presented,
                 // so this only fires on a real search exit.
-                guard !presented, chatStore.activeComposerMessage != nil else { return }
-                inputManager.cancelComposerAction()
+                guard !presented, composer.activeMessage != nil else { return }
+                inputManager.cancelAction(in: composer)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                MessagePendingAttachmentsBar()
+                VStack(alignment: .leading, spacing: 0) {
+                    MessagePendingAttachmentsBar(composer: composer)
+                    if composer.target.isThread && !composer.isEditing && chatStore.repliesInThreads(in: chat) {
+                        AlsoSendToChatToggle(isOn: Bindable(composer).alsoSendToChat, chat: chat)
+                            .padding(.horizontal)
+                            .padding(.vertical, 6)
+                    }
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    AttachmentMenu {
+                    AttachmentMenu(composer: composer) {
                         Label("Attach", systemImage: "plus")
                     }
                     .menuIndicator(.hidden)
@@ -126,7 +145,7 @@ struct SearchFieldComposer: ViewModifier {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 if dictationSettings.isEnabled {
                     ToolbarItem(placement: .bottomBar) {
-                        ComposerDictationButton()
+                        ComposerDictationButton(composer: composer)
                     }
                 }
             }
@@ -199,12 +218,11 @@ struct SearchFieldComposer: ViewModifier {
         for field in [textField] + composerFields(matching: textField, referenceView: referenceView) {
             SendableSearchTextField.install(on: field)
         }
-        let animator = inputManager.sendAnimator
-        animator.sourceFrame = { [weak animator, weak textField, weak referenceView] in
-            guard let animator, let textField, let referenceView,
+        composer.sourceFrame = { [weak composer, weak textField, weak referenceView] in
+            guard let composer, let textField, let referenceView,
                   textField.window != nil, !textField.isHidden else { return nil }
             let frame = textField.convert(textField.bounds, to: referenceView)
-            let reference = animator.searchReferenceFrame
+            let reference = composer.searchReferenceFrame
             return frame.offsetBy(dx: reference.minX, dy: reference.minY)
         }
         if delegateProxy == nil || textField.delegate !== delegateProxy {
@@ -217,11 +235,11 @@ struct SearchFieldComposer: ViewModifier {
         delegateProxy?.shouldReturn = { [weak referenceView] field in
             let sourceFrame = referenceView.map {
                 field.convert(field.bounds, to: $0).offsetBy(
-                    dx: animator.searchReferenceFrame.minX,
-                    dy: animator.searchReferenceFrame.minY
+                    dx: composer.searchReferenceFrame.minX,
+                    dy: composer.searchReferenceFrame.minY
                 )
             }
-            inputManager.handleSubmit(sourceFrame: sourceFrame)
+            inputManager.submit(composer, sourceFrame: sourceFrame)
             return false
         }
         delegateProxy?.selectionDidChange = { field in
@@ -230,12 +248,10 @@ struct SearchFieldComposer: ViewModifier {
                 location: field.offset(from: field.beginningOfDocument, to: range.start),
                 length: field.offset(from: range.start, to: range.end)
             )
-            let chatID = inputManager.selectedChatID
             Task { @MainActor [weak field] in
                 await Task.yield()
-                guard inputManager.selectedChatID == chatID,
-                      field?.text == text, inputManager.draft == text else { return }
-                inputManager.composerSelection = selection
+                guard field?.text == text, composer.text == text else { return }
+                composer.selection = selection
             }
         }
         if let searchBar {
@@ -253,17 +269,16 @@ struct SearchFieldComposer: ViewModifier {
     }
 
     private func restoreMentionCursor(_ offset: Int) {
-        let chatID = inputManager.selectedChatID
-        let insertedDraft = inputManager.draft
+        let insertedDraft = composer.text
         isFocused = true
         // Updating searchable text can move the cursor to the end. Restore it
         // after SwiftUI applies the draft, including its visible field clone.
         Task { @MainActor in
             await Task.yield()
-            guard inputManager.selectedChatID == chatID, inputManager.draft == insertedDraft else { return }
+            guard composer.text == insertedDraft else { return }
             guard let field = searchField.textField, let reference = searchField.referenceView else { return }
             for field in [field] + composerFields(matching: field, referenceView: reference) where field.isFirstResponder {
-                field.text = inputManager.draft
+                field.text = composer.text
                 if let cursor = field.position(from: field.beginningOfDocument, offset: offset) {
                     field.selectedTextRange = field.textRange(from: cursor, to: cursor)
                 }
@@ -271,49 +286,25 @@ struct SearchFieldComposer: ViewModifier {
         }
     }
 
-    /// Shows the draft in composer fields UIKit emptied while closing. Fields
-    /// being edited are left alone, as they already hold what was typed.
+    /// Shows the draft in composer fields UIKit emptied while closing.
     private func restoreDraft(in textField: UISearchTextField, referenceView: UIView) {
-        for field in composerFields(matching: textField, referenceView: referenceView)
-        where !field.isFirstResponder && field.text != inputManager.draft {
-            field.text = inputManager.draft
-        }
+        ComposerSearchFields.restore(composer.text, matching: textField, referenceView: referenceView)
     }
 
-    /// Uses regular body text and removes the magnifying glass, since this field
-    /// composes messages. A zero-size leading view replaces the glyph so its slot
-    /// takes no width; merely hiding the glyph keeps the slot.
-    ///
-    /// The bottom-bar field UIKit draws is a clone of `textField` that doesn't
-    /// follow the original's icon, so every field showing this composer's
-    /// prompt is updated directly. The chat list's "Search chats" field never
-    /// shares that prompt.
     private func styleComposerFields(in textField: UISearchTextField, referenceView: UIView) {
-        for field in composerFields(matching: textField, referenceView: referenceView)
-        where !(field.leftView is ComposerSearchFieldStyle) {
-            field.leftView = ComposerSearchFieldStyle(textField: field)
-        }
+        ComposerSearchFields.style(matching: textField, referenceView: referenceView)
     }
 
-    /// `textField` and every clone of it UIKit shows, told apart by this
-    /// composer's prompt.
+    /// `textField` and every clone of it UIKit shows.
     private func composerFields(matching textField: UISearchTextField, referenceView: UIView) -> [UISearchTextField] {
-        guard let prompt = textField.placeholder, let window = referenceView.window else { return [] }
-        return ([textField] + searchTextFields(in: window)).filter { $0.placeholder == prompt }
-    }
-
-    private func searchTextFields(in view: UIView) -> [UISearchTextField] {
-        if let field = view as? UISearchTextField {
-            return [field]
-        }
-        return view.subviews.flatMap(searchTextFields(in:))
+        ComposerSearchFields.fields(matching: textField, referenceView: referenceView)
     }
 }
 
 extension View {
-    /// Turns the navigation search field into the message composer (iPhone).
-    func searchFieldComposer() -> some View {
-        modifier(SearchFieldComposer())
+    /// Turns the navigation search field into the conversation's composer (iPhone).
+    func searchFieldComposer(_ composer: Composer, chat: Chat) -> some View {
+        modifier(SearchFieldComposer(composer: composer, chat: chat))
     }
 }
 #endif

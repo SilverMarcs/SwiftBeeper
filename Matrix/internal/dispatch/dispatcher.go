@@ -84,6 +84,10 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.listMessages(ctx, input)
 	case "load-server-history":
 		return s.loadServerHistory(ctx, input)
+	case "list-thread":
+		return s.listThread(ctx, input)
+	case "load-thread-history":
+		return s.loadThreadHistory(ctx, input)
 	case "resolve-media":
 		return s.resolveMedia(ctx, input)
 	case "send-message":

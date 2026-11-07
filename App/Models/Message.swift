@@ -26,6 +26,17 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     /// Local transaction identifier attached to realtime events.
     /// History pages may omit it.
     let transactionID: String?
+    /// The message whose thread this one replies in.
+    let threadRootID: String?
+    /// A thread reply also sent to the chat, like Slack's "Also send to channel".
+    let isThreadBroadcast: Bool?
+    /// The replies in this message's thread; nil when it has none.
+    let thread: ThreadSummary?
+
+    /// A thread reply that only the thread shows, not the main timeline.
+    var isHiddenThreadReply: Bool {
+        threadRootID != nil && isThreadBroadcast != true
+    }
 
     /// Numeric sort key for correct ordering (handles negative backfill IDs).
     var numericSortKey: Int64 { Int64(sortKey) ?? 0 }

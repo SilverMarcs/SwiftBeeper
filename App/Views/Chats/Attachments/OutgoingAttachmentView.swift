@@ -12,7 +12,7 @@ struct OutgoingAttachmentView: View {
                 decoded.image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: size.width, height: size.height)
+                    .mediaBubbleFrame(size)
                     .subtleBackground()
             } else {
                 HStack {

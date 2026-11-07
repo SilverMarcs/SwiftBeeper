@@ -38,6 +38,8 @@ struct Account: Decodable, Identifiable, Equatable {
 
 struct AccountCapabilities: Decodable, Equatable {
     let unlimitedMessageEdits: Bool
+    /// Replies go into threads, as on Slack, which has no quoted replies.
+    let threads: Bool?
 }
 
 struct ListChatsOutput: Decodable {
@@ -60,6 +62,12 @@ struct ListMessagesOutput: Decodable {
     /// False once the server has returned the start of the chat. Until then,
     /// older history may exist beyond the local database.
     let hasServerHistory: Bool
+}
+
+/// A thread from the local database: its root and replies, oldest first.
+struct ListThreadOutput: Decodable {
+    let root: Message?
+    let items: [Message]
 }
 
 struct LoadServerHistoryOutput: Decodable {

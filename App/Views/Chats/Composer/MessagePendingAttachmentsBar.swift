@@ -3,14 +3,16 @@ import SwiftUI
 /// The composer's queued attachments, shown only while there are some. On
 /// iPhone it sits above the navigation `.searchable` field, which sends.
 struct MessagePendingAttachmentsBar: View {
-    @Environment(InputManager.self) private var input
+    let composer: Composer
 
     var body: some View {
-        if !input.pendingAttachments.isEmpty {
+        if !composer.pendingAttachments.isEmpty {
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
-                    ForEach(input.pendingAttachments) { pending in
-                        PendingAttachmentPreview(pending: pending)
+                    ForEach(composer.pendingAttachments) { pending in
+                        PendingAttachmentPreview(pending: pending) {
+                            composer.pendingAttachments.removeAll { $0.id == pending.id }
+                        }
                     }
                 }
                 .padding(.horizontal, 12)

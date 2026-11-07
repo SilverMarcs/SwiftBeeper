@@ -34,8 +34,12 @@ func (s *Dispatcher) mapEventToMessage(evt *database.Event, names map[string]str
 		SortKey:         messageSortKey(evt),
 		IsSender:        evt.Sender == s.rt.Client().Account.UserID,
 		IsDeleted:       evt.RedactedBy != "",
-		LinkedMessageID: string(evt.GetReplyTo()),
+		LinkedMessageID: string(nonFallbackReplyTo(evt)),
 		Reactions:       reactions[evt.ID],
+	}
+	if root := threadRootOf(evt); root != "" {
+		message.ThreadRootID = string(root)
+		message.IsThreadBroadcast = isThreadBroadcast(evt)
 	}
 	if name, ok := names[string(evt.Sender)]; ok {
 		message.SenderName = name

@@ -18,7 +18,7 @@ struct ImageAttachmentView: View {
                 Color.clear
             }
         }
-        .frame(width: size.width, height: size.height)
+        .mediaBubbleFrame(size)
         .subtleBackground()
         .clipShape(.rect(cornerRadius: 12))
         .contentShape(.rect(cornerRadius: 12))

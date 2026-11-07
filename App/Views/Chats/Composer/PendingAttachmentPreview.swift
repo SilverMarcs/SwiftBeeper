@@ -1,9 +1,8 @@
 import SwiftUI
 
 struct PendingAttachmentPreview: View {
-    @Environment(InputManager.self) private var input
-
     let pending: PendingAttachment
+    let remove: () -> Void
 
     var body: some View {
         Group {
@@ -32,7 +31,7 @@ struct PendingAttachmentPreview: View {
         }
         .overlay(alignment: .topTrailing) {
             Button {
-                input.removePendingAttachment(id: pending.id)
+                remove()
             } label: {
                 Label("Remove Attachment", systemImage: "xmark")
                     .labelStyle(.iconOnly)

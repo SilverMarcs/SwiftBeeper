@@ -1,15 +1,12 @@
 import Foundation
 
-/// The composer's actions: optimistic sends through the outbox, edits,
-/// replies, reactions, and deletion.
+/// Message actions: optimistic sends through the outbox, edit rules,
+/// reactions, and deletion. Drafts, replies, and edits in progress belong to
+/// each conversation's `Composer`.
 extension ChatStore {
-    var activeComposerMessage: Message? {
-        editingMessage ?? replyingToMessage
-    }
-
-    /// The open chat's optimistic rows.
-    var outgoingMessages: [OutgoingMessage] {
-        selectedChatID.flatMap { outgoingMessagesByChatID[$0] } ?? []
+    /// The open chat's optimistic rows for its main timeline.
+    var timelineOutgoingMessages: [OutgoingMessage] {
+        (selectedChatID.flatMap { outgoingMessagesByChatID[$0] } ?? []).filter(\.showsInMainTimeline)
     }
 
     // MARK: - Outbox
@@ -17,20 +14,32 @@ extension ChatStore {
     /// Adds a message to the outbox synchronously so the timeline can display it
     /// before any upload or Matrix request begins.
     @discardableResult
-    func sendMessage(text: String, mentions: [ComposerMention] = [], attachments: [PendingAttachment], to chatID: String) -> OutgoingMessage? {
+    func sendMessage(
+        text: String,
+        mentions: [ComposerMention] = [],
+        attachments: [PendingAttachment],
+        to target: ComposerTarget,
+        replyingTo replyToMessageID: String? = nil,
+        alsoSendToChat: Bool = false
+    ) -> OutgoingMessage? {
         let trimmedText = text.trimmed
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
 
         let outgoing = OutgoingMessage(
-            chatID: chatID,
+            chatID: target.chatID,
             text: trimmedText,
             mentions: mentions,
             attachments: attachments,
-            replyToMessageID: replyingToMessage?.id
+            replyToMessageID: replyToMessageID,
+            threadRootID: target.threadRootID,
+            alsoSendToChat: target.isThread && alsoSendToChat
         )
-        outgoingMessagesByChatID[chatID, default: []].append(outgoing)
-        replyingToMessage = nil
-        messagesError = nil
+        outgoingMessagesByChatID[target.chatID, default: []].append(outgoing)
+        if target.isThread {
+            activeThread?.error = nil
+        } else {
+            messagesError = nil
+        }
         startSending(outgoing)
         return outgoing
     }
@@ -88,6 +97,9 @@ extension ChatStore {
                     chatID: outgoing.chatID,
                     text: isFirst && !outgoing.text.isEmpty ? outgoing.text : nil,
                     replyToMessageID: isFirst ? outgoing.replyToMessageID : nil,
+                    // Every part of a thread reply stays in the thread.
+                    threadRootID: outgoing.threadRootID,
+                    alsoSendToChat: outgoing.alsoSendToChat,
                     attachment: attachmentInput,
                     mentions: isFirst ? outgoing.mentions : []
                 )
@@ -139,58 +151,31 @@ extension ChatStore {
             message.pendingMessageIDs.insert(pendingMessageID)
         }
         // The echo can land before the send call returns its transaction ID.
-        guard chatID == selectedChatID else { return }
-        reconcileOutgoingMessages(with: messages.filter { $0.transactionID == pendingMessageID }, chatID: chatID)
+        var loaded = chatID == selectedChatID ? messages : []
+        if let activeThread, activeThread.chatID == chatID { loaded += activeThread.replies }
+        reconcileOutgoingMessages(with: loaded.filter { $0.transactionID == pendingMessageID }, chatID: chatID)
     }
 
-    // MARK: - Replies and edits
-
-    func setReplyTo(_ message: Message?) {
-        if message != nil { editingMessage = nil }
-        replyingToMessage = message
-    }
+    // MARK: - Edits
 
     /// Own messages are editable for 15 minutes, or indefinitely on networks
     /// that allow it.
     func canEdit(_ message: Message, in chat: Chat) -> Bool {
         guard !message.isDeletedMessage, message.isSender else { return false }
-        if let accountID = chat.accountID,
-           connectedAccounts.first(where: { $0.accountID == accountID })?.capabilities.unlimitedMessageEdits == true {
+        if capabilities(of: chat)?.unlimitedMessageEdits == true {
             return true
         }
         return Date.now.timeIntervalSince(message.timestamp) <= 15 * 60
     }
 
-    func startEditing(_ message: Message, in chat: Chat) {
-        guard canEdit(message, in: chat) else { return }
-        replyingToMessage = nil
-        editingMessage = message
+    /// Whether replying opens the message's thread instead of quoting it.
+    func repliesInThreads(in chat: Chat) -> Bool {
+        capabilities(of: chat)?.threads == true
     }
 
-    func cancelComposerAction() {
-        replyingToMessage = nil
-        editingMessage = nil
-    }
-
-    /// Returns whether the edit was saved; on failure the edit stays open.
-    func saveEdit(newText: String, mentions: [ComposerMention] = []) async -> Bool {
-        guard let message = editingMessage else { return false }
-
-        let trimmedText = newText.trimmed
-        guard !trimmedText.isEmpty else { return false }
-
-        isSavingEdit = true
-        defer { isSavingEdit = false }
-
-        do {
-            try await APIClient.editMessage(chatID: message.chatID, messageID: message.id, text: newText, mentions: mentions)
-            editingMessage = nil
-            messagesError = nil
-            return true
-        } catch {
-            handleMessageError(error)
-            return false
-        }
+    private func capabilities(of chat: Chat) -> AccountCapabilities? {
+        guard let accountID = chat.accountID else { return nil }
+        return connectedAccounts.first { $0.accountID == accountID }?.capabilities
     }
 
     // MARK: - Reactions and deletion
