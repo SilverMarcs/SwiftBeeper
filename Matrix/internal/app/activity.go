@@ -32,6 +32,12 @@ type activityState struct {
 	// scope identifies the login versionsChecked and attempted belong to.
 	scope           string
 	versionsChecked bool
+	// The key backup version and sync filter this login last used. The iOS
+	// app closes the store in the background, and reopening it starts a new
+	// client with neither, which would cost two round trips ahead of every
+	// foreground sync.
+	backupVersion id.KeyBackupVersion
+	filterID      string
 	// When each undecryptable session was last re-requested.
 	attempted map[id.SessionID]time.Time
 }
@@ -67,43 +73,81 @@ func (r *Runtime) setActive(active bool) {
 	scope := string(cli.Account.UserID) + "|" + string(cli.Account.DeviceID) + "|" + cli.Account.HomeserverURL
 	if scope != state.scope {
 		state.scope, state.versionsChecked = scope, false
+		state.backupVersion, state.filterID = "", ""
 		clear(state.attempted)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	state.cancel, state.context = cancel, ctx
 	checked := state.versionsChecked
+	backupVersion, filterID := state.backupVersion, state.filterID
 	state.mu.Unlock()
 	// Connections pooled before suspension are often dead without the
 	// transport knowing, and the first request would wait out the HTTP/2
 	// health check. Start the active period on fresh connections.
 	cli.Client.Client.CloseIdleConnections()
+	// A reopened store has a new client; give it what this login already
+	// fetched. gomuks syncs by itself right after verification, so leave the
+	// filter of a sync already running alone.
+	syncing := cli.IsSyncing()
+	if cli.KeyBackupVersion == "" {
+		cli.KeyBackupVersion = backupVersion
+	}
+	if filterID != "" && !syncing {
+		_ = cli.Client.Store.SaveFilterID(ctx, cli.Account.UserID, filterID)
+	}
 	// Retry the server version check with backoff, then start sync.
 	go func() {
 		delay := time.Second
 		for ctx.Err() == nil {
 			attempt, stop := context.WithTimeout(ctx, 15*time.Second)
-			// The key backup version doesn't depend on the version check, so
-			// both requests run at once. Sync still waits for it: the SDK's key
-			// request queue reads it, and checks backup only once per session.
-			backupFetched := make(chan struct{})
-			go func() {
-				defer close(backupFetched)
-				if cli.KeyBackupVersion == "" {
+			// Sync waits for the key backup version, which the SDK's key
+			// request queue reads and checks only once per session, and for the
+			// filter, which the SDK would otherwise create by itself ahead of
+			// the first sync. Neither depends on the version check, so the
+			// three requests run at once.
+			var fetches sync.WaitGroup
+			var fetchedBackup id.KeyBackupVersion
+			var fetchedFilter string
+			if cli.KeyBackupVersion == "" {
+				fetches.Add(1)
+				go func() {
+					defer fetches.Done()
 					if latest, backupErr := cli.Client.GetKeyBackupLatestVersion(attempt); backupErr == nil {
-						cli.KeyBackupVersion = latest.Version
+						fetchedBackup = latest.Version
 					}
-				}
-			}()
+				}()
+			}
+			if filterID == "" && !syncing {
+				fetches.Add(1)
+				go func() {
+					defer fetches.Done()
+					filter := cli.Client.Syncer.GetFilterJSON(cli.Account.UserID)
+					if created, filterErr := cli.Client.CreateFilter(attempt, filter); filterErr == nil {
+						fetchedFilter = created.FilterID
+					}
+				}()
+			}
 			var err error
 			if !checked {
 				err = cli.CheckServerVersions(attempt)
 			}
-			<-backupFetched
+			fetches.Wait()
+			if fetchedBackup != "" {
+				cli.KeyBackupVersion = fetchedBackup
+			}
+			if fetchedFilter != "" {
+				filterID = fetchedFilter
+				_ = cli.Client.Store.SaveFilterID(ctx, cli.Account.UserID, filterID)
+			}
+			state.mu.Lock()
+			if state.scope == scope {
+				state.versionsChecked = state.versionsChecked || err == nil
+				state.backupVersion = cli.KeyBackupVersion
+				state.filterID = filterID
+			}
+			state.mu.Unlock()
 			if err == nil {
 				checked = true
-				state.mu.Lock()
-				state.versionsChecked = true
-				state.mu.Unlock()
 				if ctx.Err() == nil {
 					go cli.SyncLocalContext(ctx)
 					r.startOpenRoomWork()
