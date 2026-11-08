@@ -27,6 +27,12 @@ struct ChatSidebarView: View {
                 }
                 #else
                 if isIPhone {
+                    if chatStore.isCatchingUp {
+                        ToolbarItem(placement: .primaryAction) {
+                            ChatSyncProgressView()
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    }
                     // Search and the filter share the bottom bar, like the
                     // chat's composer and attachment menu.
                     ToolbarItem(placement: .primaryAction) {
@@ -42,6 +48,12 @@ struct ChatSidebarView: View {
                         Button("Settings", systemImage: "gear") { showingSettings = true }
                     }
                     ToolbarSpacer()
+                    if chatStore.isCatchingUp {
+                        ToolbarItem(placement: .primaryAction) {
+                            ChatSyncProgressView()
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         ChatFilterMenu()
                     }

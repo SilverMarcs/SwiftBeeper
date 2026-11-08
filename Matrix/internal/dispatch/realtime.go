@@ -25,6 +25,7 @@ const (
 	realtimeSignalReady                  = "ready"
 	realtimeSignalResyncRequired         = "resync.required"
 	realtimeSignalPushPreferencesChanged = "push.preferences.changed"
+	realtimeSignalSyncStatus             = "sync.status"
 )
 
 // realtimeChange is one change sent to the app. Seq increases by one per
@@ -39,6 +40,14 @@ type realtimeChange[Entry any] struct {
 // realtimeSignal shares the stream without carrying entries or a sequence.
 type realtimeSignal struct {
 	Type string `json:"type"`
+}
+
+// syncStatusSignal reports the SDK's sync status: "waiting" until the first
+// sync of an active period is applied, then "ok", or "erroring" or
+// "permanently-failed". It follows the changes from the sync it reports on.
+type syncStatusSignal struct {
+	Type   string                 `json:"type"`
+	Status jsoncmd.SyncStatusType `json:"status"`
 }
 
 // eventHub turns sync results into changes for the app's one realtime
@@ -94,10 +103,34 @@ func (h *eventHub) run() {
 					evt.RoomID: {Meta: room, Events: evt.Events},
 				}})
 			}
+		case *jsoncmd.SyncStatus:
+			if evt != nil {
+				h.sendSyncStatus(evt.Type)
+			}
 		}
 		if h.overflowed.Swap(false) {
 			h.signal(realtimeSignalResyncRequired)
+			// The dropped event may have been a status change.
+			h.sendSyncStatus(h.currentSyncStatus())
 		}
+	}
+}
+
+// currentSyncStatus is "waiting" while there's no client.
+func (h *eventHub) currentSyncStatus() jsoncmd.SyncStatusType {
+	if cli := h.dispatcher.rt.Client(); cli != nil {
+		if status := cli.SyncStatus.Load(); status != nil {
+			return status.Type
+		}
+	}
+	return jsoncmd.SyncStatusWaiting
+}
+
+func (h *eventHub) sendSyncStatus(status jsoncmd.SyncStatusType) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.send != nil {
+		h.send(syncStatusSignal{Type: realtimeSignalSyncStatus, Status: status})
 	}
 }
 
@@ -110,6 +143,7 @@ func (s *Dispatcher) OpenRealtime(connectionID uint64, send func(payload any)) {
 	h.connectionID, h.send, h.seq = connectionID, send, 0
 	h.subscribed, h.messageChatIDs = false, nil
 	send(realtimeSignal{Type: realtimeSignalReady})
+	send(syncStatusSignal{Type: realtimeSignalSyncStatus, Status: h.currentSyncStatus()})
 }
 
 // SubscribeRealtime selects which chats get message updates. Sidebar updates

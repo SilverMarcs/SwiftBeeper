@@ -10,6 +10,9 @@ enum RealtimeEvent {
     /// could not be applied, so the UI reloads from the local database.
     case resyncRequired
     case notificationPreferencesChanged
+    /// Sent on connecting and whenever it changes. It follows the changes from
+    /// the sync it reports on.
+    case syncStatusChanged(MatrixSyncStatus)
     case chatUpserted(Chat)
     case chatDeleted(chatID: String)
     case messagesUpserted(chatID: String, messages: [Message])
@@ -24,9 +27,11 @@ struct EventEnvelope: Decodable {
     let chatID: String?
     let entries: [[String: String]]?
     let seq: Int?
+    /// The `sync.status` signal's status.
+    let status: String?
 
     enum CodingKeys: String, CodingKey {
-        case type, chatID, entries, seq
+        case type, chatID, entries, seq, status
     }
 
     init(from decoder: Decoder) throws {
@@ -34,6 +39,7 @@ struct EventEnvelope: Decodable {
         type = try container.decode(String.self, forKey: .type)
         chatID = try? container.decodeIfPresent(String.self, forKey: .chatID)
         seq = try? container.decodeIfPresent(Int.self, forKey: .seq)
+        status = try? container.decodeIfPresent(String.self, forKey: .status)
         // Message events carry non-string values in entries; only receipt
         // events read this field, so fall back to nil on a type mismatch.
         entries = try? container.decodeIfPresent([[String: String]].self, forKey: .entries)

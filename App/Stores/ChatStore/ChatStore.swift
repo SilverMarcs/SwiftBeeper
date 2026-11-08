@@ -33,6 +33,11 @@ final class ChatStore {
     var hasMoreChats = false
     var isLoadingMoreChats = false
     var isLoadingChats = false
+    /// The core's sync status. Reading the local database is instant; the
+    /// network catch-up behind it is what this tracks. It reads `waiting`
+    /// whenever local updates are off, so it already shows catching up on
+    /// the first frame after the iOS app returns to the foreground.
+    private(set) var syncStatus: MatrixSyncStatus = .waiting
     var chatsError: String?
     var selectedFilter: ChatFilter = .inbox(.primary) {
         didSet {
@@ -179,6 +184,9 @@ final class ChatStore {
             ?? pinnedChats.first { $0.id == chatID }
             ?? searchResults?.first { $0.id == chatID }
     }
+
+    /// Whether the chat list may still be behind the server.
+    var isCatchingUp: Bool { isSignedIn && syncStatus.isCatchingUp }
 
     /// The bridged network name for a connected account, such as "WhatsApp".
     func networkName(forAccountID accountID: String?) -> String? {
@@ -354,11 +362,15 @@ final class ChatStore {
             if requiresResync { scheduleResync() }
         case .disconnected:
             clearTyping()
+            // Nothing arrives until the stream reconnects and reports again.
+            syncStatus = .waiting
         case .resyncRequired:
             clearTyping()
             scheduleResync()
         case .notificationPreferencesChanged:
             notificationService.notificationPreferencesChanged()
+        case .syncStatusChanged(let status):
+            syncStatus = status
         case .chatUpserted(let chat):
             applyChatUpsert(chat)
         case .chatDeleted(let chatID):

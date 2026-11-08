@@ -90,6 +90,10 @@ final class RealtimeService {
             onEvent(.notificationPreferencesChanged)
         case "push.preferences.changed":
             onEvent(.notificationPreferencesChanged)
+        case "sync.status":
+            if let status = envelope.status.flatMap(MatrixSyncStatus.init(rawValue:)) {
+                onEvent(.syncStatusChanged(status))
+            }
         case "chat.upserted":
             trackSequence(in: envelope)
             if let chat = (try? decoder.decode(EntriesPayload<Chat>.self, from: data))?.entries?.first {
