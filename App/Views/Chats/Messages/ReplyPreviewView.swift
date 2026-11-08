@@ -30,6 +30,10 @@ struct ReplyPreviewView: View {
                         .lineLimit(1)
                 }
             }
+            // The accent bar is a flexible shape; without this, a VStack
+            // beside flexible media (photos, stickers) splits its height
+            // with the media and stretches the preview.
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(ChatVisualStyle.replyPreviewFill(isOutgoing: isOutgoing, outgoingBubbleColor: outgoingBubbleColor))

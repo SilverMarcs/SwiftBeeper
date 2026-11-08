@@ -64,6 +64,10 @@ struct ListMessagesOutput: Decodable {
     let hasServerHistory: Bool
 }
 
+struct GetMessagesOutput: Decodable {
+    let items: [Message]
+}
+
 /// A thread from the local database: its root and replies, oldest first.
 struct ListThreadOutput: Decodable {
     let root: Message?

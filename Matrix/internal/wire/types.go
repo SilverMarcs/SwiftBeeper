@@ -173,6 +173,12 @@ type ListMessagesOutput struct {
 	HasServerHistory bool `json:"hasServerHistory"`
 }
 
+// GetMessagesOutput holds the requested messages the local database has;
+// IDs it doesn't store are absent.
+type GetMessagesOutput struct {
+	Items []Message `json:"items"`
+}
+
 // ListThreadOutput is one thread: its root and every local reply, oldest first.
 type ListThreadOutput struct {
 	Root  *Message  `json:"root,omitempty"`

@@ -31,6 +31,10 @@ extension ChatStore {
 
             messagesError = nil
             if let readKey = response.lastReadByOtherSortKey { lastReadByOtherSortKey = readKey }
+            // Resolve old quotes before the rows render, so they never flash
+            // a placeholder. The lookup is local and takes milliseconds.
+            await loadQuotedMessages(for: response.items)
+            guard generation == timelineGeneration else { return }
             reconcileOutgoingMessages(with: response.items, chatID: chatID)
             upsertMessages(response.items)
             hasLoadedTimeline = true
@@ -58,6 +62,8 @@ extension ChatStore {
                 let response = try await APIClient.listMessages(chatID: chatID, cursor: cursor)
                 guard generation == timelineGeneration else { return }
 
+                await loadQuotedMessages(for: response.items)
+                guard generation == timelineGeneration else { return }
                 let countBefore = messages.count
                 upsertMessages(response.items)
                 hasMoreOlderMessages = response.hasMore && response.oldestCursor != cursor
@@ -125,6 +131,8 @@ extension ChatStore {
         loadMessagesTask?.cancel()
         loadMessagesTask = nil
         messages = []
+        quotedMessages = [:]
+        requestedQuotedMessageIDs = []
         hasLoadedTimeline = false
         olderMessagesCursor = nil
         hasMoreOlderMessages = false

@@ -15,7 +15,8 @@ struct TimelineEntry: Identifiable, Equatable {
     let startsSenderRun: Bool
     /// Whether this is the outgoing message that shows the "Read" indicator.
     let showsReadIndicator: Bool
-    /// The message this one replies to, when it is loaded.
+    /// The message this one replies to, from the timeline or, when older,
+    /// the source's quoted-message lookup.
     let linkedMessage: Message?
 
     var id: String { message.id }
@@ -39,6 +40,7 @@ struct TimelineEntry: Identifiable, Equatable {
         for messages: [Message],
         firstUnreadID: String?,
         lastReadByOtherSortKey: String?,
+        quotedMessages: [Message.ID: Message] = [:],
         followingTypingSenderID: String? = nil
     ) -> [TimelineEntry] {
         let messagesByID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -67,7 +69,7 @@ struct TimelineEntry: Identifiable, Equatable {
                 startsSenderRun: previous.map { $0.senderID != message.senderID } == true
                     && !showsTimestamp && message.id != firstUnreadID,
                 showsReadIndicator: row.contains { $0.id == readIndicatorID },
-                linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] }
+                linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] ?? quotedMessages[$0] }
             )
         }
     }

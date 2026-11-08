@@ -16,6 +16,8 @@ protocol TimelineSource: AnyObject {
     var typingBubble: TypingBubble? { get }
     /// Messages that took over a typing row, keeping its identity.
     var typingMessageRowIDs: [Message.ID: String] { get }
+    /// Messages that replies quote but the timeline hasn't loaded, by ID.
+    var quotedMessages: [Message.ID: Message] { get }
     /// The furthest sortKey another participant has read.
     var lastReadByOtherSortKey: String? { get }
     /// Whether the chat's read marker applies, placing the "New Messages" divider.

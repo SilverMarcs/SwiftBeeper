@@ -112,6 +112,7 @@ extension ThreadStore: TimelineSource {
 
     var typingBubble: TypingBubble? { nil }
     var typingMessageRowIDs: [Message.ID: String] { [:] }
+    var quotedMessages: [Message.ID: Message] { [:] }
     var lastReadByOtherSortKey: String? { nil }
     var showsUnreadDivider: Bool { false }
     var isLoadingOlderTimeline: Bool { false }

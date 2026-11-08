@@ -24,6 +24,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 for: messages,
                 firstUnreadID: firstUnreadID,
                 lastReadByOtherSortKey: source.lastReadByOtherSortKey,
+                quotedMessages: source.quotedMessages,
                 followingTypingSenderID: outgoingMessages.isEmpty ? typingBubble?.participant.id : nil
             )
             let outgoingTimelineEntries = OutgoingTimelineEntry.entries(for: outgoingMessages, following: messages)

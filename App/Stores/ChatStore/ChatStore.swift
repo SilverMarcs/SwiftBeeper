@@ -115,6 +115,12 @@ final class ChatStore {
     /// Whether the server may hold history older than the local database.
     /// These pages load only on an explicit request.
     var hasMoreServerHistory = false
+    /// Messages the open timeline's replies quote that are older than its
+    /// loaded pages, read from the local database by ID.
+    var quotedMessages: [Message.ID: Message] = [:]
+    /// Quoted IDs already looked up for the open chat, found or not, so a
+    /// quote older than the local database costs one miss, not one per update.
+    @ObservationIgnored var requestedQuotedMessageIDs: Set<Message.ID> = []
     /// Furthest sortKey another participant has read in the open chat.
     var lastReadByOtherSortKey: String?
     var typingParticipants: [ChatParticipant] = []
@@ -362,7 +368,11 @@ final class ChatStore {
             reconcileOutgoingMessages(with: incoming, chatID: chatID)
             if isThreadPresented, chatID == activeThread?.chatID { activeThread?.upsert(incoming) }
             // Background chats read their timeline from the database on open.
-            if chatID == selectedChatID { upsertMessages(incoming.filter { !$0.isHiddenThreadReply }) }
+            if chatID == selectedChatID {
+                let visible = incoming.filter { !$0.isHiddenThreadReply }
+                upsertMessages(visible)
+                Task { await loadQuotedMessages(for: visible) }
+            }
         case .receiptUpdated(let chatID, let readKey):
             if chatID == selectedChatID { lastReadByOtherSortKey = readKey }
         case .typingUpdated(let chatID, let participants):

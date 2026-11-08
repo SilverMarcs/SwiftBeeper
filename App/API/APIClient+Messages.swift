@@ -44,6 +44,14 @@ extension APIClient {
         ))
     }
 
+    /// Specific messages from the local database, such as quoted messages
+    /// older than the loaded timeline. IDs it doesn't store are absent.
+    static func getMessages(chatID: String, messageIDs: [String]) async throws -> [Message] {
+        struct Arguments: Encodable { let chatID: String; let messageIDs: [String] }
+        let output: GetMessagesOutput = try await execute("get-messages", arguments: Arguments(chatID: chatID, messageIDs: messageIDs))
+        return output.items
+    }
+
     /// A thread's root and replies from the local database.
     static func listThread(chatID: String, threadRootID: String) async throws -> ListThreadOutput {
         try await execute("list-thread", arguments: ThreadArguments(chatID: chatID, threadRootID: threadRootID))
