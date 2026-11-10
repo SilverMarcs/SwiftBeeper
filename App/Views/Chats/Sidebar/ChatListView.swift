@@ -38,10 +38,9 @@ struct ChatListView: View {
         }
         .if(isIPhone) { $0.listStyle(.plain) }
         // Animate only when the row order/membership changes (keyed on the id
-        // sequence), not on in-place row edits like a chat's last-message text,
-        // and not when a page appends below: animating those rows in while
-        // the list scrolls made it jump.
-        .animation(.default, value: ChatListOrder(ids: displayedChats.map(\.id)))
+        // sequence), not on in-place row edits like a chat's last-message text.
+        // Paging appends without animation; see `loadMoreChats()`.
+        .animation(.default, value: displayedChats.map(\.id))
         .overlay {
             ChatListOverlay(isEmpty: displayedChats.isEmpty)
         }

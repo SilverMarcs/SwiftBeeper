@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// The sidebar: loading and paging the chat list, search, live chat updates,
 /// and per-chat actions.
@@ -125,13 +125,19 @@ extension ChatStore {
             guard latestChatsRequestID == requestID, selectedFilter.id == requestedFilter.id,
                   self.session == session, !Task.isCancelled,
                   !isCancellationLikeError(error) else { return }
+            // Rows kept from the previous filter mustn't stand in for this one.
+            if !shouldPreserveExistingChats {
+                pinnedChats = []
+                setChats([])
+            }
             chatsError = error.localizedDescription
         }
     }
 
     func loadMoreChats() async {
         guard isSignedIn, !isLoadingChats, !isLoadingMoreChats,
-              !isSearchActive, chatsError == nil else { return }
+              !isSearchActive, chatsError == nil,
+              lastLoadedFilterID == selectedFilter.id else { return }
         guard hasMoreChats, let lastChat = chats.last else { return }
 
         let requestedFilter = selectedFilter
@@ -154,9 +160,15 @@ extension ChatStore {
                   !isSearchActive, !Task.isCancelled else { return }
             let existingIDs = Set(chats.map(\.id))
             let newChats = response.items.filter { !existingIDs.contains($0.id) }
-            setChats(chats + newChats)
+            // The list animates row changes, but rows animating in below the
+            // reader while they scroll make it jump; a page just appears.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                setChats(chats + newChats)
+                hasMoreChats = response.hasMore && !response.items.isEmpty
+            }
             chatWindowSize = max(chatWindowSize + Self.chatPageSize, chats.count)
-            hasMoreChats = response.hasMore && !response.items.isEmpty
         } catch {
             // Scrolling down again retries the same local page.
         }
@@ -458,6 +470,20 @@ extension ChatStore {
     }
 
     /// Empties the sidebar, which also clears the selection and open timeline.
+    /// Starts over for another filter but keeps the current rows on screen
+    /// until the new list replaces them in one animated change: chats in both
+    /// lists move into place and the rest leave, instead of the list blanking
+    /// first. The rows still belong to the old filter, so paging waits for the
+    /// new list (`lastLoadedFilterID`).
+    func prepareForFilterChange() {
+        pinningChatIDs = []
+        pinError = nil
+        selectedChatID = nil
+        hasMoreChats = false
+        chatWindowSize = Self.chatPageSize
+        chatsError = nil
+    }
+
     func resetChatList() {
         pinnedChats = []
         pinningChatIDs = []

@@ -43,7 +43,7 @@ final class ChatStore {
         didSet {
             guard oldValue.id != selectedFilter.id else { return }
             resetSearch()
-            resetChatList()
+            prepareForFilterChange()
         }
     }
     private(set) var connectedAccounts: [Account] = []
