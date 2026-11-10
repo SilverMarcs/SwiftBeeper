@@ -22,7 +22,16 @@ private struct ThreadPresentation: ViewModifier {
                         threadView(thread)
                         #endif
                     }
+                    #if os(macOS)
+                    // The window's minimum leaves room for the widest.
+                    .inspectorColumnWidth(
+                        min: MainWindowLayout.threadInspectorMinimumWidth,
+                        ideal: MainWindowLayout.threadInspectorIdealWidth,
+                        max: MainWindowLayout.threadInspectorMaximumWidth
+                    )
+                    #else
                     .inspectorColumnWidth(min: 300, ideal: 380, max: 560)
+                    #endif
                 }
             }
     }

@@ -33,8 +33,7 @@ struct RelayApp: App {
     var body: some Scene {
         #if os(macOS)
         Window("Relay", id: "main") {
-            withAppEnvironment(AppStartupView())
-                .frame(minWidth: 900, minHeight: 600)
+            withAppEnvironment(AppStartupView().mainWindowMinimumSize())
         }
         .defaultSize(width: 1100, height: 750)
 
