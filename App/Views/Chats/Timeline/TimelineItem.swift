@@ -14,6 +14,15 @@ enum TimelineItem: Identifiable {
         }
     }
 
+    /// The ID `scrollTo` reaches this row by. Typing rows aren't scroll targets.
+    var scrollTargetID: String? {
+        switch self {
+        case .message(let entry, _): entry.message.id
+        case .outgoing(let entry): entry.id
+        case .typing: nil
+        }
+    }
+
     var hasTypingIdentity: Bool {
         switch self {
         case .message(let entry, let rowID): rowID != entry.id

@@ -10,11 +10,16 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(MessageTextSelection.storageKey) private var selectsMessageText = true
     @State private var firstUnreadID: String?
     @State private var isNearBottom = true
     @State private var restingPosition = TimelineRestingPosition()
     /// The derived message rows, rebuilt only when their inputs change.
     @State private var entriesCache = TimelineEntriesCache()
+    /// Long messages the reader chose to read in full.
+    @State private var expandedMessages = ExpandedMessages()
+    /// Keeps the reader's row in place when older pages land above it.
+    @State private var scrollAnchor = TimelineScrollAnchor()
     private let bottomAnchorID = "timeline-bottom"
 
     var body: some View {
@@ -48,6 +53,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                         LazyVStack(spacing: 0) {
                             if source.isLoadingOlderTimeline {
                                 ProgressView()
+                                    .controlSize(.small)
                                     .frame(maxWidth: .infinity)
                             } else if source.canLoadServerHistory {
                                 LoadServerHistoryButton {
@@ -63,6 +69,16 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     activeComposerMessageID: activeComposerMessageID
                                 )
                                 .transition(.opacity)
+                                .onGeometryChange(for: CGRect.self) { geometry in
+                                    geometry.frame(in: .scrollView)
+                                } action: { frame in
+                                    guard let rowID = item.scrollTargetID else { return }
+                                    scrollAnchor.update(rowID, frame: frame)
+                                }
+                                .onDisappear {
+                                    guard let rowID = item.scrollTargetID else { return }
+                                    scrollAnchor.update(rowID, frame: nil)
+                                }
                             }
                         }
                         .animation(
@@ -113,8 +129,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     scrollAboveKeyboard(messageID, with: proxy)
                 }
                 #endif
+                // Load the next older page a screen ahead of the top, so it
+                // usually lands before the reader gets there.
                 .onScrollGeometryChange(for: Bool.self) { geometry in
-                    geometry.contentOffset.y + geometry.contentInsets.top < 80
+                    geometry.contentOffset.y + geometry.contentInsets.top < geometry.containerSize.height
                 } action: { _, nearTop in
                     guard nearTop, !messages.isEmpty else { return }
                     Task { await source.loadOlderTimeline() }
@@ -123,6 +141,27 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     Self.isNearBottom(geometry)
                 } action: { _, nearBottom in
                     isNearBottom = nearBottom
+                }
+                .onScrollGeometryChange(for: ScrollGeometry.self) { geometry in
+                    geometry
+                } action: { _, geometry in
+                    scrollAnchor.update(geometry)
+                }
+                // Older rows or the history header changed above the reader:
+                // put the row they were looking at back where it was.
+                .onChange(of: TimelineTopTracker(
+                    target: target,
+                    firstRowID: timelineItems.first?.id,
+                    isLoadingOlder: source.isLoadingOlderTimeline,
+                    canLoadServerHistory: source.canLoadServerHistory
+                )) { oldTop, newTop in
+                    guard source.hasLoadedTimeline, oldTop.target == newTop.target, oldTop.firstRowID != nil,
+                          let anchor = scrollAnchor.current() else { return }
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo(anchor.rowID, anchor: anchor.anchor)
+                    }
                 }
                 #if os(iOS)
                 // Only the reader decides; a scroll of the app's own leaves it.
@@ -144,6 +183,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: target, initial: true) { _, _ in
+                    scrollAnchor.reset()
                     firstUnreadID = nil
                     isNearBottom = true
                     restingPosition.isAtEnd = true
@@ -214,6 +254,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
                 // The conversation's composer, for message actions such as Edit.
                 .environment(\.composer, composer)
+                .environment(\.expandedMessages, expandedMessages)
+                .environment(\.selectsMessageText, selectsMessageText)
                 // Covers the composer too, so Send matches the bubbles it sends.
                 .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: chat.accountID).outgoingBubbleColor)
                 .onDrop(of: [.item], isTargeted: nil) { providers in

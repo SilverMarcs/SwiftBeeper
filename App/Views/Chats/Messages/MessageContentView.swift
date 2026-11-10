@@ -6,6 +6,7 @@ struct MessageContentView: View {
     let message: Message
     let chat: Chat
     @Environment(\.typingBubbleNamespace) private var typingBubbleNamespace
+    @Environment(\.selectsMessageText) private var selectsMessageText
 
     private enum Bubble: Equatable {
         case attachment(String?)
@@ -29,7 +30,7 @@ struct MessageContentView: View {
                     }
                 }
                 .foregroundStyle(isOutgoing ? .white : .primary)
-                .textSelection(.enabled)
+                .messageTextSelection(selectsMessageText)
                 .fixedSize(horizontal: false, vertical: true)
                 .messageBubbleChrome(isOutgoing: isOutgoing)
                 .overlay(alignment: reactionsAlignment) {
@@ -47,7 +48,7 @@ struct MessageContentView: View {
                 }
 
                 if let visibleText = message.visibleText {
-                    MessageTextView(text: message.formattedText ?? visibleText, isOutgoing: isOutgoing)
+                    MessageTextView(text: message.formattedText ?? visibleText, isOutgoing: isOutgoing, expansionID: message.id)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
                         // Media takes over the typing bubble when present; its
                         // caption has a separate background and must not match too.

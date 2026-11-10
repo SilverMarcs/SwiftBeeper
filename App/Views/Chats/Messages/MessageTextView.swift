@@ -1,20 +1,32 @@
 import SwiftUI
 
 /// The pending row, confirmed row, and send animation use identical text metrics.
+/// A long body shows a preview until expanded; see `MessageCollapse`.
 struct MessageTextView: View {
     let text: String
     let isOutgoing: Bool
+    /// Identifies the message to the timeline's `ExpandedMessages`. Nil
+    /// always shows the whole text.
+    var expansionID: String?
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.expandedMessages) private var expandedMessages
 
     var body: some View {
         MessageTextLayout(displayScale: displayScale) {
-            MessageBlocksView(blocks: text.messageBlocks)
-                .font(.body)
-                .foregroundStyle(isOutgoing ? .white : .primary)
-                // Links follow the tint; white keeps contrast on the brand fill.
-                .tint(isOutgoing ? .white : .blue)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            if let expansionID, let expandedMessages, let preview = text.collapsedMessageBlocks {
+                let isExpanded = expandedMessages.contains(expansionID)
+                VStack(alignment: .trailing, spacing: 3) {
+                    MessageBlocksText(blocks: isExpanded ? text.messageBlocks : preview, isOutgoing: isOutgoing)
+                    Button(isExpanded ? "Show Less" : "Show More") {
+                        expandedMessages.toggle(expansionID)
+                    }
+                    .buttonBorderShape(.capsule)
+                    // Muted like the text, not the bubble's link tint.
+                    .foregroundStyle(isOutgoing ? .white : .primary)
+                }
+            } else {
+                MessageBlocksText(blocks: text.messageBlocks, isOutgoing: isOutgoing)
+            }
         }
     }
 }

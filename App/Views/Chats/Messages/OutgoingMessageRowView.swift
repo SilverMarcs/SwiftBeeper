@@ -37,7 +37,7 @@ struct OutgoingMessageRowView: View {
                 }
 
                 if !message.text.isEmpty {
-                    MessageTextView(text: message.text, isOutgoing: true)
+                    MessageTextView(text: message.text, isOutgoing: true, expansionID: message.id.uuidString)
                         .messageBubbleChrome(isOutgoing: true)
                         .sendEffect(forOutgoing: message.id)
                 }
