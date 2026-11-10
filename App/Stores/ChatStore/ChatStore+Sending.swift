@@ -52,6 +52,7 @@ extension ChatStore {
             message.state = .sending
             message.pendingMessageIDs = []
             message.confirmedMessageIDs = []
+            message.sendsTextSeparately = false
         }
         startSending(outgoing)
     }
@@ -90,11 +91,16 @@ extension ChatStore {
     }
 
     /// Sends one Matrix message per attachment, or one for text alone. The
-    /// text and reply ride on the first.
+    /// text and reply ride on the first, as a caption, the way WhatsApp and
+    /// Telegram send an album. Where the network takes no captions, as on
+    /// Instagram, the text follows the attachments as its own message, the
+    /// order Meta's apps use.
     private func transmit(_ outgoing: OutgoingMessage) async {
         defer { outgoingSendTasks[outgoing.id] = nil }
         let attachments: [PendingAttachment?] = outgoing.attachments.isEmpty ? [nil] : outgoing.attachments
         do {
+            var sendsTextSeparately = false
+            var lastPendingMessageID: String?
             for (index, attachment) in attachments.enumerated() {
                 let isFirst = index == 0
                 let attachmentInput = try await uploadAttachment(attachment, for: outgoing.id)
@@ -107,6 +113,22 @@ extension ChatStore {
                     alsoSendToChat: outgoing.alsoSendToChat,
                     attachment: attachmentInput,
                     mentions: isFirst ? outgoing.mentions : []
+                )
+                if response.captionRejected == true {
+                    sendsTextSeparately = true
+                    updateOutgoingMessage(outgoing.id) { $0.sendsTextSeparately = true }
+                }
+                lastPendingMessageID = response.pendingMessageID
+                recordPendingMessageID(response.pendingMessageID, for: outgoing.id)
+            }
+            if sendsTextSeparately {
+                let response = try await APIClient.sendMessage(
+                    chatID: outgoing.chatID,
+                    text: outgoing.text,
+                    threadRootID: outgoing.threadRootID,
+                    alsoSendToChat: outgoing.alsoSendToChat,
+                    mentions: outgoing.mentions,
+                    afterPendingMessageID: lastPendingMessageID
                 )
                 recordPendingMessageID(response.pendingMessageID, for: outgoing.id)
             }

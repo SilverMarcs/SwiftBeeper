@@ -28,8 +28,12 @@ struct OutgoingMessageRowView: View {
                     ReplyPreviewView(linkedMessage: entry.linkedMessage, isOutgoing: true)
                 }
 
-                ForEach(message.attachments) { attachment in
-                    OutgoingAttachmentView(attachment: attachment, message: message)
+                if let galleryImages = message.galleryImages {
+                    OutgoingImageGalleryView(images: galleryImages, state: message.state)
+                } else {
+                    ForEach(message.attachments) { attachment in
+                        OutgoingAttachmentView(attachment: attachment, message: message)
+                    }
                 }
 
                 if !message.text.isEmpty {

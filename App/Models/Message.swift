@@ -32,6 +32,12 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let isThreadBroadcast: Bool?
     /// The replies in this message's thread; nil when it has none.
     let thread: ThreadSummary?
+    /// Marked forwarded by its bridge. The bridge's "Forwarded" prefix is
+    /// already removed from the text.
+    let isForwarded: Bool?
+    /// A bridge's status line, such as WhatsApp's "Sent an album" or a
+    /// pending decryption, rather than text the sender wrote.
+    let isNotice: Bool?
 
     /// A thread reply that only the thread shows, not the main timeline.
     var isHiddenThreadReply: Bool {

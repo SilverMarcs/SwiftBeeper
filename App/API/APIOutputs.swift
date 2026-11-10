@@ -82,4 +82,7 @@ struct LoadServerHistoryOutput: Decodable {
 struct SendMessageOutput: Decodable {
     let chatID: String
     let pendingMessageID: String
+    /// The network takes no media captions, so the media went without its
+    /// text; send the text on its own after the remaining media.
+    let captionRejected: Bool?
 }

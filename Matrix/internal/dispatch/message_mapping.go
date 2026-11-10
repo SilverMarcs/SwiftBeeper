@@ -60,6 +60,8 @@ func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtTy
 	// forwarding the fallback duplicates quoted text and any URLs it contains.
 	content.RemoveReplyFallback()
 	content.RemovePerMessageProfileFallback()
+	message.IsForwarded = removeForwardedNotice(&content)
+	message.IsNotice = content.MsgType == event.MsgNotice
 	message.Mentions = messageMentions(content.Mentions)
 
 	if attachment, ok := messageAttachment(content, evtType); ok {

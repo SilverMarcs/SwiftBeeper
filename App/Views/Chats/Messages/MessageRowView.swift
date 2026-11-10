@@ -19,6 +19,7 @@ struct MessageRowView: View {
         let showsSenderIdentity = !isOutgoing && !chat.isSingleChat
         let showsSenderName = showsSenderIdentity && entry.isFirstInGroup
         let isThreadBroadcast = message.isThreadBroadcast == true && !isInThread
+        let isForwarded = entry.messages.contains { $0.isForwarded == true }
         HStack(alignment: .bottom, spacing: 6) {
             if isOutgoing {
                 Spacer(minLength: 50)
@@ -42,7 +43,7 @@ struct MessageRowView: View {
             }
 
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
-                if showsSenderName || isThreadBroadcast {
+                if showsSenderName || isThreadBroadcast || isForwarded {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         if showsSenderName {
                             Text(message.senderDisplayName)
@@ -50,6 +51,9 @@ struct MessageRowView: View {
                         }
                         if isThreadBroadcast {
                             ThreadBroadcastLabel(followsName: showsSenderName)
+                        }
+                        if isForwarded {
+                            ForwardedLabel()
                         }
                     }
                     .font(.subheadline)
@@ -68,14 +72,16 @@ struct MessageRowView: View {
                         .modifier(TypingBubbleContentReveal())
                 }
 
-                if entry.galleryMessages.isEmpty {
-                    MessageContentView(message: message, chat: chat)
-                        .environment(\.openURL, OpenURLAction { url in
-                            openMention(url, in: message)
-                        })
-                } else {
-                    GalleryMessageContentView(messages: entry.messages, chat: chat)
+                Group {
+                    if entry.galleryMessages.isEmpty {
+                        MessageContentView(message: message, chat: chat)
+                    } else {
+                        GalleryMessageContentView(messages: entry.messages, chat: chat)
+                    }
                 }
+                .environment(\.openURL, OpenURLAction { url in
+                    openMention(url, in: message)
+                })
 
                 if !isInThread, let thread = message.thread, thread.replyCount > 0 {
                     ThreadSummaryButton(message: message, summary: thread)

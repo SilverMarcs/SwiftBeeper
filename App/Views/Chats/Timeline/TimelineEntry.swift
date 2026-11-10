@@ -4,8 +4,8 @@ import Foundation
 /// Equatable so SwiftUI skips rows whose entry didn't change.
 struct TimelineEntry: Identifiable, Equatable {
     let message: Message
-    /// Photos sent right after `message` that share its gallery bubble.
-    /// Empty unless `message` starts a run of two or more photos.
+    /// The rest of a gallery that `message` starts: its photos and the text
+    /// shown as its caption. Empty unless the row folds two or more photos.
     let galleryMessages: [Message]
     let showsTimestamp: Bool
     let isFirstInGroup: Bool
@@ -87,13 +87,13 @@ struct TimelineEntry: Identifiable, Equatable {
     /// divider sits above a row, so it always starts a new one.
     private static func galleryRows(in messages: [Message], firstUnreadID: String?) -> [[Message]] {
         var rows: [[Message]] = []
+        var run: GalleryRun?
         for message in messages {
-            if let previous = rows.last?.last, message.id != firstUnreadID, message.continuesGallery(after: previous) {
-                rows[rows.count - 1].append(message)
-            } else {
-                rows.append([message])
-            }
+            if message.id != firstUnreadID, run?.append(message) == true { continue }
+            rows += run?.rows ?? []
+            run = GalleryRun(startingWith: message)
         }
+        rows += run?.rows ?? []
         return rows
     }
 

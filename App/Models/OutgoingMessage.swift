@@ -25,6 +25,9 @@ struct OutgoingMessage: Identifiable, Equatable {
     var uploadMimeTypeByAttachmentID: [PendingAttachment.ID: String] = [:]
     var pendingMessageIDs: Set<String> = []
     var confirmedMessageIDs: Set<String> = []
+    /// The network refused the text as a caption, so it goes as its own
+    /// message after the attachments.
+    var sendsTextSeparately = false
 
     init(
         id: UUID = UUID(),
@@ -57,9 +60,10 @@ struct OutgoingMessage: Identifiable, Equatable {
     /// The thread a reply also sent to the chat goes to; nil for any other send.
     var broadcastThreadRootID: String? { alsoSendToChat ? threadRootID : nil }
 
-    /// One confirmed message per attachment, or one for a text-only send.
+    /// One confirmed message per attachment, plus the text when it went
+    /// separately, or one for a text-only send.
     var expectedConfirmationCount: Int {
-        max(attachments.count, 1)
+        max(attachments.count + (sendsTextSeparately ? 1 : 0), 1)
     }
 
     /// Whether a canonical message is the homeserver-confirmed form of this row.
@@ -81,7 +85,7 @@ struct OutgoingMessage: Identifiable, Equatable {
         // a thread are different messages.
         guard message.threadRootID == threadRootID else { return false }
 
-        if attachments.isEmpty {
+        if attachments.isEmpty || (sendsTextSeparately && message.attachments?.isEmpty != false) {
             return message.text?.trimmed == text
         }
 

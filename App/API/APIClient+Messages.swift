@@ -19,7 +19,8 @@ extension APIClient {
     }
 
     /// Sends a message, in `threadRootID`'s thread when given. `alsoSendToChat`
-    /// shows a thread reply in the main timeline too.
+    /// shows a thread reply in the main timeline too. `afterPendingMessageID`
+    /// holds it until that earlier part of the same send reaches the server.
     static func sendMessage(
         chatID: String,
         text: String?,
@@ -27,7 +28,8 @@ extension APIClient {
         threadRootID: String? = nil,
         alsoSendToChat: Bool = false,
         attachment: MessageAttachmentInput? = nil,
-        mentions: [ComposerMention] = []
+        mentions: [ComposerMention] = [],
+        afterPendingMessageID: String? = nil
     ) async throws -> SendMessageOutput {
         struct Arguments: Encodable {
             let chatID: String
@@ -37,10 +39,12 @@ extension APIClient {
             let alsoSendToChat: Bool
             let attachment: MessageAttachmentInput?
             let mentions: [ComposerMention]
+            let afterPendingMessageID: String?
         }
         return try await execute("send-message", arguments: Arguments(
             chatID: chatID, text: text, replyToMessageID: replyToMessageID, threadRootID: threadRootID,
-            alsoSendToChat: alsoSendToChat, attachment: attachment, mentions: mentions
+            alsoSendToChat: alsoSendToChat, attachment: attachment, mentions: mentions,
+            afterPendingMessageID: afterPendingMessageID
         ))
     }
 

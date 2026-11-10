@@ -8,6 +8,7 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"time"
 
 	"go.mau.fi/gomuks/pkg/hicli/database"
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
@@ -72,6 +73,18 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage, wai
 			return nil, err
 		}
 	}
+	// The bridge would refuse the whole message; send the media alone and
+	// let the caller send the text after it.
+	captionRejected := base != nil && text != "" && s.rejectsCaption(ctx, roomID, base)
+	caption := text
+	if captionRejected {
+		text = ""
+	}
+	if after := strings.TrimSpace(req.AfterPendingMessageID); after != "" {
+		if err = s.waitForEarlierSend(ctx, after); err != nil {
+			return nil, err
+		}
+	}
 	threadRoot := id.EventID(strings.TrimSpace(req.ThreadRootID))
 	relatesTo, err := s.outgoingRelation(ctx, roomID, id.EventID(strings.TrimSpace(req.ReplyToMessageID)), threadRoot)
 	if err != nil {
@@ -92,6 +105,13 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage, wai
 		if err = s.sends.wait(ctx, cli, dbEvent); err != nil {
 			return nil, err
 		}
+		// A share is a single call, so its text follows here.
+		if captionRejected {
+			if err = s.sendTextAfterMedia(ctx, roomID, caption, threadRoot, extra); err != nil {
+				return nil, err
+			}
+			captionRejected = false
+		}
 	}
 	// The event now holds the uploaded media's URL, and the SDK retries from
 	// that, never from the staged file. A share that failed to send keeps its
@@ -104,7 +124,51 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage, wai
 	if pendingMessageID == "" {
 		pendingMessageID = string(dbEvent.ID)
 	}
-	return wire.SendMessageOutput{ChatID: chatID, PendingMessageID: pendingMessageID}, nil
+	return wire.SendMessageOutput{
+		ChatID:           chatID,
+		PendingMessageID: pendingMessageID,
+		CaptionRejected:  captionRejected,
+	}, nil
+}
+
+// sendTextAfterMedia sends a share's refused caption as its own message,
+// in the media's thread, and waits for the server to accept it.
+func (s *Dispatcher) sendTextAfterMedia(ctx context.Context, roomID id.RoomID, text string, threadRoot id.EventID, extra map[string]any) error {
+	relatesTo, err := s.outgoingRelation(ctx, roomID, "", threadRoot)
+	if err != nil {
+		return err
+	}
+	cli := s.rt.Client()
+	sent, err := cli.SendMessage(ctx, roomID, nil, extra, text, relatesTo, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to send message: %w", err)
+	}
+	return s.sends.wait(ctx, cli, sent)
+}
+
+// rejectsCaption reports whether the room's bridge refuses captions on this
+// kind of media, as Instagram does. Rooms without declared features accept
+// them.
+func (s *Dispatcher) rejectsCaption(ctx context.Context, roomID id.RoomID, media *event.MessageEventContent) bool {
+	state, err := s.rt.Client().DB.CurrentState.Get(ctx, roomID, event.StateBeeperRoomFeatures, "")
+	if err != nil || state == nil {
+		return false
+	}
+	var features event.RoomFeatures
+	if json.Unmarshal(state.GetContent(), &features) != nil {
+		return false
+	}
+	feature, ok := features.File[media.GetCapMsgType()]
+	return ok && feature != nil && feature.Caption.Reject()
+}
+
+// waitForEarlierSend returns once the message with this transaction ID has
+// reached the server. The SDK sends each message in its own goroutine, so
+// without waiting, a message could overtake the one queued just before it.
+func (s *Dispatcher) waitForEarlierSend(ctx context.Context, transactionID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	return s.sends.wait(ctx, s.rt.Client(), &database.Event{TransactionID: transactionID})
 }
 
 // NotificationReply sends a reply from a notification and waits for the

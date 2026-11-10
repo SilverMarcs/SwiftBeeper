@@ -111,6 +111,12 @@ type Message struct {
 	// IsThreadBroadcast marks a thread reply also sent to the chat, like
 	// Slack's "Also send to channel".
 	IsThreadBroadcast bool `json:"isThreadBroadcast,omitempty"`
+	// IsForwarded marks a message a bridge labeled as forwarded; the label
+	// itself is removed from the text.
+	IsForwarded bool `json:"isForwarded,omitempty"`
+	// IsNotice marks an m.notice, which bridges use for their own status
+	// lines rather than anything the sender wrote.
+	IsNotice bool `json:"isNotice,omitempty"`
 	// Thread summarizes the replies to this message; nil when it has none.
 	Thread *ThreadSummary `json:"thread,omitempty"`
 }
@@ -193,6 +199,10 @@ type LoadServerHistoryOutput struct {
 type SendMessageOutput struct {
 	ChatID           string `json:"chatID"`
 	PendingMessageID string `json:"pendingMessageID"`
+	// CaptionRejected reports that the chat's network takes no media
+	// captions, so the media went without its text. The sender sends the
+	// text as its own message after the remaining media.
+	CaptionRejected bool `json:"captionRejected,omitempty"`
 }
 
 type SendMessageInput struct {
@@ -204,6 +214,9 @@ type SendMessageInput struct {
 	ThreadRootID string `json:"threadRootID"`
 	// AlsoSendToChat shows a thread reply in the main timeline too.
 	AlsoSendToChat bool `json:"alsoSendToChat"`
+	// AfterPendingMessageID holds this message until that earlier one in the
+	// same send has reached the server, so the network receives them in order.
+	AfterPendingMessageID string `json:"afterPendingMessageID,omitempty"`
 }
 
 // ComposerMention identifies an explicitly selected span, in UTF-16 units.
