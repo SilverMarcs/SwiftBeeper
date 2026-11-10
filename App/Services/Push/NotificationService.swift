@@ -30,6 +30,7 @@ final class NotificationService {
     @ObservationIgnored private var uploadedPreferences: Data?
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let pushServer = try? PushServer()
+    @ObservationIgnored private let seenMessages = SeenMessages()
     /// Holds the saved `PushRegistration`, so sign-out can remove its pusher.
     private let registrationKey = "push.registration"
 
@@ -45,12 +46,25 @@ final class NotificationService {
         Task { try? await center.setBadgeCount(0) }
     }
 
+    /// Records incoming messages the open chat has shown, so a push for one
+    /// that arrives later, after leaving the chat or the app, stays quiet.
+    func markSeen(_ messages: [Message]) {
+        guard isSignedIn, !messages.isEmpty else { return }
+        seenMessages.insert(messages, server: pushServer)
+    }
+
+    /// Whether the user already saw this message in an open chat.
+    func hasSeenMessage(_ messageID: String) -> Bool {
+        seenMessages.contains(messageID)
+    }
+
     func configure(signedIn: Bool, force: Bool = false) async {
         isSignedIn = signedIn
         guard signedIn else {
             UNUserNotificationCenter.current().removeAllDeliveredNotifications()
             await UNUserNotificationCenter.current().removePendingReplyReminders()
             try? NotificationCredentials.remove()
+            seenMessages.removeAll()
             identity = nil
             notificationsAllowed = false
             uploadedPreferences = nil

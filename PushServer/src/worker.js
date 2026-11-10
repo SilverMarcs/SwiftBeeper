@@ -83,6 +83,28 @@ async function isBlocked(env, roomID) {
     .bind(roomID, Date.now()).first();
 }
 
+// POST /seen-messages records messages already seen in Relay as delivered to
+// every device. Sync often shows a message before its Matrix push arrives; the
+// delivery check in apns.js then skips that push instead of alerting for a
+// message the user has seen. Rows expire with the day's other delivery IDs.
+async function markSeen(request, env) {
+  const input = await readJSON(request);
+  if (!Array.isArray(input.messages) || input.messages.length > 200) throw new HTTPError(400, "Invalid seen messages");
+  for (const message of input.messages) {
+    if (!message || !isBoundedString(message.chatID, 256) || !message.chatID.startsWith("!") ||
+        !isBoundedString(message.messageID, 256) || !message.messageID.startsWith("$")) throw new HTTPError(400, "Invalid seen message");
+  }
+  if (!input.messages.length) return json({ ok: true });
+  // An in-flight or completed delivery keeps its row.
+  await env.DEVICES.prepare(`
+    INSERT INTO notification_deliveries (device_id, room_id, event_id, claim, claimed_until, sent)
+    SELECT devices.id, json_extract(seen.value, '$.chatID'), json_extract(seen.value, '$.messageID'), 'seen', ?, 1
+    FROM devices, json_each(?) AS seen WHERE true
+    ON CONFLICT(device_id, room_id, event_id) DO NOTHING
+  `).bind(Date.now(), JSON.stringify(input.messages)).run();
+  return json({ ok: true });
+}
+
 // PUT /devices/{id} stores the APNs token, keeping an existing pushkey.
 async function register(request, env, id) {
   const input = await readJSON(request);
@@ -159,6 +181,10 @@ async function route(request, env) {
   if (method === "PUT" && path === "/notification-preferences") {
     await authorize(request, env);
     return updateNotificationPreferences(request, env);
+  }
+  if (method === "POST" && path === "/seen-messages") {
+    await authorize(request, env);
+    return markSeen(request, env);
   }
   if (method === "POST" && path === "/notify") {
     await authorize(request, env);
