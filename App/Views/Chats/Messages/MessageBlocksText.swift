@@ -11,8 +11,8 @@ struct MessageBlocksText: View {
         MessageBlocksView(blocks: blocks)
             .font(.body)
             .foregroundStyle(isOutgoing ? .white : .primary)
-            // Links follow the tint; white keeps contrast on the brand fill.
-            .tint(isOutgoing ? .white : .blue)
+            // Links follow the tint; white keeps contrast on the accent fill.
+            .tint(isOutgoing ? .white : .accentColor)
             .messageTextSelection(selectsMessageText)
             .fixedSize(horizontal: false, vertical: true)
     }

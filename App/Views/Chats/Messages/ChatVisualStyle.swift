@@ -22,10 +22,10 @@ enum ChatVisualStyle {
         return AnyShapeStyle(.quinary)
     }
 
-    /// Outgoing replies take a wash of the bubble color they sit above.
-    static func replyPreviewFill(isOutgoing: Bool, outgoingBubbleColor: Color) -> AnyShapeStyle {
+    /// Outgoing replies take a wash of the accent color their bubble is filled with.
+    static func replyPreviewFill(isOutgoing: Bool) -> AnyShapeStyle {
         if isOutgoing {
-            return AnyShapeStyle(outgoingBubbleColor.quaternary)
+            return AnyShapeStyle(Color.accentColor.quaternary)
         }
         return AnyShapeStyle(.quinary)
     }

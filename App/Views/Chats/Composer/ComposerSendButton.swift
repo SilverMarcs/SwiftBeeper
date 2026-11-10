@@ -2,8 +2,6 @@ import SwiftUI
 
 /// The inline composers' Send button, which saves instead while editing.
 struct ComposerSendButton: View {
-    @Environment(\.outgoingBubbleColor) private var outgoingBubbleColor
-
     let isEditing: Bool
     let isSaving: Bool
     let isDisabled: Bool
@@ -28,7 +26,6 @@ struct ComposerSendButton: View {
         .controlSize(.large)
         #endif
         .buttonStyle(.glassProminent)
-        .tint(outgoingBubbleColor)
         .buttonBorderShape(.circle)
         .allowsHitTesting(!isDisabled)
         .offset(y: -2)

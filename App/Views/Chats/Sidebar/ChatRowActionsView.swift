@@ -33,7 +33,7 @@ struct ChatRowActionsView: View {
                     }
                 }
             }
-            .if(placement == .leadingSwipe) { $0.tint(.blue) }
+            .if(placement == .leadingSwipe) { $0.tint(.accentColor) }
         }
 
         if placement != .trailingSwipe {
@@ -58,7 +58,7 @@ struct ChatRowActionsView: View {
                     }
                 }
             }
-            .if(placement == .trailingSwipe) { $0.tint(isArchived ? .blue : .orange) }
+            .if(placement == .trailingSwipe) { $0.tint(isArchived ? .accentColor : .orange) }
 
             Button(
                 isMuted ? "Unmute" : "Mute",

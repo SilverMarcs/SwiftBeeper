@@ -4,7 +4,6 @@ import SwiftUI
 /// runs `action` when one is given.
 struct ReplyPreviewView: View {
     @Environment(\.scrollToMessage) private var scrollToMessage
-    @Environment(\.outgoingBubbleColor) private var outgoingBubbleColor
 
     let linkedMessage: Message?
     let isOutgoing: Bool
@@ -20,7 +19,7 @@ struct ReplyPreviewView: View {
         } label: {
             HStack(spacing: 6) {
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(isOutgoing ? outgoingBubbleColor : .accentColor)
+                    .fill(Color.accentColor)
                     .frame(width: 3)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -42,7 +41,7 @@ struct ReplyPreviewView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(ChatVisualStyle.replyPreviewFill(isOutgoing: isOutgoing, outgoingBubbleColor: outgoingBubbleColor))
+            .background(ChatVisualStyle.replyPreviewFill(isOutgoing: isOutgoing))
             .clipShape(.rect(cornerRadius: 8))
             .contentShape(.rect(cornerRadius: 8))
         }

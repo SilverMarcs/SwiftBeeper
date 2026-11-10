@@ -23,7 +23,7 @@ struct MessageContentView: View {
                     if message.hasRetainedDeletedContent {
                         Text(message.displayFormattedText.messageAttributed)
                             .strikethrough()
-                            .tint(isOutgoing ? .white : .blue)
+                            .tint(isOutgoing ? .white : .accentColor)
                     } else {
                         Label(message.displayText, systemImage: "trash")
                             .italic()

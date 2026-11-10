@@ -256,8 +256,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .environment(\.composer, composer)
                 .environment(\.expandedMessages, expandedMessages)
                 .environment(\.selectsMessageText, selectsMessageText)
-                // Covers the composer too, so Send matches the bubbles it sends.
-                .environment(\.outgoingBubbleColor, MessagingNetwork(accountID: chat.accountID).outgoingBubbleColor)
                 .onDrop(of: [.item], isTargeted: nil) { providers in
                     inputManager.handleDrop(providers, into: composer)
                 }

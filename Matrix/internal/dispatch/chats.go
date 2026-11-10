@@ -204,6 +204,10 @@ func (s *Dispatcher) mapRoomToChat(room *database.Room, summary *chatSummary, lo
 	if isDirectChat(room, summary) {
 		chatType = wire.ChatTypeSingle
 	}
+	// Every message in a DM is addressed to the user, and replies to their
+	// messages count as highlights, so the mention badge only means something
+	// in group chats.
+	hasUnreadMention := chatType == wire.ChatTypeGroup && room.UnreadHighlights > 0
 	chat := wire.Chat{
 		ID:        string(room.ID),
 		AccountID: lookup.roomAccounts[room.ID],
@@ -215,7 +219,7 @@ func (s *Dispatcher) mapRoomToChat(room *database.Room, summary *chatSummary, lo
 			Total:   int64(summary.total),
 		},
 		UnreadCount:            int64(room.UnreadMessages),
-		HasUnreadMention:       room.UnreadHighlights > 0,
+		HasUnreadMention:       hasUnreadMention,
 		IsArchived:             state.InArchive(),
 		IsMuted:                state.IsMuted,
 		IsPinned:               state.IsPinned,

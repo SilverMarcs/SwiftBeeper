@@ -20,7 +20,7 @@ struct ThreadSummaryButton: View {
 
                 Text("^[\(summary.replyCount) reply](inflect: true)")
                     .bold()
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(.secondary)
 
                 Image(systemName: "chevron.forward")
                     .foregroundStyle(.tertiary)
