@@ -61,12 +61,14 @@ extension ChatStore {
     /// the send call returns its transaction ID.
     func reconcileOutgoingMessages(with incoming: [Message], chatID: String) {
         guard var outgoing = outgoingMessagesByChatID[chatID], !outgoing.isEmpty else { return }
+        var changed = false
 
         for message in incoming where message.isSender {
             guard let index = outgoing.firstIndex(where: {
                 !$0.confirmedMessageIDs.contains(message.id) && $0.matchesConfirmedMessage(message)
             }) else { continue }
 
+            changed = true
             outgoing[index].confirmedMessageIDs.insert(message.id)
             onOutgoingMessageConfirmed?(outgoing[index].id, message)
             if outgoing[index].confirmedMessageIDs.count >= outgoing[index].expectedConfirmationCount {
@@ -74,6 +76,9 @@ extension ChatStore {
             }
         }
 
+        // Most incoming batches confirm nothing; writing anyway would
+        // re-render the timeline, which reads the outbox.
+        guard changed else { return }
         outgoingMessagesByChatID[chatID] = outgoing.isEmpty ? nil : outgoing
     }
 

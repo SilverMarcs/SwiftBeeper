@@ -16,6 +16,7 @@ struct RelayApp: App {
 
     init() {
         URLProtocol.registerClass(MatrixURLProtocol.self)
+        MatrixMedia.registerImageSource()
         let notificationService = NotificationService()
         let chatStore = ChatStore(realtimeService: RealtimeService(), notificationService: notificationService)
         let inputManager = InputManager(chatStore: chatStore)

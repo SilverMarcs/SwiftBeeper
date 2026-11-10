@@ -180,6 +180,11 @@ actor MatrixRuntime {
         return URL(filePath: try JSONDecoder().decode(MatrixLocalAsset.self, from: response).path)
     }
 
+    /// Deletes the core's downloaded media.
+    func clearMediaCache() async throws {
+        _ = try await command("clear-media-cache", [String: String]())
+    }
+
     /// Hands upload bytes to the core through a private file it reads before
     /// this returns.
     func stageUpload(_ data: Data, fileName: String, mimeType: String) async throws -> Data {

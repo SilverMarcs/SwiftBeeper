@@ -17,6 +17,20 @@ import (
 	"maunium.net/go/mautrix/pushrules"
 )
 
+// SeedPushRules gives a newly opened client the push rules this login last
+// synced, so starting sync doesn't fetch them from the server again. The iOS
+// app reopens the store, and with it a new client, on every foreground; sync
+// delivers any change since.
+func (s *Dispatcher) SeedPushRules(ctx context.Context) {
+	cli := s.rt.Client()
+	if cli == nil || cli.Account == nil || cli.PushRules.Load() != nil {
+		return
+	}
+	if rules, err := s.roomPushRules(ctx); err == nil && rules != nil {
+		cli.PushRules.CompareAndSwap(nil, rules)
+	}
+}
+
 // Room push rules and Beeper's mute account data represent the same control.
 // The SDK keeps push rules in memory after sync; use its persisted copy at startup.
 func (s *Dispatcher) roomPushRules(ctx context.Context) (*pushrules.PushRuleset, error) {

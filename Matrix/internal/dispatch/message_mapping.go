@@ -166,18 +166,15 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 	for _, evt := range events {
 		eventIDs = append(eventIDs, evt.ID)
 	}
-	result, err := s.rt.Client().DB.Event.GetReactions(ctx, roomID, eventIDs...)
+	result, err := s.loadReactionEvents(ctx, roomID, eventIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read reactions: %w", err)
 	}
 	output := make(map[id.EventID][]wire.Reaction, len(result))
-	for evtID, reactionResult := range result {
-		if reactionResult == nil || len(reactionResult.Events) == 0 {
-			continue
-		}
+	for evtID, reactionEvents := range result {
 		seen := make(map[string]struct{})
-		reactions := make([]wire.Reaction, 0, len(reactionResult.Events))
-		for _, reactionEvt := range reactionResult.Events {
+		reactions := make([]wire.Reaction, 0, len(reactionEvents))
+		for _, reactionEvt := range reactionEvents {
 			if reactionEvt.RedactedBy != "" {
 				continue
 			}
@@ -203,6 +200,39 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 		if len(reactions) > 0 {
 			output[evtID] = reactions
 		}
+	}
+	return output, nil
+}
+
+// reactionEventsQuery is the SDK's reaction lookup, with the SDK's event
+// columns so rows scan into database.Event.
+const reactionEventsQuery = `
+	SELECT rowid, -1,
+	       room_id, event_id, sender, type, state_key, timestamp, content, decrypted, decrypted_type,
+	       unsigned, local_content, transaction_id, redacted_by, relates_to, relation_type,
+	       megolm_session_id, decryption_error, send_error, reactions, last_edit_rowid, unread_type
+	FROM event
+	WHERE room_id = ? AND type = 'm.reaction' AND relation_type = 'm.annotation'
+	  AND redacted_by IS NULL AND relates_to IN (%s)`
+
+// loadReactionEvents reads the reactions to the given events, grouped by the
+// event they react to. The SDK's GetReactions also writes the counts back to
+// each event in a write transaction, which this read doesn't need: the
+// database takes its write lock at BEGIN, so every page of messages would
+// queue behind sync.
+func (s *Dispatcher) loadReactionEvents(ctx context.Context, roomID id.RoomID, eventIDs []id.EventID) (map[id.EventID][]*database.Event, error) {
+	params := make([]any, 0, len(eventIDs)+1)
+	params = append(params, roomID)
+	for _, evtID := range eventIDs {
+		params = append(params, evtID)
+	}
+	events, err := s.rt.Client().DB.Event.QueryMany(ctx, fmt.Sprintf(reactionEventsQuery, sqlSlots(len(eventIDs))), params...)
+	if err != nil {
+		return nil, err
+	}
+	output := make(map[id.EventID][]*database.Event)
+	for _, evt := range events {
+		output[evt.RelatesTo] = append(output[evt.RelatesTo], evt)
 	}
 	return output, nil
 }

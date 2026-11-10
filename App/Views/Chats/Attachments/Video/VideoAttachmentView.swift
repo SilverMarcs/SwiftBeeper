@@ -3,7 +3,8 @@ import SwiftUI
 
 /// An inline, looping video bubble. Videos load once they're on screen and
 /// either autoplay is on or the user taps Play. Reels first need the core to
-/// resolve their media, which `ChatStore` limits to two at a time.
+/// resolve their media, which `ChatStore` limits to two at a time. Videos over
+/// `Attachment.maxInlineVideoSize` show their poster and size instead.
 ///
 /// The bubble owns its player. On iPhone and iPad, tapping the video opens it
 /// full screen on that same player, so playback carries on where it was. The
@@ -61,6 +62,8 @@ struct VideoAttachmentView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(chatStore.resolvingMediaIDs.count >= ChatStore.maxConcurrentMediaResolves)
+                        } else if attachment.isTooLargeForInlinePlayback {
+                            VideoTooLargeLabel(fileSize: attachment.fileSize)
                         } else if playback.hasFailed {
                             Button("Retry Video", systemImage: "arrow.clockwise") {
                                 Task { await loadVideo() }
@@ -116,7 +119,8 @@ struct VideoAttachmentView: View {
     private var shouldPlay: Bool { autoplay || userRequestedPlay }
 
     private var loadRequest: LoadRequest? {
-        guard shouldPlay, isVisible else { return nil }
+        // A video over the cap is never downloaded for the bubble.
+        guard shouldPlay, isVisible, !attachment.isTooLargeForInlinePlayback else { return nil }
         if attachment.type == .reel {
             guard !chatStore.failedMediaIDs.contains(message.id),
                   chatStore.resolvingMediaIDs.contains(message.id) || chatStore.resolvingMediaIDs.count < ChatStore.maxConcurrentMediaResolves else {

@@ -1,22 +1,17 @@
+import ImageIO
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 /// Local previews of a picked attachment, shared by the composer and the
 /// sending bubble before the upload has a Matrix URL.
 extension PendingAttachment {
-    /// Decodes the picked image data; nil for non-images. Decoding is not
-    /// cached, so call it once per render.
+    /// A downsampled preview of the picked image, with the image's full size
+    /// for bubble layout; nil for non-images. Decoded once per attachment,
+    /// since a full camera photo is tens of megabytes of bitmap and these
+    /// views re-render often.
     func decodedImage() -> (image: Image, size: CGSize)? {
         guard mimeType.hasPrefix("image/") else { return nil }
-        #if os(macOS)
-        guard let image = NSImage(data: fileData) else { return nil }
-        return (Image(nsImage: image), image.size)
-        #else
-        guard let image = UIImage(data: fileData) else { return nil }
-        return (Image(uiImage: image), image.size)
-        #endif
+        guard let preview = PendingAttachmentPreviews.preview(for: self) else { return nil }
+        return (Image(decorative: preview.image, scale: 1), preview.size)
     }
 
     /// The placeholder symbol for attachments without an image preview.

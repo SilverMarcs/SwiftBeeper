@@ -14,6 +14,7 @@ import (
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 
 	"relay/core/internal/gomuksruntime"
+	"relay/core/internal/wire"
 )
 
 // Dispatcher maps in-process Swift commands to Matrix operations.
@@ -21,10 +22,13 @@ type Dispatcher struct {
 	rt     *gomuksruntime.Runtime
 	events *eventHub
 	sends  *sendWaiters
+	assets *assetCache
+	// The accounts parsed from the last bridge state read.
+	accountsCache accountsCache
 }
 
 func New(rt *gomuksruntime.Runtime) *Dispatcher {
-	s := &Dispatcher{rt: rt, sends: newSendWaiters()}
+	s := &Dispatcher{rt: rt, sends: newSendWaiters(), assets: newAssetCache()}
 	s.events = newEventHub(s)
 	rt.SetEventHandler(s.receive)
 	return s
@@ -94,6 +98,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.resolveMedia(ctx, input)
 	case "send-message":
 		return s.sendMessage(ctx, input, false)
+	case "clear-media-cache":
+		return wire.Success, s.ClearMediaCache()
 	case "share-message":
 		return s.sendMessage(ctx, input, true)
 	case "edit-message":

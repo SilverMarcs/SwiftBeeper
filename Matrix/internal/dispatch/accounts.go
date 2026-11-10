@@ -2,8 +2,11 @@ package dispatch
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -103,20 +106,24 @@ func (s *Dispatcher) loadAccounts(ctx context.Context) ([]wire.Account, error) {
 		return []wire.Account{}, nil
 	}
 
-	accountDataEvents, err := cli.DB.AccountData.GetAllGlobal(ctx, cli.Account.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read global account data: %w", err)
+	// This runs for every sync batch and chat list page. Read only the bridge
+	// state, not all global account data (m.direct and push rules can be
+	// large), and parse it only when it changed.
+	var content []byte
+	err := cli.DB.QueryRow(ctx, `SELECT content FROM account_data WHERE user_id = ? AND type = ?`,
+		cli.Account.UserID, bridgeStateEventType).Scan(&content)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to read %s: %w", bridgeStateEventType, err)
+	}
+	if cached, ok := s.accountsCache.get(cli.Account.UserID, content); ok {
+		return cached, nil
 	}
 
 	var state bridgeStateContent
-	for _, ad := range accountDataEvents {
-		if ad.Type != bridgeStateEventType || len(ad.Content) == 0 {
-			continue
-		}
-		if err = json.Unmarshal(ad.Content, &state); err != nil {
+	if len(content) > 0 {
+		if err = json.Unmarshal(content, &state); err != nil {
 			return nil, fmt.Errorf("failed to parse %s: %w", bridgeStateEventType, err)
 		}
-		break
 	}
 
 	accounts := []wire.Account{{
@@ -145,7 +152,8 @@ func (s *Dispatcher) loadAccounts(ctx context.Context) ([]wire.Account, error) {
 			})
 		}
 	}
-	return accounts, nil
+	s.accountsCache.set(cli.Account.UserID, content, accounts)
+	return slices.Clone(accounts), nil
 }
 
 func sortedMapKeys[Value any](values map[string]Value) []string {

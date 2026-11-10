@@ -95,6 +95,7 @@ func (r *Runtime) setActive(active bool) {
 	if filterID != "" && !syncing {
 		_ = cli.Client.Store.SaveFilterID(ctx, cli.Account.UserID, filterID)
 	}
+	r.dispatcher.SeedPushRules(ctx)
 	// Retry the server version check with backoff, then start sync.
 	go func() {
 		delay := time.Second

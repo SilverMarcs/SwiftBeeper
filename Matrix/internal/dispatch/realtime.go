@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -67,10 +68,39 @@ type eventHub struct {
 	// No changes are sent until the app first subscribes.
 	subscribed     bool
 	messageChatIDs []string
+
+	// The last room metadata seen per room, as JSON. Read and written only
+	// by run's goroutine.
+	roomMeta map[id.RoomID]string
+	// The push rules last signalled, canonicalized. Changing a mute stores
+	// the new rules locally and then hears them again from sync; only the
+	// first should reload the app. Read and written only by run's goroutine.
+	pushRules string
+}
+
+// pushRulesChanged reports whether content differs from the push rules last
+// signalled, ignoring key order and whitespace, and remembers it.
+func (h *eventHub) pushRulesChanged(content json.RawMessage) bool {
+	var parsed any
+	canonical := string(content)
+	if json.Unmarshal(content, &parsed) == nil {
+		if raw, err := json.Marshal(parsed); err == nil {
+			canonical = string(raw)
+		}
+	}
+	if canonical == h.pushRules {
+		return false
+	}
+	h.pushRules = canonical
+	return true
 }
 
 func newEventHub(dispatcher *Dispatcher) *eventHub {
-	h := &eventHub{dispatcher: dispatcher, eventQueue: make(chan any, realtimeEventQueueSize)}
+	h := &eventHub{
+		dispatcher: dispatcher,
+		eventQueue: make(chan any, realtimeEventQueueSize),
+		roomMeta:   make(map[id.RoomID]string),
+	}
 	go h.run()
 	return h
 }
@@ -109,6 +139,9 @@ func (h *eventHub) run() {
 			}
 		}
 		if h.overflowed.Swap(false) {
+			// A dropped sync may have changed state this hub remembers.
+			clear(h.roomMeta)
+			h.pushRules = ""
 			h.signal(realtimeSignalResyncRequired)
 			// The dropped event may have been a status change.
 			h.sendSyncStatus(h.currentSyncStatus())

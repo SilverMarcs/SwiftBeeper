@@ -32,6 +32,12 @@ func messageMentionText(content event.MessageEventContent) string {
 	if content.Format != event.FormatHTML || content.FormattedBody == "" {
 		return ""
 	}
+	// Every user link is a matrix: URI or a matrix.to URL. Most messages have
+	// neither, and would otherwise be fully converted only to be discarded.
+	lowered := strings.ToLower(content.FormattedBody)
+	if !strings.Contains(lowered, "matrix.to") && !strings.Contains(lowered, "matrix:") {
+		return ""
+	}
 	parser := *format.MarkdownHTMLParser
 	parser.PillConverter = nil
 	hasMention := false

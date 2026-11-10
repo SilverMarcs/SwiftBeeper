@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"sort"
 	"strings"
@@ -29,7 +30,7 @@ type receiptUpdate struct {
 }
 
 func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
-	if syncComplete.AccountData[event.AccountDataPushRules] != nil {
+	if rules := syncComplete.AccountData[event.AccountDataPushRules]; rules != nil && h.pushRulesChanged(rules.Content) {
 		// A rule can change without any room events, including in another client.
 		h.signal(realtimeSignalPushPreferencesChanged)
 		h.signal(realtimeSignalResyncRequired)
@@ -43,13 +44,16 @@ func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 			break
 		}
 	}
+	// Recorded even while the app isn't watching, so the next comparison is
+	// against what the database actually held.
+	metaChanged := h.recordRoomMeta(syncComplete)
 	// Logout briefly leaves no client, then one with no account.
 	dispatcher := h.dispatcher
 	cli := dispatcher.rt.Client()
 	if cli == nil || cli.Account == nil || !h.isWatching("", false) {
 		return
 	}
-	changes := syncChanges(syncComplete, cli.Account.UserID)
+	changes := syncChanges(syncComplete, cli.Account.UserID, metaChanged)
 	upserted := make(map[id.RoomID]bool)
 	for _, change := range changes {
 		if change.Type == realtimeTypeChatUpserted {
@@ -88,9 +92,40 @@ func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 	}
 }
 
+// recordRoomMeta remembers each synced room's metadata and returns the rooms
+// whose metadata differs from the last seen. The SDK attaches metadata to
+// every room in a sync, even when only someone else's read receipt arrived,
+// so its presence alone says nothing changed.
+func (h *eventHub) recordRoomMeta(syncComplete *jsoncmd.SyncComplete) map[id.RoomID]bool {
+	changed := make(map[id.RoomID]bool)
+	for roomID, roomSync := range syncComplete.Rooms {
+		if roomSync == nil || roomSync.Meta == nil {
+			continue
+		}
+		meta := *roomSync.Meta
+		// Back-pagination moves the batch token without changing the chat.
+		meta.PrevBatch = ""
+		raw, err := json.Marshal(meta)
+		if err != nil {
+			changed[roomID] = true
+			delete(h.roomMeta, roomID)
+			continue
+		}
+		if h.roomMeta[roomID] != string(raw) {
+			changed[roomID] = true
+			h.roomMeta[roomID] = string(raw)
+		}
+	}
+	for _, roomID := range syncComplete.LeftRooms {
+		delete(h.roomMeta, roomID)
+	}
+	return changed
+}
+
 // syncChanges lists the chats a sync result deleted, changed or added
-// messages to, and the rooms with new receipts.
-func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID) []syncChange {
+// messages to, and the rooms with new receipts. metaChanged holds the rooms
+// whose metadata actually changed.
+func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID, metaChanged map[id.RoomID]bool) []syncChange {
 	output := make([]syncChange, 0, len(syncComplete.Rooms)*2+len(syncComplete.LeftRooms))
 
 	for _, leftRoom := range syncComplete.LeftRooms {
@@ -105,7 +140,7 @@ func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID) []syncChang
 			continue
 		}
 
-		chatTouched := roomSync.Meta != nil || len(roomSync.State) > 0 || len(roomSync.AccountData) > 0 || len(roomSync.Timeline) > 0
+		chatTouched := metaChanged[roomID] || len(roomSync.State) > 0 || len(roomSync.AccountData) > 0 || len(roomSync.Timeline) > 0
 		// Redactions update their target in place, so they share the upsert.
 		messageIDs := make(map[string]struct{})
 		for _, evt := range roomSync.Events {

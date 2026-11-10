@@ -66,8 +66,9 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage, wai
 	}
 
 	var base *event.MessageEventContent
+	var upload uploadMetadata
 	if hasAttachment {
-		if base, err = s.uploadAttachment(ctx, req.Attachment, room.EncryptionEvent != nil); err != nil {
+		if base, upload, err = s.uploadAttachment(ctx, req.Attachment, room.EncryptionEvent != nil); err != nil {
 			return nil, err
 		}
 	}
@@ -91,6 +92,12 @@ func (s *Dispatcher) sendMessage(ctx context.Context, input json.RawMessage, wai
 		if err = s.sends.wait(ctx, cli, dbEvent); err != nil {
 			return nil, err
 		}
+	}
+	// The event now holds the uploaded media's URL, and the SDK retries from
+	// that, never from the staged file. A share that failed to send keeps its
+	// file for the extension's retry; stale ones are pruned later.
+	if base != nil {
+		s.adoptSentUpload(upload, base)
 	}
 	s.clearUnreadMarkerAfterSend(ctx, roomID)
 	pendingMessageID := dbEvent.TransactionID

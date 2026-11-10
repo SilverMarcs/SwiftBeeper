@@ -29,7 +29,7 @@ struct SettingsView: View {
 
                 Section("Cache") {
                     Button {
-                        MatrixMedia.clearTemporaryFiles()
+                        Task { await MatrixMedia.clearCaches() }
                     } label: {
                         Label("Delete File Cache", systemImage: "trash")
                     }

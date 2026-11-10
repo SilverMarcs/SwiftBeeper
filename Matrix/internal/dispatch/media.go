@@ -25,6 +25,7 @@ import (
 
 // LocalAsset returns a local file for Matrix media, downloading and
 // decrypting it on the first request. The source is mxc:// or localmxc://.
+// Concurrent requests for the same media share one download.
 func (s *Dispatcher) LocalAsset(ctx context.Context, source string) (string, error) {
 	normalized := strings.TrimSpace(source)
 	if strings.HasPrefix(normalized, "localmxc://") {
@@ -35,13 +36,12 @@ func (s *Dispatcher) LocalAsset(ctx context.Context, source string) (string, err
 		return "", errors.New("URL must be mxc:// or localmxc://")
 	}
 
-	cacheDir := filepath.Join(s.rt.DataDir(), "assets")
-	sum := sha256.Sum256([]byte(normalized))
-	plainPath := filepath.Join(cacheDir, hex.EncodeToString(sum[:]))
-	decryptedPath := plainPath + ".decrypted"
+	cacheDir := s.assetCacheDir()
+	plainPath, decryptedPath := assetCachePaths(cacheDir, normalized)
 	// A decrypted copy is always right. A plain copy is right only when the
 	// media isn't encrypted, which the SDK's media table records.
 	if _, err := os.Stat(decryptedPath); err == nil {
+		s.assets.touch(decryptedPath)
 		return decryptedPath, nil
 	}
 	var encFile *attachment.EncryptedFile
@@ -52,21 +52,58 @@ func (s *Dispatcher) LocalAsset(ctx context.Context, source string) (string, err
 	if encFile != nil {
 		cachePath = decryptedPath
 	} else if _, err := os.Stat(plainPath); err == nil {
+		s.assets.touch(plainPath)
 		return plainPath, nil
 	}
-	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-		return "", fmt.Errorf("failed to create asset cache dir: %w", err)
-	}
 
-	resp, err := s.rt.Client().Client.Download(ctx, parsedMXC)
+	return s.assets.download(ctx, cachePath, func(ctx context.Context) error {
+		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+			return fmt.Errorf("failed to create asset cache dir: %w", err)
+		}
+		resp, err := s.rt.Client().Client.Download(ctx, parsedMXC)
+		if err != nil {
+			return fmt.Errorf("failed to download asset: %w", err)
+		}
+		defer resp.Body.Close()
+		if err = streamToCache(resp.Body, encFile, cacheDir, cachePath); err != nil {
+			return err
+		}
+		s.assets.pruneSoon(cacheDir, s.uploadRootDir())
+		return nil
+	})
+}
+
+func (s *Dispatcher) assetCacheDir() string {
+	return filepath.Join(s.rt.DataDir(), "assets")
+}
+
+// assetCachePaths names a source's cached file, plain and decrypted. The
+// source is a normalized mxc:// URL.
+func assetCachePaths(cacheDir, source string) (plain, decrypted string) {
+	sum := sha256.Sum256([]byte(source))
+	plain = filepath.Join(cacheDir, hex.EncodeToString(sum[:]))
+	return plain, plain + ".decrypted"
+}
+
+// ClearMediaCache deletes every cached download, and staged uploads old
+// enough that no send in progress still needs them. Downloads in progress
+// finish into the emptied directory.
+func (s *Dispatcher) ClearMediaCache() error {
+	entries, err := os.ReadDir(s.assetCacheDir())
 	if err != nil {
-		return "", fmt.Errorf("failed to download asset: %w", err)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
 	}
-	defer resp.Body.Close()
-	if err = streamToCache(resp.Body, encFile, cacheDir, cachePath); err != nil {
-		return "", err
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "download-") {
+			continue
+		}
+		_ = os.Remove(filepath.Join(s.assetCacheDir(), entry.Name()))
 	}
-	return cachePath, nil
+	removeStaleUploads(s.uploadRootDir(), time.Hour)
+	return nil
 }
 
 // streamToCache writes the download to cachePath, decrypting it on the way

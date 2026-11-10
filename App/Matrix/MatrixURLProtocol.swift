@@ -1,8 +1,9 @@
 import Foundation
 import Synchronization
 
-/// Serves `MatrixMedia.displayURL` requests from the core's media cache, so
-/// the image library loads Matrix media without any network request.
+/// Serves `MatrixMedia.displayURL` requests made through URLSession from the
+/// core's media cache, without any network request. SwiftMediaViewer reads
+/// them through `MatrixMedia.registerImageSource()` instead.
 nonisolated final class MatrixURLProtocol: URLProtocol, @unchecked Sendable {
     private let loadingTask = Mutex<Task<Void, Never>?>(nil)
 
@@ -16,9 +17,7 @@ nonisolated final class MatrixURLProtocol: URLProtocol, @unchecked Sendable {
         let task = Task { @Sendable [weak self, request] in
             guard let self else { return }
             do {
-                guard let url = request.url,
-                      let source = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                        .queryItems?.first(where: { $0.name == "url" })?.value else {
+                guard let url = request.url, let source = MatrixMedia.matrixSource(of: url) else {
                     throw MatrixError.invalidRequest
                 }
                 let file = try await MatrixRuntime.shared.localAsset(source)

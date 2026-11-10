@@ -332,7 +332,8 @@ extension ChatStore {
         updateSelectedChat(incoming)
         // Keep an in-flight search view consistent if it holds this chat.
         if var results = searchResults,
-           let index = results.firstIndex(where: { $0.id == incoming.id }) {
+           let index = results.firstIndex(where: { $0.id == incoming.id }),
+           results[index] != incoming {
             results[index] = incoming
             searchResults = results
         }
@@ -342,8 +343,19 @@ extension ChatStore {
             return
         }
 
-        pinnedChats.removeAll { $0.id == incoming.id }
-        if incoming.isPinned == true { pinnedChats.append(incoming) }
+        // Write the pinned list only when this chat's pinned copy changes:
+        // any write re-renders the sidebar, and most upserts are new messages
+        // in unpinned chats. `displayedChats` orders pins by `pinOrder`.
+        let pinnedIndex = pinnedChats.firstIndex { $0.id == incoming.id }
+        if incoming.isPinned == true {
+            if let pinnedIndex {
+                if pinnedChats[pinnedIndex] != incoming { pinnedChats[pinnedIndex] = incoming }
+            } else {
+                pinnedChats.append(incoming)
+            }
+        } else if let pinnedIndex {
+            pinnedChats.remove(at: pinnedIndex)
+        }
 
         var updated = chats
         if let index = updated.firstIndex(where: { $0.id == incoming.id }) {
@@ -364,10 +376,16 @@ extension ChatStore {
     /// Removes a chat from the sidebar and search results, closing it if it
     /// was open rather than jumping to another chat.
     func removeChatLocally(_ chatID: String) {
-        pinnedChats.removeAll { $0.id == chatID }
-        setChats(chats.filter { $0.id != chatID })
-        if var results = searchResults {
-            results.removeAll { $0.id == chatID }
+        // Upserts for chats outside the current filter land here constantly;
+        // only write the lists that actually hold the chat.
+        if let index = pinnedChats.firstIndex(where: { $0.id == chatID }) {
+            pinnedChats.remove(at: index)
+        }
+        if chats.contains(where: { $0.id == chatID }) {
+            setChats(chats.filter { $0.id != chatID })
+        }
+        if var results = searchResults, let index = results.firstIndex(where: { $0.id == chatID }) {
+            results.remove(at: index)
             searchResults = results
         }
         if selectedChatID == chatID {

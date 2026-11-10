@@ -110,7 +110,11 @@ final class NotificationService {
                 requestedAppleToken = false
                 uploadedPreferences = nil
             }
-            try await syncNotificationPreferences()
+            // Each realtime connection, including the one every foreground
+            // opens, already syncs preferences; this covers the first upload.
+            if uploadedPreferences == nil {
+                try await syncNotificationPreferences()
+            }
             if deviceToken != nil { enrollIfNeeded() }
             guard !requestedAppleToken else { return }
             requestedAppleToken = true

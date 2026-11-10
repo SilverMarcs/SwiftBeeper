@@ -408,7 +408,7 @@ final class ChatStore {
             guard let self, !Task.isCancelled else { return }
             await loadChats()
             await loadMessages()
-            if isThreadPresented { activeThread?.load() }
+            if isThreadPresented { activeThread?.load(fetchingHistory: false) }
         }
     }
 

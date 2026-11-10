@@ -35,13 +35,15 @@ final class ThreadStore {
     // MARK: - Loading
 
     /// Shows the local replies, then fetches the thread from the server, since
-    /// sync only delivers replies sent while this device followed the chat.
-    func load() {
+    /// sync only delivers replies sent while this device followed the chat. A
+    /// resync after reconnecting passes `fetchingHistory: false`: the history
+    /// was fetched when the thread opened, and sync has kept it current since.
+    func load(fetchingHistory: Bool = true) {
         loadTask?.cancel()
         loadTask = Task { [weak self] in
             guard let self else { return }
             await loadLocal()
-            guard !Task.isCancelled else { return }
+            guard fetchingHistory, !Task.isCancelled else { return }
             do {
                 try await APIClient.loadThreadHistory(chatID: chatID, threadRootID: rootID)
                 guard !Task.isCancelled else { return }
@@ -77,13 +79,16 @@ final class ThreadStore {
     /// Applies the chat's changed messages, keeping the root and this
     /// thread's replies. Every copy the core sends is complete.
     func upsert(_ incoming: [Message]) {
+        // Every change in the chat arrives here while the thread is open;
+        // most belong to other threads or the main timeline.
+        if let newRoot = incoming.last(where: { $0.id == rootID }), newRoot != root {
+            root = newRoot
+        }
+        let threadReplies = incoming.filter { $0.id != rootID && $0.threadRootID == rootID }
+        guard !threadReplies.isEmpty else { return }
         var byID = Dictionary(replies.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-        for message in incoming {
-            if message.id == rootID {
-                root = message
-            } else if message.threadRootID == rootID {
-                byID[message.id] = message
-            }
+        for message in threadReplies {
+            byID[message.id] = message
         }
         let updated = byID.values.sorted { ($0.timestamp, $0.numericSortKey, $0.id) < ($1.timestamp, $1.numericSortKey, $1.id) }
         if updated != replies { replies = updated }

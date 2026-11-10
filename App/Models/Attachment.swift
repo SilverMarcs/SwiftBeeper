@@ -68,6 +68,16 @@ struct Attachment: Identifiable, Codable, Equatable, Sendable {
         srcURL ?? _id
     }
 
+    /// The largest video the timeline downloads to play inline: 20 MB.
+    static let maxInlineVideoSize = 20 * 1024 * 1024
+
+    /// A video too large to download for inline playback, by its reported
+    /// size. Videos without a size still play.
+    var isTooLargeForInlinePlayback: Bool {
+        guard type == .video || type == .reel, let fileSize else { return false }
+        return fileSize > Self.maxInlineVideoSize
+    }
+
     var typeLabel: String {
         switch type {
         case .image: "image"

@@ -112,14 +112,44 @@ extension ChatStore {
     /// complete, so the newest one wins outright.
     func upsertMessages(_ incoming: [Message]) {
         handoffTyping(to: incoming)
-        var byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        // Replace or insert each message in the sorted timeline, rather than
+        // re-sorting everything loaded for every reaction or edit. Database
+        // reloads often equal the event-applied state; those write nothing.
+        var updated = messages
+        var changed = false
         for message in incoming {
-            byID[message.id] = message
-            if !message.hasUnresolvedReel { failedMediaIDs.remove(message.id) }
+            // A write to the set re-renders every video bubble that reads it.
+            if !message.hasUnresolvedReel, failedMediaIDs.contains(message.id) {
+                failedMediaIDs.remove(message.id)
+            }
+            if let index = updated.firstIndex(where: { $0.id == message.id }) {
+                guard updated[index] != message else { continue }
+                changed = true
+                if updated[index].numericSortKey == message.numericSortKey {
+                    updated[index] = message
+                    continue
+                }
+                updated.remove(at: index)
+            }
+            changed = true
+            updated.insert(message, at: Self.sortedInsertionIndex(of: message, in: updated))
         }
-        let updated = byID.values.sorted { ($0.numericSortKey, $0.id) < ($1.numericSortKey, $1.id) }
-        // Database reloads often equal the event-applied state; skip the no-op write.
-        if updated != messages { messages = updated }
+        if changed { messages = updated }
+    }
+
+    /// Where `message` goes in a timeline sorted by sort key, then ID.
+    private static func sortedInsertionIndex(of message: Message, in messages: [Message]) -> Int {
+        let key = (message.numericSortKey, message.id)
+        var low = 0, high = messages.count
+        while low < high {
+            let mid = (low + high) / 2
+            if (messages[mid].numericSortKey, messages[mid].id) < key {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        return low
     }
 
     /// Clears the timeline and composer state for a newly opened chat.

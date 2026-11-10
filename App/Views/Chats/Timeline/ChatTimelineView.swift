@@ -12,6 +12,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var firstUnreadID: String?
     @State private var isNearBottom = true
+    /// The derived message rows, rebuilt only when their inputs change.
+    @State private var entriesCache = TimelineEntriesCache()
     private let bottomAnchorID = "timeline-bottom"
 
     var body: some View {
@@ -20,7 +22,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             let messages = source.timelineMessages
             let outgoingMessages = source.timelineOutgoingMessages
             let typingBubble = source.typingBubble
-            let timelineEntries = TimelineEntry.entries(
+            let timelineEntries = entriesCache.entries(
                 for: messages,
                 firstUnreadID: firstUnreadID,
                 lastReadByOtherSortKey: source.lastReadByOtherSortKey,
@@ -35,6 +37,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 messageRowIDs: source.typingMessageRowIDs
             )
             let activeComposerMessageID = composer.activeMessage?.id
+            // Rows get the chat without its preview and unread state, so each
+            // new message or read doesn't re-render every row.
+            let rowChat = chat.forTimelineRows
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -52,7 +57,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                             ForEach(timelineItems) { item in
                                 TimelineItemRow(
                                     item: item,
-                                    chat: chat,
+                                    chat: rowChat,
                                     firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
                                     activeComposerMessageID: activeComposerMessageID
                                 )

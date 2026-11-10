@@ -136,10 +136,10 @@ func imageDimensions(filePath string) (int, int) {
 
 // uploadAttachment uploads a staged file to the homeserver, encrypting it for
 // encrypted rooms, and returns the media message content to send.
-func (s *Dispatcher) uploadAttachment(ctx context.Context, input wire.MessageAttachmentInput, encrypt bool) (*event.MessageEventContent, error) {
+func (s *Dispatcher) uploadAttachment(ctx context.Context, input wire.MessageAttachmentInput, encrypt bool) (*event.MessageEventContent, uploadMetadata, error) {
 	meta, err := s.loadUploadMetadata(input.UploadID)
 	if err != nil {
-		return nil, err
+		return nil, meta, err
 	}
 	fileName := strings.TrimSpace(input.FileName)
 	if fileName == "" {
@@ -151,12 +151,12 @@ func (s *Dispatcher) uploadAttachment(ctx context.Context, input wire.MessageAtt
 	}
 	file, err := os.Open(meta.FilePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open uploaded asset: %w", err)
+		return nil, meta, fmt.Errorf("failed to open uploaded asset: %w", err)
 	}
 	defer file.Close()
 	stat, err := file.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat uploaded asset: %w", err)
+		return nil, meta, fmt.Errorf("failed to stat uploaded asset: %w", err)
 	}
 
 	var uploadReader io.Reader = file
@@ -177,7 +177,7 @@ func (s *Dispatcher) uploadAttachment(ctx context.Context, input wire.MessageAtt
 		_ = encryptedReader.Close()
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload media to Matrix: %w", err)
+		return nil, meta, fmt.Errorf("failed to upload media to Matrix: %w", err)
 	}
 
 	content := &event.MessageEventContent{
@@ -199,7 +199,32 @@ func (s *Dispatcher) uploadAttachment(ctx context.Context, input wire.MessageAtt
 		content.Info.Width = int(input.Size.Width)
 		content.Info.Height = int(input.Size.Height)
 	}
-	return content, nil
+	return content, meta, nil
+}
+
+// adoptSentUpload moves a sent attachment into the media cache under the URL
+// it was sent with, so showing it never downloads it again, and deletes its
+// staging directory. In an encrypted room the staged file is the plaintext,
+// which is exactly the cache's decrypted copy.
+func (s *Dispatcher) adoptSentUpload(meta uploadMetadata, content *event.MessageEventContent) {
+	source, encrypted := string(content.URL), false
+	if content.File != nil {
+		source, encrypted = string(content.File.URL), true
+	}
+	if source != "" {
+		cacheDir := s.assetCacheDir()
+		target, decrypted := assetCachePaths(cacheDir, source)
+		if encrypted {
+			target = decrypted
+		}
+		if os.MkdirAll(cacheDir, 0o700) == nil {
+			if _, err := os.Stat(target); err != nil {
+				_ = os.Rename(meta.FilePath, target)
+			}
+		}
+	}
+	_ = os.RemoveAll(filepath.Dir(meta.FilePath))
+	s.assets.pruneSoon(s.assetCacheDir(), s.uploadRootDir())
 }
 
 func messageTypeForMime(mimeType string) event.MessageType {

@@ -1,9 +1,13 @@
 import Foundation
+import SwiftMediaViewer
 
 /// Resolves Matrix media to URLs and files the views can use.
 enum MatrixMedia {
-    /// The reserved host of media URLs that `MatrixURLProtocol` serves from
-    /// the core's cache. It is an identifier only and is never resolved.
+    /// The scheme and reserved host of media URLs, served from the core's
+    /// cache: to SwiftMediaViewer by `registerImageSource()`, and to
+    /// URLSession by `MatrixURLProtocol`. The host is an identifier only and
+    /// is never resolved.
+    nonisolated static let scheme = "relay-media"
     nonisolated static let host = "relay.local.invalid"
     private static let temporaryFilePrefix = "beeper-"
 
@@ -13,11 +17,30 @@ enum MatrixMedia {
         guard isMatrixSource(sourceURL) else { return sourceURL }
 
         var components = URLComponents()
-        components.scheme = "https"
+        components.scheme = scheme
         components.host = host
         components.path = "/media"
         components.queryItems = [URLQueryItem(name: "url", value: source)]
         return components.url
+    }
+
+    /// Has SwiftMediaViewer read display URLs straight from the core's cache.
+    /// Its own disk cache would otherwise keep a second full copy of every
+    /// image, written after a full in-memory copy through URLSession; this
+    /// source maps the core's file and decodes it at the size shown.
+    nonisolated static func registerImageSource() {
+        SMVImageSources.register(scheme: scheme) { url, _ in
+            guard let source = matrixSource(of: url) else { throw MatrixError.invalidRequest }
+            let file = try await MatrixRuntime.shared.localAsset(source)
+            return try Data(contentsOf: file, options: .mappedIfSafe)
+        }
+    }
+
+    /// The mxc:// or localmxc:// source a display URL stands for.
+    nonisolated static func matrixSource(of url: URL) -> String? {
+        guard url.host == host else { return nil }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "url" })?.value
     }
 
     /// A temporary copy of the cached media with the given extension, for
@@ -43,7 +66,13 @@ enum MatrixMedia {
         try? await MatrixRuntime.shared.localAsset(source)
     }
 
-    static func clearTemporaryFiles() {
+    /// Deletes downloaded media: the core's cache and the copies made from it.
+    static func clearCaches() async {
+        clearTemporaryFiles()
+        try? await MatrixRuntime.shared.clearMediaCache()
+    }
+
+    private static func clearTemporaryFiles() {
         let contents = (try? FileManager.default.contentsOfDirectory(
             at: URL.temporaryDirectory,
             includingPropertiesForKeys: nil
