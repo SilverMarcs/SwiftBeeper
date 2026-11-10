@@ -11,6 +11,9 @@ struct OutgoingTimelineEntry: Identifiable, Equatable {
     let startsSenderRun: Bool
     /// The quoted message for a reply, resolved from the canonical timeline.
     let linkedMessage: Message?
+    /// The thread's first message for a thread reply also sent to the chat,
+    /// resolved from the canonical timeline.
+    let threadRoot: Message?
 
     var id: String { message.timelineKey }
 
@@ -29,7 +32,8 @@ struct OutgoingTimelineEntry: Identifiable, Equatable {
                 message: message,
                 showsTimestamp: showsTimestamp,
                 startsSenderRun: startsSenderRun,
-                linkedMessage: message.replyToMessageID.flatMap { replyID in messages.first { $0.id == replyID } }
+                linkedMessage: message.replyToMessageID.flatMap { replyID in messages.first { $0.id == replyID } },
+                threadRoot: message.broadcastThreadRootID.flatMap { rootID in messages.first { $0.id == rootID } }
             )
         }
     }

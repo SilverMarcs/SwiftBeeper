@@ -1,14 +1,16 @@
 import Foundation
 
-/// Quoted messages older than the open timeline's loaded pages. Replies keep
-/// only the quoted message's ID, so these come from the local database in one
+/// Quoted messages older than the open timeline's loaded pages: the targets of
+/// replies, and the threads that replies also sent to the chat came from.
+/// Messages keep only those IDs, so these come from the local database in one
 /// batched lookup per page or sync update. Nothing here touches the network.
 extension ChatStore {
     /// Reads the messages `incoming` quotes that neither the timeline nor an
     /// earlier lookup holds. Each ID is asked for once per open chat.
     func loadQuotedMessages(for incoming: [Message]) async {
         guard let chatID = selectedChatID else { return }
-        let candidateIDs = Set(incoming.compactMap(\.linkedMessageID)).filter {
+        let quotedIDs = incoming.compactMap(\.linkedMessageID) + incoming.compactMap(\.broadcastThreadRootID)
+        let candidateIDs = Set(quotedIDs).filter {
             !$0.isEmpty && quotedMessages[$0] == nil && !requestedQuotedMessageIDs.contains($0)
         }
         guard !candidateIDs.isEmpty else { return }

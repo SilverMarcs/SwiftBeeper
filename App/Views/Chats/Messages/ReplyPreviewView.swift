@@ -1,16 +1,22 @@
 import SwiftUI
 
-/// The quoted message above a reply. Tapping it scrolls to that message.
+/// The quoted message above a reply. Tapping it scrolls to that message, or
+/// runs `action` when one is given.
 struct ReplyPreviewView: View {
     @Environment(\.scrollToMessage) private var scrollToMessage
     @Environment(\.outgoingBubbleColor) private var outgoingBubbleColor
 
     let linkedMessage: Message?
     let isOutgoing: Bool
+    var action: (() -> Void)?
 
     var body: some View {
         Button {
-            if let linkedMessage { scrollToMessage(linkedMessage.id) }
+            if let action {
+                action()
+            } else if let linkedMessage {
+                scrollToMessage(linkedMessage.id)
+            }
         } label: {
             HStack(spacing: 6) {
                 RoundedRectangle(cornerRadius: 1.5)

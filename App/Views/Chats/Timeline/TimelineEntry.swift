@@ -18,6 +18,9 @@ struct TimelineEntry: Identifiable, Equatable {
     /// The message this one replies to, from the timeline or, when older,
     /// the source's quoted-message lookup.
     let linkedMessage: Message?
+    /// For a thread reply also sent to the chat, the thread's first message,
+    /// resolved the same way as `linkedMessage`.
+    let threadRoot: Message?
 
     var id: String { message.id }
 
@@ -69,7 +72,8 @@ struct TimelineEntry: Identifiable, Equatable {
                 startsSenderRun: previous.map { $0.senderID != message.senderID } == true
                     && !showsTimestamp && message.id != firstUnreadID,
                 showsReadIndicator: row.contains { $0.id == readIndicatorID },
-                linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] ?? quotedMessages[$0] }
+                linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] ?? quotedMessages[$0] },
+                threadRoot: message.broadcastThreadRootID.flatMap { messagesByID[$0] ?? quotedMessages[$0] }
             )
         }
     }

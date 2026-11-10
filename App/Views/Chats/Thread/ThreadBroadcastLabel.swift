@@ -1,31 +1,13 @@
 import SwiftUI
 
-/// Above a thread reply also sent to the chat: "Replied to a thread", with the
-/// thread's first message when it is loaded. Tapping it opens the thread.
+/// Beside the sender's name on a thread reply also sent to the chat, or in
+/// its place when the row shows no name. Inherits the name's font.
 struct ThreadBroadcastLabel: View {
-    @Environment(ChatStore.self) private var chatStore
-
-    let message: Message
+    /// Whether the sender's name precedes the label on the same line.
+    let followsName: Bool
 
     var body: some View {
-        let root = message.threadRootID.flatMap { rootID in chatStore.messages.first { $0.id == rootID } }
-        Button {
-            chatStore.showThread(for: message)
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "arrowshape.turn.up.left.2")
-                Text("Replied to a thread")
-                if let root {
-                    Text(root.displayText)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .lineLimit(1)
-            .font(.caption)
+        Text(followsName ? "replied to a thread" : "Replied to a thread")
             .foregroundStyle(.secondary)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens the thread")
     }
 }

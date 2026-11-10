@@ -38,6 +38,12 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         threadRootID != nil && isThreadBroadcast != true
     }
 
+    /// For a thread reply also sent to the chat, the thread's first message,
+    /// which the main timeline quotes above it. Nil for any other message.
+    var broadcastThreadRootID: String? {
+        isThreadBroadcast == true ? threadRootID : nil
+    }
+
     /// Numeric sort key for correct ordering (handles negative backfill IDs).
     var numericSortKey: Int64 { Int64(sortKey) ?? 0 }
 

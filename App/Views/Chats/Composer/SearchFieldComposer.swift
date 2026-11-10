@@ -129,6 +129,7 @@ struct SearchFieldComposer: ViewModifier {
                     MessagePendingAttachmentsBar(composer: composer)
                     if composer.target.isThread && !composer.isEditing && chatStore.repliesInThreads(in: chat) {
                         AlsoSendToChatToggle(isOn: Bindable(composer).alsoSendToChat, chat: chat)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal)
                             .padding(.vertical, 6)
                     }

@@ -54,6 +54,9 @@ struct OutgoingMessage: Identifiable, Equatable {
     /// kept to its thread.
     var showsInMainTimeline: Bool { threadRootID == nil || alsoSendToChat }
 
+    /// The thread a reply also sent to the chat goes to; nil for any other send.
+    var broadcastThreadRootID: String? { alsoSendToChat ? threadRootID : nil }
+
     /// One confirmed message per attachment, or one for a text-only send.
     var expectedConfirmationCount: Int {
         max(attachments.count, 1)

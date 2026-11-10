@@ -13,10 +13,12 @@ struct MessageRowView: View {
 
     var body: some View {
         let message = entry.message
-        // Rows in a thread drop the thread footer and the broadcast label.
+        // Rows in a thread drop the thread footer and the thread quote.
         let isInThread = composer?.target.isThread == true
         let isOutgoing = message.isSender
         let showsSenderIdentity = !isOutgoing && !chat.isSingleChat
+        let showsSenderName = showsSenderIdentity && entry.isFirstInGroup
+        let isThreadBroadcast = message.isThreadBroadcast == true && !isInThread
         HStack(alignment: .bottom, spacing: 6) {
             if isOutgoing {
                 Spacer(minLength: 50)
@@ -40,17 +42,28 @@ struct MessageRowView: View {
             }
 
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
-                if showsSenderIdentity && entry.isFirstInGroup {
-                    Text(message.senderDisplayName)
-                        .font(.subheadline)
-                        .bold()
+                if showsSenderName || isThreadBroadcast {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        if showsSenderName {
+                            Text(message.senderDisplayName)
+                                .bold()
+                        }
+                        if isThreadBroadcast {
+                            ThreadBroadcastLabel(followsName: showsSenderName)
+                        }
+                    }
+                    .font(.subheadline)
+                    .lineLimit(1)
                 }
 
-                if message.isThreadBroadcast == true && !isInThread {
-                    ThreadBroadcastLabel(message: message)
-                }
-
-                if message.linkedMessageID?.isEmpty == false {
+                if isThreadBroadcast {
+                    // The thread's first message, quoted like a reply.
+                    ReplyPreviewView(linkedMessage: entry.threadRoot, isOutgoing: isOutgoing) {
+                        chatStore.showThread(for: message)
+                    }
+                    .accessibilityHint("Opens the thread")
+                    .modifier(TypingBubbleContentReveal())
+                } else if message.linkedMessageID?.isEmpty == false {
                     ReplyPreviewView(linkedMessage: entry.linkedMessage, isOutgoing: isOutgoing)
                         .modifier(TypingBubbleContentReveal())
                 }

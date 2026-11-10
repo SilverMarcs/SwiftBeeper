@@ -11,7 +11,7 @@ extension ChatStore {
         }
         guard let chat = chat(byID: message.chatID) else { return }
         activeThread?.cancel()
-        let root = rootID == message.id ? message : messages.first { $0.id == rootID }
+        let root = rootID == message.id ? message : messages.first { $0.id == rootID } ?? quotedMessages[rootID]
         let thread = ThreadStore(chat: chat, rootID: rootID, root: root, chatStore: self)
         activeThread = thread
         isThreadPresented = true
