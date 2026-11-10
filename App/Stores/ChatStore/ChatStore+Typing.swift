@@ -11,9 +11,12 @@ extension ChatStore {
             $0.isSelf != true && $0.id != currentUserProfile?.id
         }
         guard let first = others.first else {
-            // A stop often overtakes the message in sync. Briefly retain the
-            // row so the message can take its place without collapse/reinsert.
-            expireTyping(after: .milliseconds(400))
+            // A stop often overtakes the message in sync: it's emitted while the
+            // response is parsed, before the timeline commits, and it often ends
+            // the long poll a full sync round trip before the message lands.
+            // Retain the row so the message can take its place without
+            // collapse/reinsert.
+            expireTyping(after: .seconds(3))
             return
         }
         typingParticipants = others
