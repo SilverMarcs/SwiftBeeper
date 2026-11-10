@@ -11,6 +11,14 @@ struct MessageBlockView: View {
             Text(attributed)
         case .quote(let blocks):
             MessageQuoteBlockView(blocks: blocks)
+        case .heading(let level, let attributed):
+            MessageHeadingView(level: level, text: attributed)
+        case .list(let items):
+            MessageListView(items: items)
+        case .code(let code):
+            MessageCodeBlockView(code: code)
+        case .rule:
+            Divider()
         }
     }
 }

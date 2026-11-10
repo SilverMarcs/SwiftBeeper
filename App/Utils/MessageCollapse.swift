@@ -76,9 +76,32 @@ private struct MessageCollapseBudget {
             case .quote(let content):
                 let quoted = take(content)
                 if !quoted.isEmpty { taken.append(.quote(quoted)) }
+            case .heading(let level, let text):
+                taken.append(.heading(level: level, take(text)))
+            case .list(let items):
+                let listed = take(items)
+                if !listed.isEmpty { taken.append(.list(listed)) }
+            case .code(let code):
+                taken.append(.code(String(take(AttributedString(code)).characters)))
+            case .rule:
+                taken.append(.rule)
             }
             // The stack's spacing between blocks reads as a line.
             lines -= 1
+        }
+        return taken
+    }
+
+    /// The leading list items that fit, the last one cut short.
+    private mutating func take(_ items: [MessageListItem]) -> [MessageListItem] {
+        var taken: [MessageListItem] = []
+        for item in items {
+            guard !didTruncate, characters > 0, lines > 0 else {
+                didTruncate = true
+                break
+            }
+            let blocks = take(item.blocks)
+            if !blocks.isEmpty { taken.append(MessageListItem(marker: item.marker, blocks: blocks)) }
         }
         return taken
     }

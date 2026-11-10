@@ -82,7 +82,7 @@ func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtTy
 		}
 	}
 	if message.Text != "" {
-		message.FormattedText = messageMentionText(content)
+		message.FormattedText = messageMarkdownText(content)
 	}
 	return nil
 }

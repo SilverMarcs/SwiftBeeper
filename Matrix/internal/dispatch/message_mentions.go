@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"maunium.net/go/mautrix/event"
@@ -25,22 +26,21 @@ func messageMentions(mentions *event.Mentions) *wire.MessageMentions {
 	return result
 }
 
-// Convert only messages containing user links. The SDK handles Matrix HTML,
-// entities and whitespace; keeping links avoids guessing ranges from names.
+// messageMarkdownText converts an HTML body to the display Markdown the app
+// renders: links keep their labels, lists, headings, quotes and code blocks
+// keep their structure, and Matrix user links become matrix.to mentions. The
+// SDK handles Matrix HTML, entities and whitespace; keeping links avoids
+// guessing ranges from names. It returns "" for a message without HTML, or
+// one whose Markdown reads the same as its plain body.
 // Both history and realtime call this with the decrypted, latest edited content.
-func messageMentionText(content event.MessageEventContent) string {
+func messageMarkdownText(content event.MessageEventContent) string {
 	if content.Format != event.FormatHTML || content.FormattedBody == "" {
-		return ""
-	}
-	// Every user link is a matrix: URI or a matrix.to URL. Most messages have
-	// neither, and would otherwise be fully converted only to be discarded.
-	lowered := strings.ToLower(content.FormattedBody)
-	if !strings.Contains(lowered, "matrix.to") && !strings.Contains(lowered, "matrix:") {
 		return ""
 	}
 	parser := *format.MarkdownHTMLParser
 	parser.PillConverter = nil
-	hasMention := false
+	// Inline HTML would show as literal tags.
+	parser.UnderlineConverter = func(text string, ctx format.Context) string { return text }
 	parser.LinkConverter = func(text, href string, ctx format.Context) string {
 		parsed, err := url.Parse(href)
 		if err != nil {
@@ -51,7 +51,6 @@ func messageMentionText(content event.MessageEventContent) string {
 		if parsed.Scheme == "matrix" || ((parsed.Scheme == "https" || parsed.Scheme == "http") && strings.EqualFold(parsed.Hostname(), "matrix.to")) {
 			matrixURI, err := id.ParseMatrixURIOrMatrixToURL(href)
 			if err == nil && matrixURI.UserID() != "" && matrixURI.EventID() == "" {
-				hasMention = true
 				// Canonicalize both matrix: and matrix.to links for the Swift UI.
 				href = matrixURI.MatrixToURL()
 			}
@@ -72,13 +71,17 @@ func messageMentionText(content event.MessageEventContent) string {
 		return mentionMarkdownEscapes.Replace(text)
 	}
 	text := parser.Parse(content.FormattedBody, format.NewContext(context.Background()))
-	if !hasMention {
+	// Adjacent blocks each add their own line breaks.
+	text = extraBlankLines.ReplaceAllString(text, "\n\n")
+	if text == content.Body {
 		return ""
 	}
 	return text
 }
 
+var extraBlankLines = regexp.MustCompile(`\n{3,}`)
+
 var mentionMarkdownEscapes = strings.NewReplacer(
 	"\\", "\\\\", "[", "\\[", "]", "\\]", "*", "\\*", "_", "\\_",
-	"`", "\\`", "<", "\\<", ">", "\\>", "!", "\\!",
+	"`", "\\`", "<", "\\<", ">", "\\>", "!", "\\!", "#", "\\#",
 )

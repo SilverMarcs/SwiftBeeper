@@ -39,7 +39,8 @@ struct ComposerDraft {
 
     /// Restores linked identities when an existing message enters Edit.
     init(message: Message) {
-        guard let formatted = message.formattedText,
+        // Only mentions need restoring; other formatting edits as the plain body.
+        guard let formatted = message.formattedText, formatted.hasMentionLinks,
               let attributed = try? AttributedString(
                 markdown: formatted,
                 options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)

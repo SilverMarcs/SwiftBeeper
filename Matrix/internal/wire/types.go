@@ -101,7 +101,8 @@ type Message struct {
 	Reactions       []Reaction   `json:"reactions"`
 	SenderName      string       `json:"senderName"`
 	Text            string       `json:"text"`
-	// FormattedText is display Markdown with Matrix user links preserved.
+	// FormattedText is display Markdown converted from the HTML body, with
+	// links, lists, headings, code and Matrix user links preserved.
 	// Text remains the plain body for previews, copying and editing.
 	FormattedText string           `json:"formattedText,omitempty"`
 	Mentions      *MessageMentions `json:"mentions,omitempty"`
