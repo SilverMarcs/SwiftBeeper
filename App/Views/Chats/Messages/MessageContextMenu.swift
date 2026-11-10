@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reactions, reply, copy, edit, save, and delete for one message. For a photo
+/// Reactions, who reacted, reply, copy, edit, save, and delete for one message. For a photo
 /// gallery, save and delete also cover the photos folded in after it.
 struct MessageContextMenu: View {
     @Environment(ChatStore.self) private var chatStore
@@ -8,6 +8,7 @@ struct MessageContextMenu: View {
     @Environment(\.composer) private var composer
     @Environment(\.saveAttachment) private var saveAttachment
     @Environment(\.saveAttachmentToPhotos) private var saveAttachmentToPhotos
+    @Environment(\.showReactionDetails) private var showReactionDetails
 
     let message: Message
     let chat: Chat
@@ -41,18 +42,22 @@ struct MessageContextMenu: View {
         #endif
 
         Section {
-            if let composer {
-                if chatStore.canEdit(message, in: chat) {
-                    Button("Edit", systemImage: "pencil") {
-                        input.startEditing(message, in: composer)
-                    }
+            if let composer, chatStore.canEdit(message, in: chat) {
+                Button("Edit", systemImage: "pencil") {
+                    input.startEditing(message, in: composer)
                 }
+            }
 
-                // Inside a thread every message is already a thread reply.
-                if !composer.target.isThread {
-                    Button("Reply", systemImage: "arrowshape.turn.up.left") {
-                        input.reply(to: message, in: composer)
-                    }
+            if !message.visibleReactions.isEmpty {
+                Button("Reactions", systemImage: "face.smiling") {
+                    showReactionDetails(message, in: chat)
+                }
+            }
+
+            // Inside a thread every message is already a thread reply.
+            if let composer, !composer.target.isThread {
+                Button("Reply", systemImage: "arrowshape.turn.up.left") {
+                    input.reply(to: message, in: composer)
                 }
             }
 

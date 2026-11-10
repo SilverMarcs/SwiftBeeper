@@ -89,6 +89,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     }
                 })
                 .savesAttachments()
+                .showsReactionDetails()
                 // Recreate only the viewport when a timeline opens or its first database page arrives
                 .id("\(target.chatID)-\(target.threadRootID ?? "")-\(source.hasLoadedTimeline)")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)

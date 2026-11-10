@@ -124,16 +124,21 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 
-    /// Visible reactions grouped by key, in key order; nil when there are none.
-    var groupedReactions: [GroupedReaction]? {
+    /// Reactions Relay can render, in the order the core reported them.
+    var visibleReactions: [Reaction] {
         // Custom emoji and GIF reactions have no image representation in Relay.
         // Keep their data, but don't render raw shortcodes or media URLs.
-        let visibleReactions = reactions?.filter {
+        reactions?.filter {
             !($0.reactionKey.hasPrefix(":") && $0.reactionKey.hasSuffix(":"))
                 && !$0.reactionKey.hasPrefix("mxc://")
                 && !$0.reactionKey.hasPrefix("https://")
                 && !$0.reactionKey.hasPrefix("http://")
         } ?? []
+    }
+
+    /// Visible reactions grouped by key, in key order; nil when there are none.
+    var groupedReactions: [GroupedReaction]? {
+        let visibleReactions = visibleReactions
         guard !visibleReactions.isEmpty else { return nil }
         return Dictionary(grouping: visibleReactions, by: \.reactionKey)
             .map { key, group in
