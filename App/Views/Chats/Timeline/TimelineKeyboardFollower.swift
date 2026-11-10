@@ -63,7 +63,8 @@ final class TimelineKeyboardFollower {
 
     private weak var scrollView: UIScrollView?
     /// Whether the timeline should end at its newest message when the
-    /// keyboard shows. Replying or editing scrolls to that message instead.
+    /// keyboard shows. Replying or editing scrolls to that message instead,
+    /// and a timeline the reader scrolled back through stays put.
     private var followsKeyboardShow: () -> Bool = { true }
     private var observer: CFRunLoopObserver?
     private var offsetObservation: NSKeyValueObservation?
@@ -267,8 +268,8 @@ final class TimelineKeyboardFollower {
     // MARK: - Following
 
     /// Starts following as the keyboard shows, with the composer at rest.
-    /// Runs before either moves. `ScrollOnComposerFocus` takes the timeline
-    /// to its newest message, so it follows from anywhere near it.
+    /// Runs before either moves. `ScrollOnComposerFocus` takes a timeline
+    /// left at its end to its newest message, so it follows from there.
     private func beginShowFollowIfNeeded() {
         guard let scrollView, scrollView.window != nil, !scrollView.isTracking,
               followsKeyboardShow(),

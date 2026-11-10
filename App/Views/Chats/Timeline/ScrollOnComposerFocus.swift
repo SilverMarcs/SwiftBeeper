@@ -3,7 +3,8 @@ import SwiftUI
 
 /// Scrolls the timeline when the composer gains focus: to the message being
 /// replied to or edited, so it sits just above the keyboard, or otherwise to
-/// the newest message.
+/// the newest message, which `scrollToLatest` skips for a reader who
+/// scrolled back.
 ///
 /// Focus is observed here rather than in `ChatTimelineView.body`, so a focus
 /// change re-evaluates only this modifier. Interactive keyboard dismissal ends

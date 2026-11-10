@@ -12,6 +12,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var firstUnreadID: String?
     @State private var isNearBottom = true
+    @State private var restingPosition = TimelineRestingPosition()
     /// The derived message rows, rebuilt only when their inputs change.
     @State private var entriesCache = TimelineEntriesCache()
     private let bottomAnchorID = "timeline-bottom"
@@ -76,7 +77,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     }
                     #if os(iOS)
                     .if(isIPhone) {
-                        $0.followsComposerOnKeyboard(composer)
+                        $0.followsComposerOnKeyboard(composer, restingPosition: restingPosition)
                     }
                     #endif
                 }
@@ -104,6 +105,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
                 .scrollsOnComposerFocus(composer) {
+                    // A reader who scrolled back through the conversation
+                    // stays where they are.
+                    guard restingPosition.isAtEnd else { return }
                     scrollToLatest(with: proxy)
                 } scrollToComposerMessage: { messageID in
                     scrollAboveKeyboard(messageID, with: proxy)
@@ -116,10 +120,25 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     Task { await source.loadOlderTimeline() }
                 }
                 .onScrollGeometryChange(for: Bool.self) { geometry in
-                    geometry.visibleRect.maxY >= geometry.contentSize.height - 80
+                    Self.isNearBottom(geometry)
                 } action: { _, nearBottom in
                     isNearBottom = nearBottom
                 }
+                #if os(iOS)
+                // Only the reader decides; a scroll of the app's own leaves it.
+                // Mid-scroll counts as away, so a fling back through the
+                // conversation isn't pulled down by a tap on the composer.
+                .onScrollPhaseChange { _, phase, context in
+                    switch phase {
+                    case .tracking, .interacting, .decelerating:
+                        restingPosition.isAtEnd = false
+                    case .idle:
+                        restingPosition.isAtEnd = Self.isNearBottom(context.geometry)
+                    default:
+                        break
+                    }
+                }
+                #endif
                 .onChange(of: typingBubble?.id) { _, newValue in
                     guard newValue != nil, isNearBottom else { return }
                     scrollToLatest(with: proxy)
@@ -127,6 +146,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .onChange(of: target, initial: true) { _, _ in
                     firstUnreadID = nil
                     isNearBottom = true
+                    restingPosition.isAtEnd = true
                 }
                 .onChange(of: source.hasLoadedTimeline, initial: true) { _, loaded in
                     guard loaded, source.showsUnreadDivider else { return }
@@ -221,6 +241,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             }
             #endif
         }
+    }
+
+    private static func isNearBottom(_ geometry: ScrollGeometry) -> Bool {
+        geometry.visibleRect.maxY >= geometry.contentSize.height - 80
     }
 
     private func scrollToLatest(with proxy: ScrollViewProxy) {
