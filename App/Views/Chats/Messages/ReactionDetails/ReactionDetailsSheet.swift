@@ -3,6 +3,7 @@ import SwiftUI
 /// Everyone who reacted to a message, with their reaction.
 struct ReactionDetailsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(ChatStore.self) private var chatStore
 
     let details: ReactionDetails
 
@@ -11,7 +12,9 @@ struct ReactionDetailsSheet: View {
             List(details.message.visibleReactions) { reaction in
                 ReactionDetailsRow(
                     reaction: reaction,
-                    participant: details.chat.participant(with: reaction.participantID)
+                    participant: details.chat.participant(with: reaction.participantID).map {
+                        chatStore.displayedParticipant($0, in: details.chat)
+                    }
                 )
             }
             .navigationTitle("Reactions")

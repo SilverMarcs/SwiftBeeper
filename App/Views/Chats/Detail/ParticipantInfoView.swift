@@ -23,7 +23,11 @@ struct ParticipantInfoView: View {
                         title: participant.displayName,
                         subtitle: ChatInfoSubtitle.participant(participant, network: network)
                     ) {
-                        ProfileAvatarView(participant: participant, dimension: 96, allowsFullscreen: true)
+                        ProfileAvatarView(
+                            participant: chatStore.displayedParticipant(participant, in: sourceChat),
+                            dimension: 96,
+                            allowsFullscreen: true
+                        )
                     }
 
                     if !isSelf {

@@ -2,6 +2,9 @@ import SwiftUI
 
 /// A group's members; each row pushes that member's profile.
 struct ChatInfoMembersSection: View {
+    @Environment(ChatStore.self) private var chatStore
+
+    let chat: Chat
     let participants: ChatParticipants
     let previewLimit: Int
 
@@ -13,7 +16,7 @@ struct ChatInfoMembersSection: View {
         Section("Members (\(totalCount))") {
             ForEach(visibleParticipants) { participant in
                 NavigationLink(value: ChatInfoDestination.participant(participant)) {
-                    ParticipantRow(participant: participant)
+                    ParticipantRow(participant: chatStore.displayedParticipant(participant, in: chat))
                 }
             }
 

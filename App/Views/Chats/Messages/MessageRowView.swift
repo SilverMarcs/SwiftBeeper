@@ -84,7 +84,7 @@ struct MessageRowView: View {
                 })
 
                 if !isInThread, let thread = message.thread, thread.replyCount > 0 {
-                    ThreadSummaryButton(message: message, summary: thread)
+                    ThreadSummaryButton(message: message, summary: thread, chat: chat)
                 } else if isInThread, message.isThreadBroadcast == true {
                     Text(chat.isSingleChat ? "Also sent as direct message" : "Also sent to \(chat.displayTitle)")
                         .font(.caption2)

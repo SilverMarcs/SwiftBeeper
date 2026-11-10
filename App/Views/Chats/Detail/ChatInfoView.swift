@@ -33,7 +33,7 @@ struct ChatInfoView: View {
                 }
 
                 if chat.isGroupChat, let participants = detailedParticipants ?? chat.participants {
-                    ChatInfoMembersSection(participants: participants, previewLimit: Self.participantPreviewLimit)
+                    ChatInfoMembersSection(chat: chat, participants: participants, previewLimit: Self.participantPreviewLimit)
                 }
             }
             .formStyle(.grouped)

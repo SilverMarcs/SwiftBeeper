@@ -7,13 +7,16 @@ struct ThreadSummaryButton: View {
 
     let message: Message
     let summary: ThreadSummary
+    let chat: Chat
 
     var body: some View {
         Button {
             chatStore.showThread(for: message)
         } label: {
             HStack(spacing: 6) {
-                ThreadParticipantsView(participants: summary.participants ?? [])
+                ThreadParticipantsView(participants: (summary.participants ?? []).map {
+                    chatStore.displayedParticipant($0, in: chat)
+                })
 
                 Text("^[\(summary.replyCount) reply](inflect: true)")
                     .bold()
