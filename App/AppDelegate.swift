@@ -53,6 +53,14 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
         await MainActor.run {
             // Stay quiet for the chat already on screen.
             let content = notification.request.content
+            // A push can land after its message was already seen in an open
+            // chat, once the user has moved on. It has nothing new to show.
+            if content.categoryIdentifier == NotificationCategory.message,
+               content.replyDraft == nil,
+               let messageID = content.userInfo["messageID"] as? String,
+               Self.notificationService?.hasSeenMessage(messageID) == true {
+                return []
+            }
             #if os(macOS)
             guard Self.notificationService?.isAppActive == true else { return [.banner, .sound] }
             #endif

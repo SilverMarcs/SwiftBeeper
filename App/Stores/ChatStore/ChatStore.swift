@@ -61,7 +61,9 @@ final class ChatStore {
     // MARK: Notification taps
 
     /// The chat whose timeline is on screen, so its banners stay quiet.
-    @ObservationIgnored var visibleChatID: String?
+    @ObservationIgnored var visibleChatID: String? {
+        didSet { if visibleChatID != oldValue { markVisibleMessagesSeen(messages) } }
+    }
     /// A tapped notification's chat, held until it can be selected.
     @ObservationIgnored private(set) var pendingNotificationChatID: String?
     /// Changes whenever an action opens a chat, including one outside the sidebar.
@@ -102,7 +104,9 @@ final class ChatStore {
 
     /// The open chat's main timeline, oldest first. Thread replies kept to
     /// their thread live in `activeThread` instead.
-    var messages: [Message] = []
+    var messages: [Message] = [] {
+        didSet { markVisibleMessagesSeen(messages) }
+    }
     /// The latest thread opened from the timeline. It outlives its
     /// presentation, so the inspector keeps its content while it hides.
     var activeThread: ThreadStore?

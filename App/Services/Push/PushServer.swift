@@ -45,6 +45,12 @@ nonisolated struct PushServer {
         _ = try await send("PUT", body: preferences, path: "notification-preferences")
     }
 
+    /// Records messages already seen in Relay, so the server drops a Matrix
+    /// push for one that arrives afterwards, on all of this account's devices.
+    func markSeen(_ messages: [SeenMessage]) async throws {
+        _ = try await send("POST", body: JSONEncoder().encode(["messages": messages]), path: "seen-messages")
+    }
+
     /// Deletes this installation by ID, which also covers an enrollment
     /// interrupted before its pushkey was saved.
     func unregister() async throws {
