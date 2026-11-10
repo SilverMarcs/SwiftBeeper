@@ -14,10 +14,9 @@ struct ContentView: View {
                     ChatSidebarView()
                         .navigationSplitViewColumnWidth(min: 280, ideal: 340)
                 } detail: {
+                    // One detail for every chat, as on macOS: the timeline
+                    // viewport and composer re-key themselves per chat.
                     ChatDetailView(chatID: chatStore.selectedChatID)
-                        #if os(iOS)
-                        .id(chatStore.selectedChatID)
-                        #endif
                 }
                 .presentsThreads()
                 .onChange(of: chatStore.chatNavigationID) {

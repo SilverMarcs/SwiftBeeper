@@ -1,9 +1,15 @@
-import SwiftMediaViewer
+import AVKit
 import SwiftUI
 
 /// An inline, looping video bubble. Videos load once they're on screen and
 /// either autoplay is on or the user taps Play. Reels first need the core to
 /// resolve their media, which `ChatStore` limits to two at a time.
+///
+/// The bubble owns its player. On iPhone and iPad, tapping the video opens it
+/// full screen on that same player, so playback carries on where it was. The
+/// timeline behind the cover can still scroll, for a new message or a typing
+/// bubble, and take the row out of view; the player outlives that until full
+/// screen closes.
 struct VideoAttachmentView: View {
     let attachment: Attachment
     let message: Message
@@ -11,29 +17,40 @@ struct VideoAttachmentView: View {
     @Environment(ChatStore.self) private var chatStore
     @AppStorage("autoplay") private var autoplay = true
     @AppStorage("muteOnPlay") private var muteOnPlay = false
-    #if os(macOS)
     @State private var playback = AttachmentVideoPlayback()
-    #else
-    @State private var playbackURL: URL?
-    @State private var downloadFailed = false
-    #endif
     @State private var userRequestedPlay = false
     @State private var hasRequestedResolution = false
     @State private var isVisible = false
+    #if os(iOS)
+    @State private var isShowingFullScreen = false
+    /// Whether the row is in the timeline's rendered window, between its
+    /// `onAppear` and `onDisappear`.
+    @State private var isOnScreen = false
+    @Namespace private var fullScreenTransition
+    #endif
 
     var body: some View {
         let size = MediaBubbleSize.fitting(attachment.size)
         ZStack {
-            #if os(macOS)
             if playback.hasPlayer {
+                #if os(macOS)
                 MacVideoPlayer(player: playback.player)
+                #else
+                VideoPlayerLayerView(player: playback.player)
+                    // Above the UIKit view, which would otherwise take the tap.
+                    .overlay {
+                        Button {
+                            isShowingFullScreen = true
+                        } label: {
+                            Color.clear
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Play Full Screen")
+                    }
+                #endif
             }
-            #else
-            if let playbackURL {
-                SMVVideo(videoURL: playbackURL.absoluteString, autoplay: true, muteOnPlay: muteOnPlay)
-            }
-            #endif
-            if !isReadyForPlayback {
+            if !playback.isReadyForPlayback {
                 VideoAttachmentPoster(source: attachment.type == .reel ? attachment.resolvedURL : attachment.posterImg)
                     .overlay {
                         if chatStore.failedMediaIDs.contains(message.id) {
@@ -44,7 +61,7 @@ struct VideoAttachmentView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(chatStore.resolvingMediaIDs.count >= ChatStore.maxConcurrentMediaResolves)
-                        } else if hasFailed {
+                        } else if playback.hasFailed {
                             Button("Retry Video", systemImage: "arrow.clockwise") {
                                 Task { await loadVideo() }
                             }
@@ -78,22 +95,21 @@ struct VideoAttachmentView: View {
         }
         #if os(macOS)
         .onDisappear { playback.stop() }
-        #endif
-    }
-
-    private var isReadyForPlayback: Bool {
-        #if os(macOS)
-        playback.isReadyForPlayback
         #else
-        playbackURL != nil
-        #endif
-    }
-
-    private var hasFailed: Bool {
-        #if os(macOS)
-        playback.hasFailed
-        #else
-        downloadFailed
+        .matchedTransitionSource(id: message.id, in: fullScreenTransition)
+        .onAppear { isOnScreen = true }
+        .onDisappear {
+            isOnScreen = false
+            // Full screen plays on this player; it stops once that closes.
+            if !isShowingFullScreen { playback.stop() }
+        }
+        .fullScreenCover(isPresented: $isShowingFullScreen, onDismiss: {
+            if !isOnScreen { playback.stop() }
+        }) {
+            VideoPlayer(player: playback.player)
+                .ignoresSafeArea()
+                .navigationTransition(.zoom(sourceID: message.id, in: fullScreenTransition))
+        }
         #endif
     }
 
@@ -113,15 +129,7 @@ struct VideoAttachmentView: View {
 
     private func loadVideo() async {
         guard let source = attachment.resolvedURL else { return }
-        #if os(macOS)
         await playback.load(source: source, muted: muteOnPlay)
-        #else
-        downloadFailed = false
-        let url = await MatrixMedia.temporaryFile(for: source, fileExtension: "mp4")
-        guard !Task.isCancelled else { return }
-        playbackURL = url
-        downloadFailed = url == nil
-        #endif
     }
 }
 
