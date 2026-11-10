@@ -49,7 +49,7 @@ struct MessageContextMenu: View {
             }
 
             if !message.visibleReactions.isEmpty {
-                Button("Reactions", systemImage: "face.smiling") {
+                Button("Show Reactions", systemImage: "face.smiling") {
                     showReactionDetails(message, in: chat)
                 }
             }
