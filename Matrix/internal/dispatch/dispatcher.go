@@ -25,6 +25,7 @@ type Dispatcher struct {
 	assets *assetCache
 	// The accounts parsed from the last bridge state read.
 	accountsCache accountsCache
+	threads       threadFollows
 }
 
 func New(rt *gomuksruntime.Runtime) *Dispatcher {

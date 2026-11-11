@@ -35,6 +35,14 @@ export function notification(title, body, chatID = "", messageID = "", isMention
   };
 }
 
+// Deliveries are remembered for a day, long enough to outlast Matrix retries
+// and a seen message's push; no message text enters this table. The daily
+// scheduled cleanup removes older rows, so a push makes no extra write.
+export async function pruneDeliveries(env) {
+  await env.DEVICES.prepare("DELETE FROM notification_deliveries WHERE claimed_until < ?")
+    .bind(Date.now() - 86400000).run();
+}
+
 // Both Matrix callbacks and trusted direct sends use the same event identity.
 // A mention changes eligibility, never creates a second notification. Keep a
 // short lease while sending so concurrent callbacks cannot both send it.
@@ -42,9 +50,6 @@ export async function deliver(env, device, payload) {
   if (!payload.chatID || !payload.messageID) return send(env, device, payload);
   const now = Date.now();
   const claim = crypto.randomUUID();
-  // Retain only a day's deduplication IDs; no message text enters this table.
-  await env.DEVICES.prepare("DELETE FROM notification_deliveries WHERE claimed_until < ?")
-    .bind(now - 86400000).run();
   const acquired = await env.DEVICES.prepare(`
     INSERT INTO notification_deliveries (device_id, room_id, event_id, claim, claimed_until, sent)
     VALUES (?, ?, ?, ?, ?, 0)

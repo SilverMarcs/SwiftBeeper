@@ -3,7 +3,7 @@
 A personal Cloudflare Worker that forwards Matrix notifications to APNs. One
 shared secret protects device registration and notification preferences; D1
 holds your devices, suppressed room IDs with expiry times, and one day of
-delivery IDs for retry suppression. There are no Matrix sessions, sync loops,
+delivery IDs for retry suppression, pruned by a daily cron trigger. There are no Matrix sessions, sync loops,
 stored messages, or encryption keys on this service. This folder is independent
 of the Xcode project.
 
@@ -168,6 +168,19 @@ Optional `deviceID` selects one of your installations; otherwise it sends to all
 your registered devices. Optional `isMention: true` identifies a personal
 mention and bypasses room suppression. Use the original chat and message IDs
 so a direct send and a Matrix callback cannot become two notifications.
+
+Relay also manages Slack thread notifications with push rules, so a thread
+reply alerts only like it would in Slack: in a thread you started
+(`com.silvermarcs.relay.thread_started`, via the MSC3664 related-event
+condition), a thread you replied in (one `com.silvermarcs.relay.thread.*`
+rule per thread, removed after 14 quiet days), or with a mention. A final
+`com.silvermarcs.relay.slack_threads` rule silences every other Slack thread
+reply. The first two set a `com.silvermarcs.relay.thread` tweak of `started`
+or `followed`, which bypasses room suppression like a mention, so a thread
+you follow still alerts in a muted chat. `com.silvermarcs.relay.thread_room_mention`
+lets `@channel` and `@here` in a thread alert like in the channel itself,
+without bypassing room suppression. The Worker logs only which of the two
+matched and whether the chat was muted.
 
 ## Local development
 

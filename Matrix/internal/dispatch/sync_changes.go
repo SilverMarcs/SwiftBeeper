@@ -49,6 +49,7 @@ func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 	metaChanged := h.recordRoomMeta(syncComplete)
 	// Logout briefly leaves no client, then one with no account.
 	dispatcher := h.dispatcher
+	dispatcher.observeThreadActivity(syncComplete)
 	cli := dispatcher.rt.Client()
 	if cli == nil || cli.Account == nil || !h.isWatching("", false) {
 		return

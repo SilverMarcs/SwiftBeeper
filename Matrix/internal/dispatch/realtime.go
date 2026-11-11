@@ -79,11 +79,22 @@ type eventHub struct {
 }
 
 // pushRulesChanged reports whether content differs from the push rules last
-// signalled, ignoring key order and whitespace, and remembers it.
+// signalled, ignoring key order, whitespace and Relay's own notification
+// rules, and remembers it. Relay's rules don't change any chat's state, and
+// followed Slack threads rewrite theirs as the threads move.
 func (h *eventHub) pushRulesChanged(content json.RawMessage) bool {
-	var parsed any
+	var parsed map[string]any
 	canonical := string(content)
 	if json.Unmarshal(content, &parsed) == nil {
+		if global, ok := parsed["global"].(map[string]any); ok {
+			if override, ok := global["override"].([]any); ok {
+				global["override"] = slices.DeleteFunc(override, func(rule any) bool {
+					fields, _ := rule.(map[string]any)
+					ruleID, _ := fields["rule_id"].(string)
+					return strings.HasPrefix(ruleID, RelayRulePrefix)
+				})
+			}
+		}
 		if raw, err := json.Marshal(parsed); err == nil {
 			canonical = string(raw)
 		}

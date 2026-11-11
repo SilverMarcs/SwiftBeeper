@@ -14,7 +14,8 @@ const mentionPushRuleID = "com.silvermarcs.relay.mention"
 
 // This account-level exception precedes per-room mute rules, without changing
 // the rooms' mute/archive state or the global master switch. First-match push
-// rules produce one delivery for the event, not a separate mention event.
+// rules produce one delivery for the event, not a separate mention event. The
+// Slack thread rules follow it.
 func (r *Runtime) configureMentionNotifications(ctx context.Context) error {
 	cli := r.rt.Client()
 	if cli == nil || cli.Account == nil {
@@ -24,6 +25,22 @@ func (r *Runtime) configureMentionNotifications(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	written, err := r.putMentionRule(ctx, rules)
+	if err != nil {
+		return err
+	}
+	if written {
+		if rules, err = cli.Client.GetPushRules(ctx); err != nil {
+			return err
+		}
+	}
+	return r.dispatcher.ConfigureThreadNotifications(ctx, rules)
+}
+
+// putMentionRule makes the mention rule the first override rule, and reports
+// whether it wrote anything.
+func (r *Runtime) putMentionRule(ctx context.Context, rules *pushrules.PushRuleset) (bool, error) {
+	cli := r.rt.Client()
 	conditions := []*pushrules.PushCondition{{
 		Kind: pushrules.KindEventPropertyContains,
 		Key:  `content.m\.mentions.user_ids`, Value: string(cli.Account.UserID),
@@ -43,7 +60,7 @@ func (r *Runtime) configureMentionNotifications(ctx context.Context) error {
 		if rule.RuleID == mentionPushRuleID {
 			existing = rule
 			if before == "" && rule.Enabled && reflect.DeepEqual(rule.Conditions, conditions) && reflect.DeepEqual(rule.Actions, actions) {
-				return nil
+				return false, nil
 			}
 		} else if before == "" {
 			before = rule.RuleID
@@ -54,15 +71,16 @@ func (r *Runtime) configureMentionNotifications(ctx context.Context) error {
 		query["before"] = before
 	}
 	ruleURL := cli.Client.BuildURLWithQuery(mautrix.ClientURLPath{"v3", "pushrules", "global", "override", mentionPushRuleID}, query)
-	if _, err = cli.Client.MakeRequest(ctx, http.MethodPut, ruleURL, map[string]any{
+	if _, err := cli.Client.MakeRequest(ctx, http.MethodPut, ruleURL, map[string]any{
 		"conditions": conditions, "actions": actions,
 	}, nil); err != nil {
-		return err
+		return true, err
 	}
 	if existing != nil && !existing.Enabled {
-		_, err = cli.Client.MakeRequest(ctx, http.MethodPut,
+		_, err := cli.Client.MakeRequest(ctx, http.MethodPut,
 			cli.Client.BuildClientURL("v3", "pushrules", "global", "override", mentionPushRuleID, "enabled"),
 			map[string]bool{"enabled": true}, nil)
+		return true, err
 	}
-	return err
+	return true, nil
 }

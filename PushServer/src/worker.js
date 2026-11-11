@@ -1,4 +1,4 @@
-import { deliver, notification } from "./apns.js";
+import { deliver, notification, pruneDeliveries } from "./apns.js";
 
 const MATRIX_GATEWAY_PATH = "/_matrix/push/v1/notify";
 
@@ -123,7 +123,9 @@ async function unregister(env, id) {
 
 // The standard Matrix callback carries our exact mention tweak. Generic
 // highlight/high priority can mean replies or encrypted traffic, so neither
-// bypasses a block. Message content is ignored and never logged or stored.
+// bypasses a block. A reply in a Slack thread you started or follow carries
+// the thread tweak and also bypasses one. Message content is ignored and
+// never logged or stored.
 async function matrixPush(request, env) {
   const { notification: incoming } = await readJSON(request, 1048576);
   if (!incoming || !Array.isArray(incoming.devices) || incoming.devices.length > 100 ||
@@ -141,7 +143,11 @@ async function matrixPush(request, env) {
     if (!device) { rejected.push(requested.pushkey); continue; }
     // Ignore unread-count-only updates: opening Relay clears the local badge.
     const isMention = requested.tweaks?.["com.silvermarcs.relay.mention"] === true;
-    if (!incoming.event_id || !incoming.room_id || (blocked && !isMention)) continue;
+    const thread = requested.tweaks?.["com.silvermarcs.relay.thread"];
+    const isThread = thread === "started" || thread === "followed";
+    if (!incoming.event_id || !incoming.room_id || (blocked && !isMention && !isThread)) continue;
+    // Which thread rule matched, with no IDs or content, for checking the rules in Workers Logs.
+    if (isThread) console.log(JSON.stringify({ threadPush: thread, mutedChat: blocked }));
     const result = await deliver(env, device, notification("Relay", isMention ? "You were mentioned" : "New message", incoming.room_id, incoming.event_id, isMention));
     if (result === "expired") rejected.push(requested.pushkey);
     if (result === "failed") failed = true;
@@ -199,6 +205,9 @@ async function route(request, env) {
 }
 
 export default {
+  async scheduled(controller, env) {
+    await pruneDeliveries(env);
+  },
   async fetch(request, env) {
     try {
       return await route(request, env);

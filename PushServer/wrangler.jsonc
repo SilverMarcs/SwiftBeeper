@@ -4,6 +4,9 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-10-12",
   "workers_dev": true,
+  "observability": { "enabled": true },
+  // Daily cleanup of delivery IDs older than a day.
+  "triggers": { "crons": ["30 19 * * *"] },
   "vars": {
     "APNS_TOPIC": "com.SilverMarcs.Relay",
     "APNS_ENVIRONMENT": "sandbox"
