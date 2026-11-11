@@ -13,6 +13,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @AppStorage(MessageTextSelection.storageKey) private var selectsMessageText = true
     @State private var firstUnreadID: String?
     @State private var isNearBottom = true
+    /// Bumped by each scroll to the newest row; its completion only clears
+    /// `isScrollingToLatest` when no newer scroll started meanwhile.
+    @State private var latestScrollGeneration = 0
+    /// True while the app animates to the newest row. A tall new row pushes
+    /// the bottom out of reach until the scroll lands, and a burst of
+    /// messages arriving meanwhile should keep following.
+    @State private var isScrollingToLatest = false
     @State private var restingPosition = TimelineRestingPosition()
     /// The derived message rows, rebuilt only when their inputs change.
     @State private var entriesCache = TimelineEntriesCache()
@@ -179,13 +186,14 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
                 #endif
                 .onChange(of: typingBubble?.id) { _, newValue in
-                    guard newValue != nil, isNearBottom else { return }
+                    guard newValue != nil, isFollowingLatest else { return }
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: target, initial: true) { _, _ in
                     scrollAnchor.reset()
                     firstUnreadID = nil
                     isNearBottom = true
+                    isScrollingToLatest = false
                     restingPosition.isAtEnd = true
                 }
                 .onChange(of: source.hasLoadedTimeline, initial: true) { _, loaded in
@@ -205,6 +213,11 @@ struct ChatTimelineView<Source: TimelineSource>: View {
 
                     let confirmedOptimisticMessage = oldTracker.lastID?.hasPrefix("outgoing-") == true
                         && newTracker.count == oldTracker.count
+                    // Sending always brings the reader down to their message;
+                    // anything else only follows a reader already at the end,
+                    // so scrolling back through the conversation isn't undone.
+                    let sentMessage = newTracker.lastID?.hasPrefix("outgoing-") == true
+                    guard sentMessage || isFollowingLatest else { return }
                     firstUnreadID = nil
                     // Confirmation replaces the outgoing row, but not the end
                     // marker. Let the existing scroll animation finish.
@@ -287,9 +300,21 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         geometry.visibleRect.maxY >= geometry.contentSize.height - 80
     }
 
+    /// Whether the reader is at the newest row, or the app is already taking
+    /// them there.
+    private var isFollowingLatest: Bool {
+        isNearBottom || isScrollingToLatest
+    }
+
     private func scrollToLatest(with proxy: ScrollViewProxy) {
+        latestScrollGeneration += 1
+        let generation = latestScrollGeneration
+        isScrollingToLatest = true
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        } completion: {
+            guard generation == latestScrollGeneration else { return }
+            isScrollingToLatest = false
         }
     }
 
