@@ -87,6 +87,15 @@ struct MessageInputView: View {
                                 fieldFrame = frame
                             }
                             .onSubmit(submit)
+                            #if os(macOS)
+                            // Return sends; Shift-Return starts a new line. The
+                            // field treats both as submit unless intercepted.
+                            .onKeyPress(.return, phases: [.down, .repeat]) { press in
+                                guard press.modifiers.contains(.shift) else { return .ignored }
+                                NSApp.sendAction(#selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil)
+                                return .handled
+                            }
+                            #endif
                             .composerMentionPopover(composer, isFocused: isMessageFieldFocused, restoreCursor: restoreMentionCursor)
 
                         ComposerDictationButton(composer: composer, isInline: true)
