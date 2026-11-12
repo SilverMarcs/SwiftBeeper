@@ -31,6 +31,13 @@ extension APIClient {
         ))
     }
 
+    /// Removes the gateway's pushers whose pushkey isn't in `pushkeys`, left by
+    /// installations the push server no longer has.
+    static func prunePushers(gatewayURL: URL, keeping pushkeys: [String]) async throws {
+        struct Arguments: Encodable { let gatewayURL: String; let pushkeys: [String] }
+        try await executeRaw("prune-pushers", arguments: Arguments(gatewayURL: gatewayURL.absoluteString, pushkeys: pushkeys))
+    }
+
     static func removePusher(pushkey: String, appID: String) async throws {
         struct Arguments: Encodable { let pushkey: String; let appID: String }
         try await executeRaw("remove-pusher", arguments: Arguments(pushkey: pushkey, appID: appID))

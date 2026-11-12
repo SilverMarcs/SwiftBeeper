@@ -81,13 +81,18 @@ export async function deliver(env, device, payload) {
   }
 }
 
+// Development builds get sandbox tokens and Developer ID or App Store builds
+// production ones, and a token only works with its own environment. Each
+// device remembers the one that last accepted it; a new device tries the
+// configured environment first.
+const APNS_HOSTS = { sandbox: "api.sandbox.push.apple.com", production: "api.push.apple.com" };
+
 // Sends one alert and returns "sent", "expired" (the device was removed) or "failed".
 async function send(env, device, payload) {
   const body = JSON.stringify(payload);
   if (encoder.encode(body).length > MAX_PAYLOAD_BYTES) throw new Error("APNs payload exceeds 4096 bytes");
-  const environment = env.APNS_ENVIRONMENT;
-  if (environment !== "sandbox" && environment !== "production") throw new Error("Invalid APNs environment");
-  const host = environment === "sandbox" ? "api.sandbox.push.apple.com" : "api.push.apple.com";
+  const preferred = device.environment in APNS_HOSTS ? device.environment : env.APNS_ENVIRONMENT;
+  if (!(preferred in APNS_HOSTS)) throw new Error("Invalid APNs environment");
   const headers = {
     authorization: `bearer ${await providerToken(env)}`, "apns-topic": env.APNS_TOPIC,
     "apns-push-type": "alert", "apns-priority": "10", "apns-expiration": "0", "content-type": "application/json",
@@ -97,17 +102,27 @@ async function send(env, device, payload) {
     const hash = await crypto.subtle.digest("SHA-256", encoder.encode(`${payload.chatID}\0${payload.messageID}`));
     headers["apns-collapse-id"] = base64url(hash);
   }
-  const response = await fetch(`https://${host}/3/device/${device.token}`, {
-    method: "POST", headers, body, redirect: "manual", signal: AbortSignal.timeout(15000),
-  });
-  if (response.ok) return "sent";
-  const reason = (await response.json().catch(() => ({}))).reason;
-  if (response.status === 410 || (response.status === 400 && reason === "BadDeviceToken")) {
-    // A token may have rotated while this request was in flight.
-    const removed = await env.DEVICES.prepare("DELETE FROM devices WHERE id = ? AND token = ? RETURNING id")
-      .bind(device.id, device.token).first();
-    return removed ? "expired" : "failed";
+  for (const environment of [preferred, preferred === "sandbox" ? "production" : "sandbox"]) {
+    const response = await fetch(`https://${APNS_HOSTS[environment]}/3/device/${device.token}`, {
+      method: "POST", headers, body, redirect: "manual", signal: AbortSignal.timeout(15000),
+    });
+    if (response.ok) {
+      if (device.environment !== environment) {
+        await env.DEVICES.prepare("UPDATE devices SET environment = ? WHERE id = ? AND token = ?")
+          .bind(environment, device.id, device.token).run();
+      }
+      return "sent";
+    }
+    const reason = (await response.json().catch(() => ({}))).reason;
+    // BadDeviceToken can mean the other environment's token; try it once.
+    if (response.status === 400 && reason === "BadDeviceToken") continue;
+    // 410: the app was removed. Wrong topic: a token from an earlier bundle ID.
+    if (response.status === 410 || (response.status === 400 && reason === "DeviceTokenNotForTopic")) break;
+    console.error("APNs delivery failed", response.status, reason ?? "unknown");
+    return "failed";
   }
-  console.error("APNs delivery failed", response.status, reason ?? "unknown");
-  return "failed";
+  // A token may have rotated while this request was in flight.
+  const removed = await env.DEVICES.prepare("DELETE FROM devices WHERE id = ? AND token = ? RETURNING id")
+    .bind(device.id, device.token).first();
+  return removed ? "expired" : "failed";
 }

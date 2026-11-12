@@ -51,6 +51,12 @@ nonisolated struct PushServer {
         _ = try await send("POST", body: JSONEncoder().encode(["messages": messages]), path: "seen-messages")
     }
 
+    /// The pushkeys of every installation the server still delivers to.
+    func registeredPushkeys() async throws -> [String] {
+        struct Response: Decodable { let pushkeys: [String] }
+        return try JSONDecoder().decode(Response.self, from: await send("GET", path: "pushkeys")).pushkeys
+    }
+
     /// Deletes this installation by ID, which also covers an enrollment
     /// interrupted before its pushkey was saved.
     func unregister() async throws {

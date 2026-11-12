@@ -36,9 +36,11 @@ npm run deploy
 Use a random value of at least 32 characters for `PUSH_SECRET`, such as the output
 of `openssl rand -hex 32`. Save the same value privately for app registration.
 `APNS_PRIVATE_KEY` is the complete Apple `.p8` file. Secrets belong in Wrangler,
-never in source control. `APNS_TOPIC` is the app bundle ID. Keep the configured
-`sandbox` environment for development-signed tokens; change it to `production`
-for distribution builds.
+never in source control. `APNS_TOPIC` is the app bundle ID. `APNS_ENVIRONMENT` is
+the environment a new device tries first. Development-signed builds get sandbox
+tokens and Developer ID builds production ones; the Worker tries the other
+environment when APNs rejects a token, then remembers per device which one
+accepted it. A token both reject, or one for another bundle ID, is removed.
 
 The deploy command prints your public HTTPS Worker URL. `/health` returns
 `{"ok":true}`; it is a liveness check, not a credential or delivery check.

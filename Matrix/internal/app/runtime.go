@@ -71,6 +71,7 @@ type Command struct {
 	AppID             string     `json:"appID"`
 	GatewayURL        string     `json:"gatewayURL"`
 	DeviceDisplayName string     `json:"deviceDisplayName"`
+	Pushkeys          []string   `json:"pushkeys"`
 }
 
 // Execute runs one command; input is the command's whole JSON object.
@@ -91,6 +92,8 @@ func (r *Runtime) Execute(ctx context.Context, command Command, input json.RawMe
 		return r.dispatcher.StageUpload(command.Path, command.FileName, command.MimeType, r.cfg.StateDir)
 	case "set-pusher", "remove-pusher":
 		return r.updatePusher(ctx, command)
+	case "prune-pushers":
+		return r.prunePushers(ctx, command)
 	case "notification-credentials":
 		return r.notificationCredentials(ctx)
 	case "push-preferences":

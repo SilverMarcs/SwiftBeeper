@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"maunium.net/go/mautrix/id"
 
@@ -49,6 +50,48 @@ func (r *Runtime) updatePusher(ctx context.Context, command Command) (any, error
 		return nil, err
 	}
 	return wire.Success, nil
+}
+
+// prunePushers removes this gateway's pushers whose pushkey the gateway no
+// longer holds, from any app ID, keeping every other pusher. Beeper keeps a
+// pusher the gateway rejects, so one left by a removed device or an earlier
+// bundle ID would otherwise be called for every message.
+func (r *Runtime) prunePushers(ctx context.Context, command Command) (any, error) {
+	cli := r.rt.Client()
+	if cli == nil || cli.Account == nil || cli.Client == nil || cli.Client.AccessToken == "" {
+		return nil, errors.New("a logged-in Matrix session is required")
+	}
+	// An empty list would remove every Relay pusher, including this device's.
+	if command.GatewayURL == "" || len(command.Pushkeys) == 0 {
+		return nil, errors.New("invalid pusher list")
+	}
+	var listed struct {
+		Pushers []struct {
+			Pushkey string `json:"pushkey"`
+			AppID   string `json:"app_id"`
+			Data    struct {
+				URL string `json:"url"`
+			} `json:"data"`
+		} `json:"pushers"`
+	}
+	if _, err := cli.Client.MakeRequest(ctx, http.MethodGet, cli.Client.BuildClientURL("v3", "pushers"), nil, &listed); err != nil {
+		return nil, err
+	}
+	var errs []error
+	removed := 0
+	for _, pusher := range listed.Pushers {
+		if pusher.Data.URL != command.GatewayURL || slices.Contains(command.Pushkeys, pusher.Pushkey) {
+			continue
+		}
+		_, err := cli.Client.MakeRequest(ctx, http.MethodPost, cli.Client.BuildClientURL("v3", "pushers", "set"),
+			map[string]any{"pushkey": pusher.Pushkey, "app_id": pusher.AppID, "kind": nil}, nil)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		removed++
+	}
+	return map[string]int{"removed": removed}, errors.Join(errs...)
 }
 
 // notificationCredentials hands the notification extension what it needs to

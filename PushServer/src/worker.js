@@ -111,9 +111,19 @@ async function register(request, env, id) {
   if (!isBoundedString(input.token, 256) || !/^[0-9a-f]{32,256}$/i.test(input.token) || input.token.length % 2) throw new HTTPError(400, "Invalid APNs token");
   const device = await env.DEVICES.prepare(`
     INSERT INTO devices (id, pushkey, token) VALUES (?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET token = excluded.token RETURNING pushkey
+    ON CONFLICT(id) DO UPDATE SET token = excluded.token,
+      environment = CASE WHEN devices.token = excluded.token THEN devices.environment END
+    RETURNING pushkey
   `).bind(id, randomKey(), input.token.toLowerCase()).first();
   return json({ pushkey: device.pushkey, app_id: env.APNS_TOPIC, gatewayPath: MATRIX_GATEWAY_PATH });
+}
+
+// GET /pushkeys lists the registered devices' pushkeys. The app removes the
+// homeserver's pushers for this gateway that aren't among them: Beeper keeps
+// a pusher the gateway rejects, and would call it for every message.
+async function pushkeys(env) {
+  const { results } = await env.DEVICES.prepare("SELECT pushkey FROM devices").all();
+  return json({ pushkeys: results.map(row => row.pushkey) });
 }
 
 async function unregister(env, id) {
@@ -139,7 +149,7 @@ async function matrixPush(request, env) {
     if (seen.has(requested.pushkey)) continue;
     seen.add(requested.pushkey);
     const device = requested.app_id === env.APNS_TOPIC && /^[0-9a-f]{64}$/.test(requested.pushkey)
-      ? await env.DEVICES.prepare("SELECT id, token FROM devices WHERE pushkey = ?").bind(requested.pushkey).first() : null;
+      ? await env.DEVICES.prepare("SELECT id, token, environment FROM devices WHERE pushkey = ?").bind(requested.pushkey).first() : null;
     if (!device) { rejected.push(requested.pushkey); continue; }
     // Ignore unread-count-only updates: opening Relay clears the local badge.
     const isMention = requested.tweaks?.["com.silvermarcs.relay.mention"] === true;
@@ -168,8 +178,8 @@ async function directPush(request, env) {
   if (new TextEncoder().encode(JSON.stringify(payload)).length > 4096) throw new HTTPError(400, "Notification exceeds APNs limit");
   if (!isMention && await isBlocked(env, input.chatID)) return json({ sent: 0, failed: 0, suppressed: true });
   const { results } = input.deviceID
-    ? await env.DEVICES.prepare("SELECT id, token FROM devices WHERE id = ?").bind(input.deviceID).all()
-    : await env.DEVICES.prepare("SELECT id, token FROM devices").all();
+    ? await env.DEVICES.prepare("SELECT id, token, environment FROM devices WHERE id = ?").bind(input.deviceID).all()
+    : await env.DEVICES.prepare("SELECT id, token, environment FROM devices").all();
   if (!results.length) throw new HTTPError(404, "No registered devices");
   let sent = 0, failed = 0;
   for (const device of results) {
@@ -191,6 +201,10 @@ async function route(request, env) {
   if (method === "POST" && path === "/seen-messages") {
     await authorize(request, env);
     return markSeen(request, env);
+  }
+  if (method === "GET" && path === "/pushkeys") {
+    await authorize(request, env);
+    return pushkeys(env);
   }
   if (method === "POST" && path === "/notify") {
     await authorize(request, env);

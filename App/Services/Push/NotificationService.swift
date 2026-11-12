@@ -255,6 +255,12 @@ final class NotificationService {
         let deviceName = Device.isMac ? "Relay on Mac" : Device.isIPad ? "Relay on iPad" : "Relay on iPhone"
         try await APIClient.setPusher(pushkey: registration.pushkey, appID: registration.appID,
                                       gatewayURL: server.gatewayURL, deviceDisplayName: deviceName)
+        // Beeper keeps pushers the gateway rejects. Remove those of installations
+        // the push server dropped, this one's earlier pushkeys included. Best
+        // effort: the next registration tries again.
+        if let pushkeys = try? await server.registeredPushkeys(), pushkeys.contains(registration.pushkey) {
+            try? await APIClient.prunePushers(gatewayURL: server.gatewayURL, keeping: pushkeys)
+        }
     }
 
     private func removeRegistration() async throws {

@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS devices (
   id TEXT PRIMARY KEY,
   pushkey TEXT NOT NULL UNIQUE,
-  token TEXT NOT NULL
+  token TEXT NOT NULL,
+  -- The APNs environment that last accepted the token; NULL until one has.
+  environment TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notification_blocks (
