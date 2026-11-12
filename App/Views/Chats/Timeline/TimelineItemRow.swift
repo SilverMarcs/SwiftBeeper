@@ -25,6 +25,9 @@ struct TimelineItemRow: View {
             case .outgoing(let entry):
                 OutgoingTimelineEntryRow(entry: entry, activeComposerMessageID: activeComposerMessageID)
                     .id(entry.id)
+            case .deliveryCaption(let indicator):
+                DeliveryCaptionView(indicator: indicator)
+                    .timelineFocus(activeComposerMessageID == nil)
             case .typing(let bubble, let isFirstInGroup):
                 TypingIndicatorView(participant: bubble.participant, chat: chat, isFirstInGroup: isFirstInGroup)
                     .timelineFocus(activeComposerMessageID == nil)

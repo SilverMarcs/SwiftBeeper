@@ -13,8 +13,6 @@ struct TimelineEntry: Identifiable, Equatable {
     /// Whether the sender changed from the row directly above, with no divider
     /// between them. The timeline widens the gap there to separate the two sides.
     let startsSenderRun: Bool
-    /// Whether this is the outgoing message that shows the "Read" indicator.
-    let showsReadIndicator: Bool
     /// The message this one replies to, from the timeline or, when older,
     /// the source's quoted-message lookup.
     let linkedMessage: Message?
@@ -47,7 +45,6 @@ struct TimelineEntry: Identifiable, Equatable {
         followingTypingSenderID: String? = nil
     ) -> [TimelineEntry] {
         let messagesByID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let readIndicatorID = readIndicatorMessageID(in: messages, lastReadByOtherSortKey: lastReadByOtherSortKey)
         let rows = galleryRows(in: messages, firstUnreadID: firstUnreadID)
 
         return rows.indices.map { index in
@@ -71,7 +68,6 @@ struct TimelineEntry: Identifiable, Equatable {
                     || nextShowsTimestamp || (next.map { $0.id == firstUnreadID } ?? false),
                 startsSenderRun: previous.map { $0.senderID != message.senderID } == true
                     && !showsTimestamp && message.id != firstUnreadID,
-                showsReadIndicator: row.contains { $0.id == readIndicatorID },
                 linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] ?? quotedMessages[$0] },
                 threadRoot: message.broadcastThreadRootID.flatMap { messagesByID[$0] ?? quotedMessages[$0] }
             )
@@ -110,14 +106,24 @@ struct TimelineEntry: Identifiable, Equatable {
         return messages.first { $0.isUnread == true }?.id
     }
 
-    /// The last outgoing message the other side has read. A reply after it
-    /// already proves they read it, so then no message shows the indicator.
-    private static func readIndicatorMessageID(in messages: [Message], lastReadByOtherSortKey: String?) -> String? {
-        guard let readSortKey = lastReadByOtherSortKey.flatMap({ Int64($0) }) else { return nil }
-        for message in messages.reversed() {
-            guard message.isSender else { return nil }
-            if message.numericSortKey <= readSortKey { return message.id }
+    /// The caption for the newest message, when the user sent it: "Read" once the
+    /// other side's receipt reaches it, otherwise what its bridge reported. A
+    /// message the homeserver has but the bridge hasn't reported on yet is
+    /// still sending, in a chat whose bridge reports at all; elsewhere, the
+    /// homeserver having it is as sent as it gets. A failed message shows its
+    /// failure instead, and a reply after it needs no caption.
+    static func deliveryIndicator(in messages: [Message], lastReadByOtherSortKey: String?) -> DeliveryIndicator? {
+        guard let newest = messages.last, newest.isSender else { return nil }
+        if let readSortKey = lastReadByOtherSortKey.flatMap({ Int64($0) }), newest.numericSortKey <= readSortKey {
+            return .read
         }
-        return nil
+        switch newest.deliveryStatus {
+        case .delivered: return .delivered
+        case .sent: return .sent
+        case .failed: return nil
+        case nil:
+            let bridgeReports = messages.contains { $0.deliveryStatus != nil }
+            return bridgeReports ? .sending : .sent
+        }
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A canonical message: in group chats the sender's name heads a run and their
-/// avatar ends it; the read indicator follows the bubbles.
+/// avatar ends it; a failed delivery's caption follows the bubbles.
 struct MessageRowView: View {
     let entry: TimelineEntry
     let chat: Chat
@@ -91,8 +91,10 @@ struct MessageRowView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if isOutgoing && entry.showsReadIndicator {
-                    MessageDeliveryStatusView(status: .read)
+                // Progress shows once, below the newest row; a failure shows
+                // on whichever message failed.
+                if isOutgoing, let failed = entry.messages.first(where: { $0.deliveryStatus == .failed }) {
+                    MessageDeliveryStatusView(status: .notDelivered(error: failed.deliveryError))
                 }
             }
 

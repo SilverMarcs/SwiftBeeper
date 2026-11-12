@@ -19,6 +19,8 @@ final class TimelineEntriesCache {
     private var messages: [Message] = []
     private var quotedMessages: [Message.ID: Message] = [:]
     private var entries: [TimelineEntry] = []
+    /// The caption for the newest message, from the same inputs as the rows.
+    private(set) var deliveryIndicator: DeliveryIndicator?
 
     func entries(
         for messages: [Message],
@@ -44,6 +46,7 @@ final class TimelineEntriesCache {
             quotedMessages: quotedMessages,
             followingTypingSenderID: followingTypingSenderID
         )
+        deliveryIndicator = TimelineEntry.deliveryIndicator(in: messages, lastReadByOtherSortKey: lastReadByOtherSortKey)
         self.inputs = inputs
         self.messages = messages
         self.quotedMessages = quotedMessages

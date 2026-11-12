@@ -43,9 +43,15 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 followingTypingSenderID: outgoingMessages.isEmpty ? typingBubble?.participant.id : nil
             )
             let outgoingTimelineEntries = OutgoingTimelineEntry.entries(for: outgoingMessages, following: messages)
+            // A just-sent bubble lands before its caption appears below it,
+            // as in Messages.
+            let deliveryCaption = inputManager.sendAnimator.flights.isEmpty
+                ? DeliveryIndicator.newest(outgoing: outgoingMessages, confirmed: entriesCache.deliveryIndicator)
+                : nil
             let timelineItems = TimelineItem.items(
                 messages: timelineEntries,
                 outgoing: outgoingTimelineEntries,
+                deliveryCaption: deliveryCaption,
                 typing: source.hasLoadedTimeline ? typingBubble : nil,
                 messageRowIDs: source.typingMessageRowIDs
             )
@@ -75,7 +81,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
                                     activeComposerMessageID: activeComposerMessageID
                                 )
-                                .transition(.opacity)
+                                // The caption comes and goes at once; the
+                                // scroll below it is the motion.
+                                .transition(item.isDeliveryCaption ? .identity : .opacity)
                                 .onGeometryChange(for: CGRect.self) { geometry in
                                     geometry.frame(in: .scrollView)
                                 } action: { frame in
@@ -222,6 +230,19 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     // Confirmation replaces the outgoing row, but not the end
                     // marker. Let the existing scroll animation finish.
                     guard !confirmedOptimisticMessage else { return }
+                    scrollToLatest(with: proxy)
+                }
+                // A caption appearing below the newest row grows the timeline
+                // under the reader, who follows it down if they were following
+                // the conversation, as when "Delivered" appears in Messages.
+                // Later steps replace its words in place and need no scroll.
+                .onChange(of: TimelineDeliveryCaptionTracker(
+                    target: target,
+                    hasRows: !messages.isEmpty || !outgoingMessages.isEmpty,
+                    showsCaption: deliveryCaption != nil
+                )) { oldTracker, newTracker in
+                    guard source.hasLoadedTimeline, oldTracker.target == newTracker.target, oldTracker.hasRows,
+                          !oldTracker.showsCaption, newTracker.showsCaption, isFollowingLatest else { return }
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in

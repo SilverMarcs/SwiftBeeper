@@ -168,6 +168,11 @@ func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID, metaChanged
 				if root := threadRootOf(evt); root != "" {
 					messageIDs[string(root)] = struct{}{}
 				}
+			case evtType == event.BeeperMessageStatus.Type:
+				// A bridge's delivery report changes the message it reports on.
+				if evt.RelatesTo != "" {
+					messageIDs[string(evt.RelatesTo)] = struct{}{}
+				}
 			case evtType == event.StateMember.Type ||
 				evtType == event.StateRoomName.Type ||
 				evtType == event.StateRoomAvatar.Type ||

@@ -120,7 +120,25 @@ type Message struct {
 	IsNotice bool `json:"isNotice,omitempty"`
 	// Thread summarizes the replies to this message; nil when it has none.
 	Thread *ThreadSummary `json:"thread,omitempty"`
+	// DeliveryStatus is the bridge's latest report on an outgoing message;
+	// empty when no bridge reported on it.
+	DeliveryStatus DeliveryStatus `json:"deliveryStatus,omitempty"`
+	// DeliveryError is the bridge's explanation of a failed delivery, when
+	// it gave one.
+	DeliveryError string `json:"deliveryError,omitempty"`
 }
+
+// DeliveryStatus is how far an outgoing message got past the homeserver.
+type DeliveryStatus string
+
+const (
+	// DeliveryStatusSent means the bridge handed it to the network.
+	DeliveryStatusSent DeliveryStatus = "sent"
+	// DeliveryStatusDelivered means the recipient's device confirmed it.
+	DeliveryStatusDelivered DeliveryStatus = "delivered"
+	// DeliveryStatusFailed means the network didn't take it.
+	DeliveryStatusFailed DeliveryStatus = "failed"
+)
 
 // ThreadSummary is what a thread root shows under its bubble.
 type ThreadSummary struct {

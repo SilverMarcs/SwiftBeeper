@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// The caption under an outgoing message: "Read", or a failed send's retry.
+/// The caption under an outgoing message that didn't get through: a bridge's
+/// refusal, or a failed send's retry. Progress is `DeliveryCaptionView`.
 struct MessageDeliveryStatusView: View {
-    enum Status {
-        case read
+    enum Status: Equatable {
+        /// The bridge couldn't deliver a message the homeserver accepted.
+        case notDelivered(error: String?)
+        /// The homeserver never accepted it; sending again may.
         case failed(messageID: OutgoingMessage.ID, error: String)
     }
 
@@ -14,9 +17,11 @@ struct MessageDeliveryStatusView: View {
     var body: some View {
         Group {
             switch status {
-            case .read:
-                Text("Read")
-                    .foregroundStyle(.secondary)
+            case .notDelivered(let error):
+                Text("Not Delivered")
+                    .foregroundStyle(.red)
+                    .help(error ?? "")
+                    .accessibilityHint(error ?? "")
             case .failed(let messageID, let error):
                 Button("Not Delivered — Retry") {
                     chatStore.retrySending(messageID)

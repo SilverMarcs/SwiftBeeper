@@ -38,6 +38,11 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     /// A bridge's status line, such as WhatsApp's "Sent an album" or a
     /// pending decryption, rather than text the sender wrote.
     let isNotice: Bool?
+    /// How far an outgoing message got past the homeserver, as its bridge
+    /// reported. Nil when no bridge reported on it.
+    let deliveryStatus: MessageDeliveryStatus?
+    /// The bridge's explanation of a failed delivery, when it gave one.
+    let deliveryError: String?
 
     /// A thread reply that only the thread shows, not the main timeline.
     var isHiddenThreadReply: Bool {

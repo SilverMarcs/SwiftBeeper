@@ -188,6 +188,7 @@ func (s *Dispatcher) mapEvents(ctx context.Context, roomID id.RoomID, events []*
 		}
 	}
 	s.applyThreadSummaries(ctx, roomID, events, messages)
+	s.applyDeliveryStatuses(ctx, roomID, messages)
 	return messages, nil
 }
 

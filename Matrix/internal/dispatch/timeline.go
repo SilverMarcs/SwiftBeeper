@@ -94,6 +94,7 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 	}
 
 	s.applyThreadSummaries(ctx, roomID, events, messages)
+	s.applyDeliveryStatuses(ctx, roomID, messages)
 
 	output := wire.ListMessagesOutput{
 		Items:        messages,
