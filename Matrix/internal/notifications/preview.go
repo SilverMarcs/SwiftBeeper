@@ -45,6 +45,9 @@ type Preview struct {
 	Recipients    []Participant `json:"recipients,omitempty"`
 	TargetEventID id.EventID    `json:"targetEventID,omitempty"`
 	MentionsMe    bool          `json:"mentionsMe"`
+	// ThreadRootID is the thread a reply belongs to, which opening the
+	// notification shows over its chat.
+	ThreadRootID id.EventID `json:"threadRootID,omitempty"`
 }
 
 type Participant struct {
@@ -193,7 +196,8 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	}
 	preview := &Preview{Title: truncate(title, 120), Body: truncate(body, 500),
 		SenderID: evt.Sender.String(), SenderName: truncate(sender, 120), IsGroup: isGroup,
-		Recipients: recipients, TargetEventID: targetEventID, MentionsMe: mentionsUser(content, req.UserID)}
+		Recipients: recipients, TargetEventID: targetEventID, MentionsMe: mentionsUser(content, req.UserID),
+		ThreadRootID: threadRoot(evt.Content.VeryRaw)}
 	var extras sync.WaitGroup
 	extras.Add(1)
 	go func() {
@@ -209,6 +213,18 @@ func Fetch(ctx context.Context, req Request) (*Preview, error) {
 	}
 	extras.Wait()
 	return preview, nil
+}
+
+// threadRoot returns the thread a reply belongs to. Encryption leaves the
+// relation readable, so this is the event's outer content.
+func threadRoot(content json.RawMessage) id.EventID {
+	var parsed struct {
+		RelatesTo *event.RelatesTo `json:"m.relates_to"`
+	}
+	if json.Unmarshal(content, &parsed) != nil || parsed.RelatesTo == nil || parsed.RelatesTo.Type != event.RelThread {
+		return ""
+	}
+	return parsed.RelatesTo.EventID
 }
 
 // Use recipient metadata, never a name match or the generic highlight tweak

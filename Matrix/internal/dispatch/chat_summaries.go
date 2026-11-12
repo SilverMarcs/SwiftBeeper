@@ -158,12 +158,14 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 		byRoomPreview[evt.RoomID] = evt
 	}
 	// The SDK previews a room's newest message, which can be a thread reply
-	// the main timeline hides. Preview the newest message it shows instead.
+	// the main timeline hides. Only one that notified you stays the preview;
+	// otherwise preview the newest message the timeline shows or that notified.
+	me := s.rt.Client().Account.UserID
 	for index, evt := range events {
-		if !isHiddenThreadReply(evt) {
+		if !isHiddenThreadReply(evt) || isAlertingThreadReply(evt, me) {
 			continue
 		}
-		replacement, err := s.newestTimelineMessage(ctx, evt.RoomID)
+		replacement, err := s.newestTimelineMessage(ctx, evt.RoomID, me)
 		if err != nil {
 			return nil, err
 		}
@@ -238,12 +240,13 @@ func (s *Dispatcher) syncedChatSummaries(complete *jsoncmd.SyncComplete, upserte
 	return result
 }
 
-// newestTimelineMessage is the room's newest message the main timeline shows,
-// or nil when none is stored.
-func (s *Dispatcher) newestTimelineMessage(ctx context.Context, roomID id.RoomID) (*database.Event, error) {
+// newestTimelineMessage is the room's newest message the main timeline shows
+// or, for a thread reply, that notified you; nil when none is stored.
+func (s *Dispatcher) newestTimelineMessage(ctx context.Context, roomID id.RoomID, me id.UserID) (*database.Event, error) {
 	events, err := s.queryEvents(ctx, timelineSelectBase+` AND (event.type IN ('m.room.message','m.sticker') OR event.decrypted_type IN ('m.room.message','m.sticker'))
-		AND (relation_type IS NULL OR relation_type<>'m.replace') AND redacted_by IS NULL AND NOT `+hiddenThreadReplySQL+`
-		ORDER BY timeline.rowid DESC LIMIT 1`, roomID)
+		AND (relation_type IS NULL OR relation_type<>'m.replace') AND redacted_by IS NULL
+		AND (NOT `+hiddenThreadReplySQL+` OR (unread_type & 2 <> 0 AND sender<>?))
+		ORDER BY timeline.rowid DESC LIMIT 1`, roomID, me)
 	if err != nil || len(events) == 0 {
 		return nil, err
 	}

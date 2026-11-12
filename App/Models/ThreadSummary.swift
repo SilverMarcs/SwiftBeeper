@@ -5,4 +5,6 @@ struct ThreadSummary: Codable, Equatable, Sendable {
     let replyCount: Int
     /// The most recent repliers first.
     let participants: [ChatParticipant]?
+    /// A reply that notified you arrived since you last opened the thread.
+    let hasUnread: Bool?
 }

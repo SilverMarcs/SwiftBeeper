@@ -172,6 +172,7 @@ extension ChatStore {
         isLoadingMessages = false
         lastReadByOtherSortKey = nil
         closeThread()
+        refreshUnreadThreads()
         messagesError = nil
     }
 

@@ -29,6 +29,9 @@ final class NotificationDelivery: Sendable {
             if let targetEventID = preview.targetEventID {
                 content.userInfo["messageID"] = targetEventID
             }
+            if let threadRootID = preview.threadRootID {
+                content.userInfo["threadRootID"] = threadRootID
+            }
             return content.copy() as? UNNotificationContent
         }
     }

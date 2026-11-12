@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/tidwall/gjson"
+	"go.mau.fi/gomuks/pkg/hicli"
 	"go.mau.fi/gomuks/pkg/hicli/database"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/event"
@@ -26,6 +28,9 @@ const (
 	// threadHistoryPages bounds one server fetch of a thread's replies.
 	threadHistoryPages    = 5
 	threadHistoryPageSize = 100
+	// hungryservServerName is the server part of every room on Beeper's
+	// bridge homeserver.
+	hungryservServerName = "beeper.local"
 
 	// broadcastOutsideThreadKey is the bridge's flag for a thread reply also
 	// sent to the channel (Slack's "Also send to channel").
@@ -139,8 +144,12 @@ func (s *Dispatcher) loadThreadHistory(ctx context.Context, input json.RawMessag
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cli := s.rt.Client()
-	if _, err = cli.GetEvent(ctx, roomID, rootID); err != nil {
+	root, err := cli.GetEvent(ctx, roomID, rootID)
+	if err != nil {
 		return nil, err
+	}
+	if isHungryservRoom(roomID) {
+		return wire.Success, s.loadThreadHistoryFromTimeline(ctx, roomID, root)
 	}
 	since := ""
 	for range threadHistoryPages {
@@ -154,6 +163,40 @@ func (s *Dispatcher) loadThreadHistory(ctx context.Context, input json.RawMessag
 		since = resp.NextBatch
 	}
 	return wire.Success, nil
+}
+
+// isHungryservRoom reports a room on Beeper's bridge homeserver, which doesn't
+// implement /relations: the v1 route answers M_FORBIDDEN "not in room" and the
+// v3 route COM.BEEPER.NOT_IMPLEMENTED.
+func isHungryservRoom(roomID id.RoomID) bool {
+	return strings.HasSuffix(string(roomID), ":"+hungryservServerName)
+}
+
+// loadThreadHistoryFromTimeline is the thread fetch for rooms without
+// /relations. The local timeline is contiguous back to its oldest row, so once
+// it reaches the root every later reply is local. Until then it pages the room
+// back toward the root, a bounded number of pages.
+func (s *Dispatcher) loadThreadHistoryFromTimeline(ctx context.Context, roomID id.RoomID, root *database.Event) error {
+	cli := s.rt.Client()
+	for range threadHistoryPages {
+		var inTimeline bool
+		err := cli.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM timeline WHERE room_id=? AND event_rowid=?)`, roomID, root.RowID).Scan(&inTimeline)
+		if err != nil || inTimeline {
+			return err
+		}
+		resp, err := cli.PaginateServer(ctx, roomID, threadHistoryPageSize, false)
+		switch {
+		case errors.Is(err, hicli.ErrPaginationAlreadyInProgress):
+			// The chat's own pagination is paging the same timeline; the
+			// replies the thread has locally stand.
+			return nil
+		case err != nil:
+			return err
+		case !resp.HasMore:
+			return nil
+		}
+	}
+	return nil
 }
 
 func threadTarget(chatID, rootID string) (id.RoomID, id.EventID, error) {
@@ -288,9 +331,16 @@ func (s *Dispatcher) loadThreadSummaries(ctx context.Context, roomID id.RoomID, 
 		senders = append(senders, entry.senders...)
 	}
 	users := s.loadRoomUsers(ctx, roomID, senders)
+	rootsWithReplies := make([]any, 0, len(tallies))
+	for rootID := range tallies {
+		rootsWithReplies = append(rootsWithReplies, rootID)
+	}
+	// A summary still shows when its unread state can't be read.
+	unread, _ := s.unreadThreads(ctx, roomID, rootsWithReplies)
 	output := make(map[id.EventID]*wire.ThreadSummary, len(tallies))
 	for rootID, entry := range tallies {
-		summary := &wire.ThreadSummary{ReplyCount: entry.count, Participants: make([]wire.User, 0, len(entry.senders))}
+		summary := &wire.ThreadSummary{ReplyCount: entry.count, Participants: make([]wire.User, 0, len(entry.senders)),
+			HasUnread: unread[rootID] > 0}
 		for _, sender := range entry.senders {
 			if user, ok := users[sender]; ok {
 				summary.Participants = append(summary.Participants, user)

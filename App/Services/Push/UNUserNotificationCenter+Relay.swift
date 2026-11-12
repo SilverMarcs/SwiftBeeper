@@ -58,6 +58,9 @@ extension UNNotificationContent {
     /// The chat a notification belongs to.
     nonisolated var chatID: String { userInfo["chatID"] as? String ?? threadIdentifier }
 
+    /// The thread a notified reply belongs to, set by the notification service extension.
+    nonisolated var threadRootID: String? { userInfo["threadRootID"] as? String }
+
     /// The unsent text of a failed notification reply.
     nonisolated var replyDraft: String? { userInfo["replyDraft"] as? String }
 }

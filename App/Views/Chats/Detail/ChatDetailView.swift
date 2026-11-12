@@ -53,6 +53,12 @@ struct ChatDetailView: View {
 
                     #endif
 
+                    if !chatStore.unreadThreads.isEmpty {
+                        ToolbarItem(placement: .primaryAction) {
+                            UnreadThreadsMenu()
+                        }
+                    }
+
                     ToolbarItem(placement: .primaryAction) {
                         Menu("Chat Actions", systemImage: "ellipsis") {
                             ChatRowActionsView(chat: selectedChat, placement: .contextMenu)

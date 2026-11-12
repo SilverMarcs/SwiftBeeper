@@ -56,6 +56,19 @@ extension APIClient {
         return output.items
     }
 
+    /// The roots of the chat's threads with replies you haven't seen, the most
+    /// recently active first.
+    static func listUnreadThreads(chatID: String) async throws -> [Message] {
+        struct Arguments: Encodable { let chatID: String }
+        let output: GetMessagesOutput = try await execute("list-unread-threads", arguments: Arguments(chatID: chatID))
+        return output.items
+    }
+
+    /// Records that the thread was opened, clearing its unread dot on every device.
+    static func markThreadSeen(chatID: String, threadRootID: String) async throws {
+        try await executeRaw("mark-thread-seen", arguments: ThreadArguments(chatID: chatID, threadRootID: threadRootID))
+    }
+
     /// A thread's root and replies from the local database.
     static func listThread(chatID: String, threadRootID: String) async throws -> ListThreadOutput {
         try await execute("list-thread", arguments: ThreadArguments(chatID: chatID, threadRootID: threadRootID))

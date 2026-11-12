@@ -93,6 +93,10 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.getMessages(ctx, input)
 	case "list-thread":
 		return s.listThread(ctx, input)
+	case "list-unread-threads":
+		return s.listUnreadThreads(ctx, input)
+	case "mark-thread-seen":
+		return s.markThreadSeen(ctx, input)
 	case "load-thread-history":
 		return s.loadThreadHistory(ctx, input)
 	case "resolve-media":

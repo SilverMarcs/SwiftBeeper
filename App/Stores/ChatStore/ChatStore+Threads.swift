@@ -6,12 +6,18 @@ extension ChatStore {
     /// Opens the thread `message` starts, or the one it replies in.
     func showThread(for message: Message) {
         let rootID = message.threadRootID ?? message.id
-        if isThreadPresented, let activeThread, activeThread.rootID == rootID, activeThread.chatID == message.chatID {
+        showThread(rootID: rootID, chatID: message.chatID, root: rootID == message.id ? message : nil)
+    }
+
+    /// Opens the thread starting at `rootID` in a known chat. A root that
+    /// isn't at hand loads with the thread.
+    func showThread(rootID: String, chatID: String, root: Message? = nil) {
+        if isThreadPresented, let activeThread, activeThread.rootID == rootID, activeThread.chatID == chatID {
             return
         }
-        guard let chat = chat(byID: message.chatID) else { return }
+        guard let chat = chat(byID: chatID) else { return }
         activeThread?.cancel()
-        let root = rootID == message.id ? message : messages.first { $0.id == rootID } ?? quotedMessages[rootID]
+        let root = root ?? messages.first { $0.id == rootID } ?? quotedMessages[rootID]
         let thread = ThreadStore(chat: chat, rootID: rootID, root: root, chatStore: self)
         activeThread = thread
         isThreadPresented = true

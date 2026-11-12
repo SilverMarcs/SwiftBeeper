@@ -312,6 +312,8 @@ extension ChatStore {
 
         do {
             try await APIClient.markChatAsRead(chatID: chatID)
+            // Reading the chat also reads its threads.
+            if chatID == selectedChatID { refreshUnreadThreads() }
         } catch {
             guard self.session == session else { return }
             if let previous { updateChat(chatID) { $0 = previous } }

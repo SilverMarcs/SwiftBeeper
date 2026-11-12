@@ -16,6 +16,8 @@ struct NotificationPreview: Decodable, Sendable {
     let recipients: [Participant]?
     let targetEventID: String?
     let mentionsMe: Bool?
+    /// The thread a reply belongs to; opening the notification shows it.
+    let threadRootID: String?
 
     func subtitle(isMention: Bool) -> String {
         if isMention {

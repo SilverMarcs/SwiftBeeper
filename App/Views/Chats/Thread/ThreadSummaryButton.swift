@@ -22,6 +22,14 @@ struct ThreadSummaryButton: View {
                     .bold()
                     .foregroundStyle(.secondary)
 
+                if summary.hasUnread == true {
+                    // The chat list's unread dot.
+                    Image(systemName: "circle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Unread")
+                }
+
                 Image(systemName: "chevron.forward")
                     .foregroundStyle(.tertiary)
                     .imageScale(.small)
@@ -29,8 +37,9 @@ struct ThreadSummaryButton: View {
             .font(.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            // The same fill as the message's own bubble.
-            .bubbleBackground(isOutgoing: message.isSender)
+            // The neutral bubble fill on both sides, so the secondary text
+            // reads the same under outgoing roots as incoming ones.
+            .subtleBackground()
             .clipShape(.capsule)
             .contentShape(.capsule)
         }

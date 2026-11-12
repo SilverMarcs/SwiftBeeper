@@ -66,6 +66,8 @@ final class ChatStore {
     }
     /// A tapped notification's chat, held until it can be selected.
     @ObservationIgnored private(set) var pendingNotificationChatID: String?
+    /// The thread to open over that chat, for a notified thread reply.
+    @ObservationIgnored private var pendingNotificationThreadRootID: String?
     /// Changes whenever an action opens a chat, including one outside the sidebar.
     var chatNavigationID: UUID?
     @ObservationIgnored private var notificationChatTask: Task<Void, Never>?
@@ -110,6 +112,9 @@ final class ChatStore {
     /// The latest thread opened from the timeline. It outlives its
     /// presentation, so the inspector keeps its content while it hides.
     var activeThread: ThreadStore?
+    /// The open chat's threads with replies you haven't seen, for the toolbar.
+    var unreadThreads: [Message] = []
+    @ObservationIgnored var unreadThreadsTask: Task<Void, Never>?
     var isThreadPresented = false {
         didSet {
             guard !isThreadPresented, let activeThread else { return }
@@ -286,6 +291,7 @@ final class ChatStore {
         notificationChatRequestID = UUID()
         if !isSignedIn {
             pendingNotificationChatID = nil
+            pendingNotificationThreadRootID = nil
             chatNavigationID = nil
         }
         resyncTask?.cancel()
@@ -315,23 +321,30 @@ final class ChatStore {
     // MARK: - Notification taps
 
     /// Retain a tap through startup, sync, and a room outside the loaded sidebar.
-    func openNotificationChat(_ chatID: String) {
+    func openNotificationChat(_ chatID: String, threadRootID: String? = nil) {
         guard !chatID.isEmpty else { return }
         notificationChatTask?.cancel()
         notificationChatTask = nil
         notificationChatRequestID = UUID()
         pendingNotificationChatID = chatID
+        pendingNotificationThreadRootID = threadRootID
         searchQuery = ""
         resolveNotificationChat()
         loadPendingNotificationChat()
     }
 
-    /// Selects the pending chat once the app is active and the chat is known.
+    /// Selects the pending chat once the app is active and the chat is known,
+    /// and opens a notified reply's thread over it. Opening the chat resets
+    /// its timeline, closing any thread, so the thread opens after.
     func resolveNotificationChat() {
         guard notificationService.isAppActive,
               let id = pendingNotificationChatID, let chat = chat(byID: id) else { return }
         pendingNotificationChatID = nil
         openChat(chat)
+        if let rootID = pendingNotificationThreadRootID {
+            pendingNotificationThreadRootID = nil
+            showThread(rootID: rootID, chatID: chat.id)
+        }
     }
 
     /// Fetches the pending chat directly, for one outside the loaded sidebar.
@@ -382,11 +395,15 @@ final class ChatStore {
         case .messagesUpserted(let chatID, let incoming):
             // Reconcile first so a confirmed send never renders twice.
             reconcileOutgoingMessages(with: incoming, chatID: chatID)
-            if isThreadPresented, chatID == activeThread?.chatID { activeThread?.upsert(incoming) }
+            if isThreadPresented, let activeThread, chatID == activeThread.chatID {
+                activeThread.upsert(incoming)
+                if incoming.contains(where: { $0.threadRootID == activeThread.rootID }) { markThreadSeen(activeThread) }
+            }
             // Background chats read their timeline from the database on open.
             if chatID == selectedChatID {
                 let visible = incoming.filter { !$0.isHiddenThreadReply }
                 upsertMessages(visible)
+                if incoming.contains(where: { $0.threadRootID != nil }) { refreshUnreadThreads() }
                 Task { await loadQuotedMessages(for: visible) }
             }
         case .receiptUpdated(let chatID, let readKey):

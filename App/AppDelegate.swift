@@ -88,7 +88,7 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
                 await Self.sendReply(reply.userText, chatID: chatID, messageID: content.userInfo["messageID"] as? String)
             } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
                 if let draft = content.replyDraft { Self.inputManager?.restoreNotificationDraft(draft, for: chatID) }
-                Self.chatStore?.openNotificationChat(chatID)
+                Self.chatStore?.openNotificationChat(chatID, threadRootID: content.threadRootID)
             }
         }
     }

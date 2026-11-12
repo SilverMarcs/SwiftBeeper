@@ -145,6 +145,8 @@ type ThreadSummary struct {
 	ReplyCount int `json:"replyCount"`
 	// The most recent repliers first, at most a few.
 	Participants []User `json:"participants"`
+	// HasUnread marks a reply that notified you since you last saw the thread.
+	HasUnread bool `json:"hasUnread,omitempty"`
 }
 
 // MessageMentions preserves intentional notifications separately from visible
