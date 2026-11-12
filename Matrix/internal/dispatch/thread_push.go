@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"go.mau.fi/gomuks/pkg/hicli"
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/event"
@@ -34,8 +35,9 @@ const (
 	mentionRuleID           = RelayRulePrefix + "mention"
 	threadStartedRuleID     = RelayRulePrefix + "thread_started"
 	threadRoomMentionRuleID = RelayRulePrefix + "thread_room_mention"
-	threadSilenceRuleID     = RelayRulePrefix + "slack_threads"
-	threadFollowRulePrefix  = RelayRulePrefix + "thread."
+	// gomuks keeps replies this rule silences out of unread counts and sorting.
+	threadSilenceRuleID    = hicli.QuietThreadRuleID
+	threadFollowRulePrefix = RelayRulePrefix + "thread."
 	// "started" or "followed"; the gateway lets either through a muted chat.
 	threadTweak = pushrules.PushActionTweak(RelayRulePrefix + "thread")
 	// When a followed thread was last active, in Unix milliseconds. Kept in
