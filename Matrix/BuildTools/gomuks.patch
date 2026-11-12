@@ -266,3 +266,39 @@
 -	zerolog.Ctx(ctx).Debug().Msg("Fetching key backup version")
 +	if !online { return nil }
 +zerolog.Ctx(ctx).Debug().Msg("Fetching key backup version")
+--- a/pkg/hicli/pushrules.go
++++ b/pkg/hicli/pushrules.go
+@@ -13,0 +14 @@
++	"github.com/tidwall/gjson"
+@@ -108,0 +110,14 @@
++// QuietThreadRuleID is Relay's push rule silencing Slack thread replies you
++// don't follow. Such a reply stays out of the chat's timeline, so it isn't
++// unread either and doesn't move the chat up, unless it was also sent to the
++// channel. The homeserver can't read that flag in an encrypted reply; the
++// decrypted event here can.
++const QuietThreadRuleID = "com.silvermarcs.relay.slack_threads"
++
++// isQuietThreadReply reports whether the quiet thread rule caught evt: it is
++// someone else's message, but evaluating push rules left it not even unread.
++func isQuietThreadReply(evt *database.Event, me id.UserID) bool {
++	return evt.RelationType == event.RelThread && evt.Sender != me &&
++		evt.GetNonPushUnreadType() != database.UnreadTypeNone && evt.UnreadType == database.UnreadTypeNone
++}
++
+@@ -114 +129 @@
+-	should := h.PushRules.Load().GetMatchingRule(&pushRoom{
++	rule := h.PushRules.Load().GetMatchingRule(&pushRoom{
+@@ -119 +134,5 @@
+-	}, evt).GetActions().Should()
++	}, evt)
++	if rule != nil && rule.RuleID == QuietThreadRuleID && !gjson.GetBytes(evt.Content.VeryRaw, `com\.beeper\.broadcast_outside_thread`).Bool() {
++		return database.UnreadTypeNone
++	}
++	should := rule.GetActions().Should()
+--- a/pkg/hicli/sync.go
++++ b/pkg/hicli/sync.go
+@@ -847 +847,3 @@
+-			updatedRoom.BumpSortingTimestamp(dbEvt)
++			if !isQuietThreadReply(dbEvt, h.Account.UserID) {
++				updatedRoom.BumpSortingTimestamp(dbEvt)
++			}
