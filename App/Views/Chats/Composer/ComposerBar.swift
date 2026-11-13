@@ -29,11 +29,13 @@ struct ComposerBar: View {
     /// Where a sent bubble flies from.
     @State private var editorFrame: CGRect?
 
-    private var showsCancel: Bool { composer.activeMessage != nil }
+    /// Bumped each time the bar asks the editor for focus, so it asks again
+    /// even when the composer already thinks it has focus.
+    @State private var focusAttempt = 0
 
     private var editorHeight: CGFloat {
         guard isEditing, width > 0 else { return ComposerBarLayout.rowHeight }
-        let editorWidth = ComposerBarLayout.editorWidth(in: width, isFocused: true, leadingButtons: showsCancel ? 2 : 1)
+        let editorWidth = ComposerBarLayout.editorWidth(in: width, isFocused: true)
         return ComposerEditor.fittingHeight(of: composer.text, width: editorWidth, maximumLines: ComposerTextView.maximumLines)
     }
 
@@ -70,13 +72,6 @@ struct ComposerBar: View {
 
                         ComposerBarAttachButton(composer: composer)
                             .composerBarPart(.attach)
-
-                        if showsCancel {
-                            ComposerBarCancelButton {
-                                input.cancelAction(in: composer)
-                            }
-                            .composerBarPart(.cancel)
-                        }
                     }
                 }
 
@@ -85,22 +80,19 @@ struct ComposerBar: View {
                 // by an identical layout, with empty stand-ins for the buttons.
                 ComposerBarLayout(isFocused: isEditing, editorHeight: editorHeight) {
                     Color.clear.composerBarPart(.attach)
-                    if showsCancel { Color.clear.composerBarPart(.cancel) }
 
                     ComposerTextView(
                         text: Bindable(composer).text,
                         isFocused: Bindable(composer).isFocused,
                         isEditing: $isEditing,
+                        focusAttempt: focusAttempt,
                         selection: composer.selection,
+                        mentions: composer.draft.mentions.map(\.range),
                         placeholder: composer.prompt,
                         onSelectionChange: { composer.selection = $0 },
                         onReturn: send
                     )
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { editorFrame = $0 }
-                    .composerMentionPopover(composer, isFocused: composer.isFocused) { _ in
-                        // The mention's insertion already placed the caret.
-                        composer.isFocused = true
-                    }
                     .composerBarPart(.editor)
 
                     if dictationSettings.isEnabled {
@@ -140,7 +132,6 @@ struct ComposerBar: View {
         // smoothly, and the timeline follows it.
         .animation(.smooth(duration: 0.25), value: editorHeight)
         .animation(.smooth(duration: 0.2), value: showsSend)
-        .animation(.smooth(duration: 0.25), value: showsCancel)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         // Another conversation's composer can take over the bar, as when iPad
         // switches chats with the keyboard up.
@@ -149,17 +140,26 @@ struct ComposerBar: View {
             composer.isFocused = isEditing
         }
         // Reply, Edit, and notification drafts ask for focus. Reply and Edit
-        // come from a context menu: focusing before it has dismissed is undone
-        // by its keyboard restore. A thread's composer appears after its
-        // Reply, so this also runs for a request made before it existed.
+        // often come from a context menu, which restores the keyboard state
+        // from before it opened as it finishes dismissing, resigning an
+        // editor focused before then. The dismissal takes longer on some
+        // devices and menus than others, so focus is asked for again until it
+        // has held past it. A thread's composer appears after its Reply, so
+        // this also runs for a request made before it existed.
         .task(id: composer.focusRequestID) {
             guard composer.focusRequestID != nil else { return }
             do {
                 try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
+                for _ in 0..<Self.focusAttempts {
+                    if !isEditing {
+                        composer.isFocused = true
+                        focusAttempt += 1
+                    }
+                    try await Task.sleep(for: .milliseconds(150))
+                }
             } catch {
                 return
             }
-            composer.isFocused = true
             composer.didHandleFocusRequest()
         }
         // Leaving the chat can tear the editor down while it still has focus;
@@ -167,7 +167,12 @@ struct ComposerBar: View {
         .onDisappear {
             composer.isFocused = false
         }
+        // Outermost, so folding away takes the whole bar out of the safe area.
+        .yieldsKeyboardToOtherFields(composer)
     }
+
+    /// How many times a focus request checks that the editor has focus.
+    private static let focusAttempts = 4
 
     /// Sends or saves the draft, keeping the keyboard up for the next message.
     private func send() {

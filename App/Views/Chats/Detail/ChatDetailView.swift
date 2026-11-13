@@ -51,11 +51,7 @@ struct ChatDetailView: View {
                     }
 
                     ToolbarItem(placement: .primaryAction) {
-                        Menu("Chat Actions", systemImage: "ellipsis") {
-                            ChatRowActionsView(chat: selectedChat, placement: .contextMenu)
-                        }
-                        .menuOrder(.fixed)
-                        .menuIndicator(.hidden)
+                        ChatActionsToolbarButton(chat: selectedChat)
                     }
                 }
             }

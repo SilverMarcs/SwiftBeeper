@@ -13,9 +13,14 @@ struct ComposerTextView: UIViewRepresentable {
     /// Whether the editor is first responder: set only once UIKit has moved
     /// focus, after the keyboard's own announcements.
     @Binding var isEditing: Bool
+    /// Changes each time the composer asks for focus, which the editor then
+    /// takes even if `isFocused` was already true.
+    let focusAttempt: Int
     /// Where the caret goes when the draft is replaced from outside, as when
     /// a mention is inserted.
     let selection: NSRange?
+    /// The draft's mentions, coloured in the text.
+    let mentions: [NSRange]
     let placeholder: String
     let onSelectionChange: (NSRange) -> Void
     let onReturn: () -> Void
@@ -52,14 +57,40 @@ struct ComposerTextView: UIViewRepresentable {
             }
             editor.textDidChange()
         }
+        // Restyled whenever the text or its mentions change, once any
+        // composition has ended.
+        if editor.markedTextRange == nil,
+           context.coordinator.styledText != editor.text || context.coordinator.styledMentions != mentions {
+            context.coordinator.styledText = editor.text
+            context.coordinator.styledMentions = mentions
+            Self.styleMentions(mentions, in: editor)
+        }
         // Focus changes from outside UIKit land after this update, so they
         // don't run inside SwiftUI's view update.
-        if isFocused != editor.isFirstResponder {
+        if context.coordinator.focusAttempt != focusAttempt {
+            context.coordinator.focusAttempt = focusAttempt
+            Task { @MainActor [weak editor] in
+                guard let editor, editor.window != nil, !editor.isFirstResponder else { return }
+                editor.focus()
+            }
+        } else if isFocused != editor.isFirstResponder {
             Task { @MainActor [weak editor] in
                 guard let editor, editor.window != nil, isFocused != editor.isFirstResponder else { return }
                 if isFocused { editor.focus() } else { _ = editor.resignFirstResponder() }
             }
         }
+    }
+
+    private static func styleMentions(_ mentions: [NSRange], in editor: ComposerEditor) {
+        let font = editor.font ?? .preferredFont(forTextStyle: .body)
+        ComposerMentionStyle.apply(
+            to: editor.textStorage,
+            mentions: mentions,
+            font: font,
+            textColor: .label,
+            mentionColor: editor.tintColor
+        )
+        editor.typingAttributes = ComposerMentionStyle.plainAttributes(font: font, textColor: .label)
     }
 
     /// Exactly the room `ComposerBarLayout` gives it, rather than the
@@ -73,6 +104,11 @@ struct ComposerTextView: UIViewRepresentable {
         var isFocused: Binding<Bool>
         var isEditing: Binding<Bool>
         var onSelectionChange: (NSRange) -> Void
+        /// The focus attempt the editor last acted on.
+        var focusAttempt = 0
+        /// The text and mentions the editor was last styled for.
+        var styledText: String?
+        var styledMentions: [NSRange] = []
 
         init(text: Binding<String>, isFocused: Binding<Bool>, isEditing: Binding<Bool>, onSelectionChange: @escaping (NSRange) -> Void) {
             self.text = text
@@ -89,6 +125,11 @@ struct ComposerTextView: UIViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
+            // The caret taking a mention's colour from the letter before it
+            // would colour what's typed next.
+            if textView.markedTextRange == nil, let font = textView.font {
+                textView.typingAttributes = ComposerMentionStyle.plainAttributes(font: font, textColor: .label)
+            }
             let range = textView.selectedRange
             let draft = textView.text
             // Typing reports the new caret before the new text. Wait for the

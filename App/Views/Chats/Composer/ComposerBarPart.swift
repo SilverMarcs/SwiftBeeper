@@ -6,8 +6,6 @@ nonisolated enum ComposerBarPart {
     /// The field's glass, which grows with the draft.
     case panel
     case attach
-    /// Leaves a reply or edit.
-    case cancel
     case editor
     case dictation
     case send

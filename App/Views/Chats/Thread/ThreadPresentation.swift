@@ -53,9 +53,7 @@ private struct ThreadPresentation: ViewModifier {
                     ToolbarSpacer(.flexible)
                     #endif
                     ToolbarItem(placement: .primaryAction) {
-                        Button("Close Thread", systemImage: "xmark") {
-                            chatStore.closeThread()
-                        }
+                        ThreadCloseButton(thread: thread)
                     }
                 }
             }
