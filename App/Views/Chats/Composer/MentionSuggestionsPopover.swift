@@ -1,22 +1,14 @@
+#if os(macOS)
 import SwiftUI
 
+/// The mention suggestions in a popover below the macOS field.
 struct MentionSuggestionsPopover: View {
     let participants: [ChatParticipant]
     let select: (ChatParticipant) -> Void
 
     var body: some View {
-        ScrollView {
-            VStack {
-                ForEach(participants) { participant in
-                    MentionSuggestionRow(participant: participant) {
-                        select(participant)
-                    }
-                }
-            }
-            .padding()
-        }
-        .frame(idealWidth: 300, maxHeight: 320)
-        .fixedSize(horizontal: true, vertical: false)
-        .presentationCompactAdaptation(.popover)
+        MentionSuggestionsList(participants: participants, maximumHeight: 220, select: select)
+            .frame(width: 260)
     }
 }
+#endif

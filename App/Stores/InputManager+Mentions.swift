@@ -31,22 +31,28 @@ extension InputManager {
     }
 
     func mentionSuggestions(in composer: Composer) -> [ChatParticipant] {
-        guard let query = mentionQuery(in: composer), query != composer.dismissedMentionQuery,
+        // A lone @ only starts the members loading; the list waits for the
+        // first letter of a name.
+        guard let query = mentionQuery(in: composer), !query.text.isEmpty, query != composer.dismissedMentionQuery,
               mentionParticipantsChatID == composer.target.chatID else { return [] }
         return Array(mentionParticipants.lazy.filter { participant in
-            participant.isSelf != true && (query.text.isEmpty
-                || participant.displayName.localizedStandardContains(query.text)
+            participant.isSelf != true && (participant.displayName.localizedStandardContains(query.text)
                 || participant.username?.localizedStandardContains(query.text) == true)
         }.prefix(8))
     }
 
+    /// Reads the members of `composer`'s chat, once per chat, when a mention
+    /// is being typed there. The newest chat asked for wins.
     func loadMentionParticipants(for composer: Composer) async {
         guard let chatID = mentionChatID(for: composer), mentionQuery(in: composer) != nil,
-              mentionParticipantsChatID != chatID else { return }
+              mentionParticipantsChatID != chatID, mentionLoadingChatID != chatID else { return }
+        mentionLoadingChatID = chatID
+        defer { if mentionLoadingChatID == chatID { mentionLoadingChatID = nil } }
         do {
             let chat = try await APIClient.getChat(chatID: chatID, maxParticipantCount: Self.mentionMemberLimit)
-            guard !Task.isCancelled,
-                  let participants = chat.participants, participants.hasMore != true,
+            // The chat is known to be small enough to list whole, so whatever
+            // members came back are the ones to offer.
+            guard mentionLoadingChatID == chatID, let participants = chat.participants,
                   (participants.total ?? participants.items.count) <= Self.mentionMemberLimit else { return }
             mentionParticipants = participants.items.sorted {
                 $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending

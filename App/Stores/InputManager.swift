@@ -20,6 +20,9 @@ final class InputManager {
 
     var mentionParticipants: [ChatParticipant] = []
     var mentionParticipantsChatID: String?
+    /// The chat whose members are being read for mentions, so a lookup for a
+    /// chat left meanwhile can't replace the current chat's.
+    @ObservationIgnored var mentionLoadingChatID: String?
 
     /// Created on first use. Composers are observable themselves, so adding
     /// one from a view body doesn't invalidate anything.

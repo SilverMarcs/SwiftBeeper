@@ -1,6 +1,8 @@
+#if os(macOS)
 import SwiftUI
 
-/// The same mention presentation and lifecycle for every composer.
+/// Mention suggestions in a popover below the macOS field. iPhone and iPad
+/// show them in `ComposerMentionSuggestions` instead.
 struct ComposerMentionPopover: ViewModifier {
     @Environment(InputManager.self) private var input
     @State private var isPresented = false
@@ -15,15 +17,15 @@ struct ComposerMentionPopover: ViewModifier {
             .popover(isPresented: $isPresented, attachmentAnchor: .point(.bottom), arrowEdge: .bottom) {
                 MentionSuggestionsPopover(participants: suggestions, select: insertMention)
             }
-            .task(id: input.mentionQuery(in: composer) == nil ? nil : input.mentionChatID(for: composer)) {
-                await input.loadMentionParticipants(for: composer)
-            }
+            .loadsMentionParticipants(for: composer)
             .onChange(of: suggestions, initial: true) { _, participants in
                 isPresented = !participants.isEmpty && (isFocused || isPresented)
             }
             .onChange(of: isFocused) { _, focused in
                 if focused { isPresented = !suggestions.isEmpty }
             }
+            // Closing the popover, as by clicking elsewhere, dismisses the
+            // query until it changes.
             .onChange(of: isPresented) { _, presented in
                 if !presented { composer.dismissedMentionQuery = input.mentionQuery(in: composer) }
             }
@@ -47,3 +49,4 @@ extension View {
         modifier(ComposerMentionPopover(composer: composer, isFocused: isFocused, restoreCursor: restoreCursor))
     }
 }
+#endif
