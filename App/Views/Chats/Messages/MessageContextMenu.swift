@@ -9,6 +9,7 @@ struct MessageContextMenu: View {
     @Environment(\.saveAttachment) private var saveAttachment
     @Environment(\.saveAttachmentToPhotos) private var saveAttachmentToPhotos
     @Environment(\.showReactionPicker) private var showReactionPicker
+    @Environment(\.reactionToggleFeedback) private var reactionToggleFeedback
 
     let message: Message
     let chat: Chat
@@ -119,6 +120,9 @@ struct MessageContextMenu: View {
 
     private func setOwnReaction(_ newValue: String?) {
         let old = ownReactionKey
+        guard old != newValue else { return }
+        // Played by the timeline, since choosing dismisses this menu.
+        reactionToggleFeedback?.play()
         Task {
             if let old, old != newValue {
                 await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: old)

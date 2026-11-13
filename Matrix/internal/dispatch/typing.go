@@ -16,9 +16,15 @@ import (
 
 // Typing is receive-only. Resolve names from local membership, without sending
 // a typing request or fetching profiles from the homeserver.
+//
+// Sync already carries typing for every joined room, so every room's typing
+// goes to the app: the open chat's timeline and the chat list's previews. The
+// server only sends an update when a room's typists change, and each costs
+// one keyed member-state read, plus the bounded thread scan when a Slack user
+// is typing.
 func (h *eventHub) processTyping(update *jsoncmd.Typing) {
 	cli := h.dispatcher.rt.Client()
-	if update == nil || cli == nil || cli.Account == nil || !h.isWatching(string(update.RoomID), true) {
+	if update == nil || cli == nil || cli.Account == nil || !h.isWatching(string(update.RoomID), false) {
 		return
 	}
 	users := make([]wire.User, 0, len(update.UserIDs))

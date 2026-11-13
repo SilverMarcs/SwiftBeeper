@@ -31,6 +31,7 @@ struct MessageRowView: View {
                     } label: {
                         ProfileAvatarView(
                             name: message.senderDisplayName,
+                            colorID: message.senderID,
                             imageURLString: sender?.imgURL,
                             dimension: 28
                         )
@@ -48,6 +49,7 @@ struct MessageRowView: View {
                         if showsSenderName {
                             Text(message.senderDisplayName)
                                 .bold()
+                                .foregroundStyle(IdentityColor(id: message.senderID).nameStyle)
                         }
                         if isThreadBroadcast {
                             ThreadBroadcastLabel(followsName: showsSenderName)
@@ -62,13 +64,13 @@ struct MessageRowView: View {
 
                 if isThreadBroadcast {
                     // The thread's first message, quoted like a reply.
-                    ReplyPreviewView(linkedMessage: entry.threadRoot, isOutgoing: isOutgoing) {
+                    ReplyPreviewView(linkedMessage: entry.threadRoot, showsSenderName: !chat.isSingleChat) {
                         chatStore.showThread(for: message)
                     }
                     .accessibilityHint("Opens the thread")
                     .modifier(TypingBubbleContentReveal())
                 } else if message.linkedMessageID?.isEmpty == false {
-                    ReplyPreviewView(linkedMessage: entry.linkedMessage, reply: message, isOutgoing: isOutgoing)
+                    ReplyPreviewView(linkedMessage: entry.linkedMessage, reply: message, showsSenderName: !chat.isSingleChat)
                         .modifier(TypingBubbleContentReveal())
                 }
 
@@ -82,6 +84,8 @@ struct MessageRowView: View {
                 .environment(\.openURL, OpenURLAction { url in
                     openMention(url, in: message)
                 })
+                // The bubbles' outer corners, where they meet the rows beside.
+                .environment(\.messageBubbleJoins, entry.bubbleJoins)
 
                 // Outside the bubbles' context menu, so holding a pill opens
                 // the sheet of who reacted instead.

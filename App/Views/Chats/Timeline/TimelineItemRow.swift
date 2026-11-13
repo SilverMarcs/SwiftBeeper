@@ -26,13 +26,14 @@ struct TimelineItemRow: View {
                 OutgoingTimelineEntryRow(entry: entry, activeComposerMessageID: activeComposerMessageID)
                     .id(entry.id)
             case .deliveryCaption(let indicator):
-                DeliveryCaptionView(indicator: indicator)
+                DeliveryCaptionView(indicator: indicator, chat: chat)
                     .timelineFocus(activeComposerMessageID == nil)
             case .seenCaption(let indicator):
-                DeliveryCaptionView(indicator: indicator, isOutgoing: false)
+                DeliveryCaptionView(indicator: indicator, chat: chat, isOutgoing: false)
                     .timelineFocus(activeComposerMessageID == nil)
-            case .typing(let bubble, let isFirstInGroup):
+            case .typing(let bubble, let isFirstInGroup, let joinsAbove):
                 TypingIndicatorView(participant: bubble.participant, chat: chat, isFirstInGroup: isFirstInGroup)
+                    .environment(\.messageBubbleJoins, joinsAbove ? .above : [])
                     .timelineFocus(activeComposerMessageID == nil)
                     .timelineRowPadding(startsSenderRun: isFirstInGroup)
                     .transition(.opacity)

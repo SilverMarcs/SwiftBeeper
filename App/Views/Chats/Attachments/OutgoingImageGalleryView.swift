@@ -30,6 +30,6 @@ struct OutgoingImageGalleryView: View {
                 Color.black.opacity(0.12)
             }
         }
-        .clipShape(.rect(cornerRadius: 12))
+        .messageBubbleClip(isOutgoing: true)
     }
 }

@@ -27,6 +27,7 @@ type Dispatcher struct {
 	accountsCache accountsCache
 	threads       threadFollows
 	searchIndex   messageSearchIndex
+	linkPreviews  linkPreviewCache
 }
 
 func New(rt *gomuksruntime.Runtime) *Dispatcher {
@@ -114,6 +115,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.loadThreadHistory(ctx, input)
 	case "resolve-media":
 		return s.resolveMedia(ctx, input)
+	case "get-link-preview":
+		return s.getLinkPreview(ctx, input)
 	case "send-message":
 		return s.sendMessage(ctx, input, false)
 	case "clear-media-cache":

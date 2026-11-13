@@ -9,7 +9,9 @@ enum TimelineItem: Identifiable {
     case deliveryCaption(DeliveryIndicator)
     /// In a group, who has seen the newest message when someone else sent it.
     case seenCaption(DeliveryIndicator)
-    case typing(TypingBubble, isFirstInGroup: Bool)
+    /// `joinsAbove`: whether the bubble carries on the newest row's, as the
+    /// message it turns into will.
+    case typing(TypingBubble, isFirstInGroup: Bool, joinsAbove: Bool)
 
     var id: String {
         switch self {
@@ -19,7 +21,7 @@ enum TimelineItem: Identifiable {
         // the last in place, even across an optimistic row's confirmation.
         case .deliveryCaption: "delivery-caption"
         case .seenCaption: "seen-caption"
-        case .typing(let bubble, _): bubble.id
+        case .typing(let bubble, _, _): bubble.id
         }
     }
 
@@ -74,7 +76,8 @@ enum TimelineItem: Identifiable {
         }
         if let typing {
             let isFirstInGroup = !outgoing.isEmpty || messages.last?.message.senderID != typing.participant.id
-            items.append(.typing(typing, isFirstInGroup: isFirstInGroup))
+            let joinsAbove = !isFirstInGroup && messages.last?.bubbleJoins.contains(.below) == true
+            items.append(.typing(typing, isFirstInGroup: isFirstInGroup, joinsAbove: joinsAbove))
         }
         return items
     }

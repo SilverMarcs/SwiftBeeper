@@ -5,6 +5,7 @@ import SwiftUI
 struct ReactionPillButton: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(\.showReactionDetails) private var showReactionDetails
+    @Environment(\.reactionToggleFeedback) private var reactionToggleFeedback
 
     let pill: ReactionPill
     let chat: Chat
@@ -40,6 +41,9 @@ struct ReactionPillButton: View {
             didLongPress = false
             return
         }
+        // Played by the timeline: a pill the user was last to react with
+        // leaves once the reaction is taken back.
+        reactionToggleFeedback?.play()
         let message = pill.message
         let reactionKey = pill.group.reactionKey
         Task {

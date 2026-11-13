@@ -162,6 +162,9 @@ final class ChatStore {
     /// Preserve the typing row's identity after its real message arrives.
     var typingMessageRowIDs: [Message.ID: String] = [:]
     @ObservationIgnored var typingExpirationTask: Task<Void, Never>?
+    /// Every chat's typing, for the chat list. Rows observe their own chat's
+    /// entry, not this store.
+    let chatListTyping = ChatListTyping()
     var isLoadingOlderMessages = false
     var isLoadingServerHistory = false
     var isLoadingMessages = false
@@ -277,7 +280,7 @@ final class ChatStore {
     /// the background; they resync when it returns.
     func setAppActive(_ active: Bool) {
         notificationService.setAppActive(active)
-        if !active { clearTyping() }
+        if !active { clearAllTyping() }
         #if os(iOS)
         if !active { realtimeService.stop() }
         #endif
@@ -415,21 +418,22 @@ final class ChatStore {
     private func handle(_ event: RealtimeEvent) {
         switch event {
         case .connected(let requiresResync):
-            clearTyping()
+            clearAllTyping()
             notificationService.notificationPreferencesChanged()
             if requiresResync { scheduleResync() }
         case .disconnected:
-            clearTyping()
+            clearAllTyping()
             // Nothing arrives until the stream reconnects and reports again.
             syncStatus = .waiting
         case .resyncRequired:
-            clearTyping()
+            clearAllTyping()
             scheduleResync()
         case .notificationPreferencesChanged:
             notificationService.notificationPreferencesChanged()
         case .syncStatusChanged(let status):
             syncStatus = status
         case .chatUpserted(let chat):
+            chatListTyping.chatUpdated(chat)
             applyChatUpsert(chat)
         case .chatDeleted(let chatID):
             removeChatLocally(chatID)
@@ -451,8 +455,9 @@ final class ChatStore {
             if chatID == selectedChatID, readReceipts != receipts { readReceipts = receipts }
         case .typingUpdated(let chatID, let participants):
             if chatID == selectedChatID { updateTyping(participants) }
+            updateListTyping(chatID: chatID, participants: participants)
         case .failed(let message):
-            clearTyping()
+            clearAllTyping()
             messagesError = message
         }
     }

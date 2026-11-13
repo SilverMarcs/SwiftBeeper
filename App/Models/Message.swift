@@ -43,6 +43,11 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let deliveryStatus: MessageDeliveryStatus?
     /// The bridge's explanation of a failed delivery, when it gave one.
     let deliveryError: String?
+    /// The first usable link preview the bridge sent with the message.
+    let linkPreview: MessageLinkPreview?
+    /// The first link worth previewing when the bridge sent no preview. Its
+    /// preview is fetched only when the message is shown; see `LinkPreviewLoader`.
+    let linkPreviewURL: String?
 
     /// A thread reply that only the thread shows, not the main timeline.
     var isHiddenThreadReply: Bool {

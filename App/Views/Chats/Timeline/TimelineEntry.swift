@@ -13,6 +13,11 @@ struct TimelineEntry: Identifiable, Equatable {
     /// Whether the sender changed from the row directly above, with no divider
     /// between them. The timeline widens the gap there to separate the two sides.
     let startsSenderRun: Bool
+    /// Which of the rows beside it this row's bubbles carry on into, for the
+    /// corners where they meet. Grouping alone isn't enough: a quote or
+    /// label above the bubbles, or reactions or a caption below them, sit
+    /// between and part them.
+    let bubbleJoins: MessageBubbleJoins
     /// The message this one replies to, from the timeline or, when older,
     /// the source's quoted-message lookup.
     let linkedMessage: Message?
@@ -37,14 +42,22 @@ struct TimelineEntry: Identifiable, Equatable {
 
     /// Groups consecutive messages from one sender. A timestamp break or the
     /// unread divider starts a new group. Runs of photos fold into one row.
+    /// `followingRowContinues` says whether the row rendered after the last
+    /// one, an optimistic send or a typing bubble, carries on its bubbles
+    /// with nothing between them. In a thread (`isThread`), rows show their
+    /// thread labels differently, which moves what parts their bubbles.
     static func entries(
         for messages: [Message],
         firstUnreadID: String?,
         quotedMessages: [Message.ID: Message] = [:],
-        followingTypingSenderID: String? = nil
+        followingTypingSenderID: String? = nil,
+        isThread: Bool = false,
+        followingRowContinues: Bool = false
     ) -> [TimelineEntry] {
         let messagesByID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let rows = galleryRows(in: messages, firstUnreadID: firstUnreadID)
+        let breaksAbove = rows.map { breaksBubbleRunAbove($0, isThread: isThread) }
+        let breaksBelow = rows.map { breaksBubbleRunBelow($0, isThread: isThread) }
 
         return rows.indices.map { index in
             let row = rows[index]
@@ -58,15 +71,24 @@ struct TimelineEntry: Identifiable, Equatable {
                 Self.showsTimestamp(before: $0.timestamp, previous: lastMessage.timestamp)
             } ?? false
 
+            let isFirstInGroup = previous?.senderID != message.senderID || showsTimestamp || message.id == firstUnreadID
+            let isLastInGroup = (next?.senderID ?? followingTypingSenderID) != message.senderID
+                || nextShowsTimestamp || (next.map { $0.id == firstUnreadID } ?? false)
+            // The row after the last isn't a message here; the caller decides.
+            let continuesBelow = next == nil ? followingRowContinues : !isLastInGroup && !breaksAbove[index + 1]
+
             return TimelineEntry(
                 message: message,
                 galleryMessages: Array(row.dropFirst()),
                 showsTimestamp: showsTimestamp,
-                isFirstInGroup: previous?.senderID != message.senderID || showsTimestamp || message.id == firstUnreadID,
-                isLastInGroup: (next?.senderID ?? followingTypingSenderID) != message.senderID
-                    || nextShowsTimestamp || (next.map { $0.id == firstUnreadID } ?? false),
+                isFirstInGroup: isFirstInGroup,
+                isLastInGroup: isLastInGroup,
                 startsSenderRun: previous.map { $0.senderID != message.senderID } == true
                     && !showsTimestamp && message.id != firstUnreadID,
+                bubbleJoins: MessageBubbleJoins(
+                    above: !isFirstInGroup && !breaksAbove[index] && !breaksBelow[index - 1],
+                    below: continuesBelow && !breaksBelow[index]
+                ),
                 linkedMessage: message.linkedMessageID.flatMap { messagesByID[$0] ?? quotedMessages[$0] },
                 threadRoot: message.broadcastThreadRootID.flatMap { messagesByID[$0] ?? quotedMessages[$0] }
             )
@@ -115,6 +137,7 @@ struct TimelineEntry: Identifiable, Equatable {
             isFirstInGroup: true,
             isLastInGroup: true,
             startsSenderRun: false,
+            bubbleJoins: [],
             linkedMessage: linkedMessage,
             threadRoot: threadRoot
         )
@@ -156,10 +179,7 @@ struct TimelineEntry: Identifiable, Equatable {
         if groupMemberCount > 1, readers.count >= groupMemberCount - 1 {
             return DeliveryCaption(indicator: .seenByAll, messageID: message.id)
         }
-        let names = readers.values
-            .map(DeliveryIndicator.firstName(of:))
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        return DeliveryCaption(indicator: .seenBy(names), messageID: message.id)
+        return DeliveryCaption(indicator: .seenBy(sortedReaders(readers)), messageID: message.id)
     }
 
     /// In a group whose newest message someone else sent, who else has seen
@@ -181,10 +201,22 @@ struct TimelineEntry: Identifiable, Equatable {
         if groupMemberCount > 2, readers.count >= groupMemberCount - 2 {
             return .seenByAll
         }
-        let names = readers.values
-            .map(DeliveryIndicator.firstName(of:))
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        return .seenBy(names)
+        return .seenBy(sortedReaders(readers))
+    }
+
+    /// Readers by first name, as the caption lists them, then by ID so equal
+    /// names keep their order between passes.
+    private static func sortedReaders(_ readers: [String: String]) -> [DeliveryReader] {
+        readers
+            .map { (reader: DeliveryReader(id: $0.key, name: $0.value), firstName: DeliveryIndicator.firstName(of: $0.value)) }
+            .sorted {
+                switch $0.firstName.localizedStandardCompare($1.firstName) {
+                case .orderedAscending: true
+                case .orderedDescending: false
+                case .orderedSame: $0.reader.id < $1.reader.id
+                }
+            }
+            .map(\.reader)
     }
 
     /// The caption for the newest message, when the user sent it: "Seen" once the

@@ -5,6 +5,7 @@ import SwiftUI
 /// accent color.
 struct ReactionPillLabel: View {
     @Environment(ChatStore.self) private var chatStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let pill: ReactionPill
     let chat: Chat
@@ -17,6 +18,8 @@ struct ReactionPillLabel: View {
                 ReactionPillAvatars(participantIDs: pill.group.participantIDs, chat: chat, isOwn: pill.isOwn)
             } else if pill.group.count > 1 {
                 Text(pill.group.count, format: .number)
+                    // Rolls with the pills' animation; see `ReactionPillsView`.
+                    .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(pill.group.count)))
                     .foregroundStyle(pill.isOwn ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             }
         }

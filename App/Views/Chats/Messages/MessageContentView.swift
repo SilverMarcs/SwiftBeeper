@@ -6,9 +6,13 @@ struct MessageContentView: View {
     let message: Message
     let chat: Chat
     @Environment(\.typingBubbleNamespace) private var typingBubbleNamespace
+    /// The stack's outer corners, where it meets the rows beside it.
+    @Environment(\.messageBubbleJoins) private var bubbleJoins
 
     var body: some View {
         let isOutgoing = message.isSender
+        // Each attachment and the text are bubbles of their own, joined.
+        let bubbleCount = (message.attachments?.count ?? 0) + (message.visibleText == nil ? 0 : 1)
         VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
             if message.isDeletedMessage {
                 Group {
@@ -29,20 +33,22 @@ struct MessageContentView: View {
                 ForEach((message.attachments ?? []).enumerated(), id: \.element.id) { index, attachment in
                     AttachmentView(attachment: attachment, message: message, chat: chat)
                         .modifier(TypingBubbleGeometry(isEnabled: index == 0))
+                        .environment(\.messageBubbleJoins, bubbleJoins.bubble(at: index, of: bubbleCount))
                 }
 
                 if let visibleText = message.visibleText {
-                    MessageTextView(text: message.formattedText ?? visibleText, isOutgoing: isOutgoing, expansionID: message.id)
+                    MessageTextWithLinkPreview(message: message, text: message.formattedText ?? visibleText, isOutgoing: isOutgoing)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
                         // Media takes over the typing bubble when present; its
                         // caption has a separate background and must not match too.
                         .environment(\.typingBubbleNamespace, message.attachments?.isEmpty != false ? typingBubbleNamespace : nil)
+                        .environment(\.messageBubbleJoins, bubbleJoins.bubble(at: bubbleCount - 1, of: bubbleCount))
                         .sendEffect(forConfirmed: isOutgoing ? message.id : nil)
                 }
             }
         }
         #if !os(macOS)
-        .contentShape(.contextMenuPreview, .rect(cornerRadius: 16))
+        .contentShape(.contextMenuPreview, ChatVisualStyle.bubbleShape(isOutgoing: isOutgoing, joins: bubbleJoins))
         #endif
         .modifier(ReactionTargetHighlight(messageID: message.id))
         .contextMenu {

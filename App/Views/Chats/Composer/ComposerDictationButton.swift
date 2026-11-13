@@ -49,8 +49,9 @@ struct ComposerDictationButton: View {
                                 Label(isRecording ? "Finish Dictation" : "Dictate", systemImage: "waveform")
                                     .labelStyle(.iconOnly)
                                     .imageScale(symbolScale)
-                                    // The waveform ripples while it listens.
-                                    .symbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating, isActive: isRecording)
+                                    // The waveform ripples back and forth while it listens; a
+                                    // one-way sweep leaves every bar dim between passes.
+                                    .symbolEffect(.variableColor.iterative.dimInactiveLayers.reversing, options: .repeat(.continuous), isActive: isRecording)
                             }
                         }
                     }

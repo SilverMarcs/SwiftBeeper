@@ -147,6 +147,13 @@ type Message struct {
 	// DeliveryError is the bridge's explanation of a failed delivery, when
 	// it gave one.
 	DeliveryError string `json:"deliveryError,omitempty"`
+	// LinkPreview is the first usable preview a bridge sent with the
+	// message; nil when it sent none.
+	LinkPreview *LinkPreview `json:"linkPreview,omitempty"`
+	// LinkPreviewURL is the first link worth previewing when no bridge
+	// preview came with the message. The app fetches its preview with
+	// get-link-preview only when the message is shown.
+	LinkPreviewURL string `json:"linkPreviewURL,omitempty"`
 }
 
 // DeliveryStatus is how far an outgoing message got past the homeserver.

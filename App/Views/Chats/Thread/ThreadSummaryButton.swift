@@ -4,6 +4,7 @@ import SwiftUI
 /// replies. Tapping it opens the thread.
 struct ThreadSummaryButton: View {
     @Environment(ChatStore.self) private var chatStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let message: Message
     let summary: ThreadSummary
@@ -20,6 +21,7 @@ struct ThreadSummaryButton: View {
 
                 Text("^[\(summary.replyCount) reply](inflect: true)")
                     .bold()
+                    .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(summary.replyCount)))
                     .foregroundStyle(.secondary)
 
                 if summary.hasUnread == true {
@@ -44,6 +46,9 @@ struct ThreadSummaryButton: View {
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
+        // Scoped to the footer, so its capsule resizes with the count while
+        // the row around it stays put.
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy, value: summary.replyCount)
         .accessibilityHint("Opens the thread")
     }
 }

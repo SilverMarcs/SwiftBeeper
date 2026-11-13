@@ -9,11 +9,7 @@ struct TypingIndicatorView: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
             if !chat.isSingleChat {
-                ProfileAvatarView(
-                    name: participant.displayName,
-                    imageURLString: participant.imgURL,
-                    dimension: 28
-                )
+                ProfileAvatarView(participant: participant, dimension: 28)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -21,6 +17,7 @@ struct TypingIndicatorView: View {
                     Text(participant.displayName)
                         .font(.subheadline)
                         .bold()
+                        .foregroundStyle(IdentityColor(id: participant.id).nameStyle)
                 }
 
                 TypingDotsView()

@@ -1,9 +1,13 @@
 import SwiftMediaViewer
 import SwiftUI
 
-/// A circular photo, or the name's initials while it loads or when there is none.
+/// A circular photo, or the name's initials on the person's own colour
+/// while it loads or when there is none.
 struct ProfileAvatarView: View {
     let name: String
+    /// The stable ID that colours the initials: a Matrix user ID, or a chat
+    /// ID for a chat's own initials. See `IdentityColor`.
+    let colorID: String
     let imageURLString: String?
     let dimension: CGFloat
     var allowsFullscreen: Bool = false
@@ -15,7 +19,7 @@ struct ProfileAvatarView: View {
                 SMVImage(url: displayURL, targetSize: targetSize)
             } else {
                 CachedAsyncImage(url: displayURL, targetSize: targetSize) {
-                    InitialsAvatarView(name: name)
+                    InitialsAvatarView(name: name, colorID: colorID)
                 }
             }
         }
@@ -35,6 +39,7 @@ extension ProfileAvatarView {
     init(participant: ChatParticipant?, dimension: CGFloat, allowsFullscreen: Bool = false) {
         self.init(
             name: participant?.displayName ?? "?",
+            colorID: participant?.id ?? "?",
             imageURLString: participant?.imgURL,
             dimension: dimension,
             allowsFullscreen: allowsFullscreen
@@ -43,5 +48,5 @@ extension ProfileAvatarView {
 }
 
 #Preview {
-    ProfileAvatarView(name: "Alice Wonder", imageURLString: nil, dimension: 36)
+    ProfileAvatarView(name: "Alice Wonder", colorID: "@alice:example.org", imageURLString: nil, dimension: 36)
 }

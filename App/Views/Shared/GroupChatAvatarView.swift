@@ -4,6 +4,8 @@ import SwiftUI
 /// with the first member largest at the top left.
 struct GroupChatAvatarView: View {
     let title: String
+    /// Colours the title's initials when they stand in for a member.
+    let chatID: String
     let participants: [ChatParticipant]
     let dimension: CGFloat
 
@@ -31,6 +33,7 @@ struct GroupChatAvatarView: View {
                 let slot = layout[index]
                 ProfileAvatarView(
                     name: avatars[index].name,
+                    colorID: avatars[index].colorID,
                     imageURLString: avatars[index].imageURL,
                     dimension: dimension * slot.size
                 )
@@ -42,11 +45,11 @@ struct GroupChatAvatarView: View {
     }
 
     /// Up to five members, padded with initials-only avatars to at least two.
-    private var avatars: [(name: String, imageURL: String?)] {
-        let members = participants.prefix(Self.maximumAvatarCount).map { (name: $0.displayName, imageURL: $0.imgURL) }
+    private var avatars: [(name: String, colorID: String, imageURL: String?)] {
+        let members = participants.prefix(Self.maximumAvatarCount).map { (name: $0.displayName, colorID: $0.id, imageURL: $0.imgURL) }
         switch members.count {
-        case 0: return [(title, nil), ("Group", nil)]
-        case 1: return [members[0], (title, nil)]
+        case 0: return [(title, chatID, nil), ("Group", "Group", nil)]
+        case 1: return [members[0], (title, chatID, nil)]
         default: return members
         }
     }

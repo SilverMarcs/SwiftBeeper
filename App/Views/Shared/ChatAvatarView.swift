@@ -11,15 +11,22 @@ struct ChatAvatarView: View {
             if let chatImageURL = chat.ownImageURL {
                 ProfileAvatarView(
                     name: chat.displayTitle,
+                    colorID: chat.id,
                     imageURLString: chatImageURL,
                     dimension: dimension,
                     allowsFullscreen: allowsFullscreen
                 )
             } else if chat.isGroupChat {
-                GroupChatAvatarView(title: chat.displayTitle, participants: groupParticipants, dimension: dimension)
+                GroupChatAvatarView(
+                    title: chat.displayTitle,
+                    chatID: chat.id,
+                    participants: groupParticipants,
+                    dimension: dimension
+                )
             } else {
                 ProfileAvatarView(
                     name: primaryParticipantName,
+                    colorID: chat.otherParticipant?.id ?? chat.id,
                     imageURLString: chat.otherParticipant?.imgURL,
                     dimension: dimension,
                     allowsFullscreen: allowsFullscreen

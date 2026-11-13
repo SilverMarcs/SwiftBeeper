@@ -43,9 +43,18 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 readReceipts: source.readReceipts,
                 groupMemberCount: chat.isGroupChat ? chat.participants.map { $0.total ?? $0.items.count } : nil,
                 quotedMessages: source.quotedMessages,
-                followingTypingSenderID: outgoingMessages.isEmpty ? typingBubble?.participant.id : nil
+                followingTypingSenderID: outgoingMessages.isEmpty ? typingBubble?.participant.id : nil,
+                isThread: target.isThread,
+                continuesIntoOutgoing: OutgoingTimelineEntry.continuesBubbles(
+                    of: messages, into: outgoingMessages, isThread: target.isThread
+                )
             )
-            let outgoingTimelineEntries = OutgoingTimelineEntry.entries(for: outgoingMessages, following: messages)
+            let outgoingTimelineEntries = OutgoingTimelineEntry.entries(
+                for: outgoingMessages,
+                following: messages,
+                joinsLastRow: timelineEntries.last?.bubbleJoins.contains(.below) == true,
+                isThread: target.isThread
+            )
             let confirmedCaption = entriesCache.deliveryCaption
             // A just-sent bubble lands before its caption appears below it,
             // as in Messages.

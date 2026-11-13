@@ -10,6 +10,7 @@ struct ReactionDetailsRow: View {
         HStack {
             ProfileAvatarView(
                 name: name,
+                colorID: reaction.participantID,
                 imageURLString: participant?.imgURL,
                 dimension: 32
             )

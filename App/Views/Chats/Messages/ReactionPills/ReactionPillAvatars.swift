@@ -14,14 +14,11 @@ struct ReactionPillAvatars: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            HStack(spacing: -Self.dimension / 3) {
-                ForEach(participantIDs.prefix(Self.shownLimit), id: \.self) { id in
-                    ProfileAvatarView(participant: participant(with: id), dimension: Self.dimension)
-                        // Each avatar's edge stays visible over the one before it.
-                        .padding(1)
-                        .background { ReactionPillFill(isOwn: isOwn) }
-                        .clipShape(.circle)
-                }
+            OverlappingAvatarsView(
+                participants: participantIDs.prefix(Self.shownLimit).map(participant(with:)),
+                dimension: Self.dimension
+            ) {
+                ReactionPillFill(isOwn: isOwn)
             }
 
             if participantIDs.count > Self.shownLimit {
@@ -32,14 +29,15 @@ struct ReactionPillAvatars: View {
         }
     }
 
-    /// The reactor's profile, with the user's own photo for themselves.
-    private func participant(with id: String) -> ChatParticipant? {
+    /// The reactor's profile, with the user's own photo for themselves, or
+    /// "?" in their colour when the chat hasn't loaded them.
+    private func participant(with id: String) -> ChatParticipant {
         if let participant = chat.participant(with: id) {
             return chatStore.displayedParticipant(participant, in: chat)
         }
         if let profile = chatStore.currentUserProfile, profile.id == id {
             return chatStore.displayedParticipant(profile, in: chat)
         }
-        return nil
+        return ChatParticipant(id: id, username: nil, fullName: "?", imgURL: nil, isSelf: nil)
     }
 }

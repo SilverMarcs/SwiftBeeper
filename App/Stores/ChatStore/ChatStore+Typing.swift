@@ -64,4 +64,22 @@ extension ChatStore {
         typingParticipants = []
         typingBubble = nil
     }
+
+    // MARK: - Chat list
+
+    /// Any chat's typing, shown in place of its chat list preview. Like the
+    /// timeline, it shows only while Relay is frontmost.
+    func updateListTyping(chatID: String, participants: [ChatParticipant]) {
+        guard notificationService.isAppActive else { return }
+        let others = participants.filter {
+            $0.isSelf != true && $0.id != currentUserProfile?.id
+        }
+        chatListTyping.update(chatID: chatID, participants: others, previewID: chat(byID: chatID)?.preview?.id)
+    }
+
+    /// Clears the open timeline's typing and every chat list row's.
+    func clearAllTyping() {
+        clearTyping()
+        chatListTyping.clearAll()
+    }
 }

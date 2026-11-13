@@ -14,6 +14,8 @@ final class TimelineEntriesCache {
         let readReceipts: [ReadReceipt]
         let groupMemberCount: Int?
         let followingTypingSenderID: String?
+        let isThread: Bool
+        let continuesIntoOutgoing: Bool
     }
 
     private var inputs: Inputs?
@@ -26,13 +28,17 @@ final class TimelineEntriesCache {
     /// Who has seen the newest message in a group, when someone else sent it.
     private(set) var newestSeenCaption: DeliveryIndicator?
 
+    /// The rows for `messages`. `continuesIntoOutgoing` says whether the
+    /// first optimistic row carries on the newest row's bubbles.
     func entries(
         for messages: [Message],
         firstUnreadID: String?,
         readReceipts: [ReadReceipt],
         groupMemberCount: Int?,
         quotedMessages: [Message.ID: Message],
-        followingTypingSenderID: String?
+        followingTypingSenderID: String?,
+        isThread: Bool = false,
+        continuesIntoOutgoing: Bool = false
     ) -> [TimelineEntry] {
         let inputs = Inputs(
             messagesStorage: messages.withUnsafeBufferPointer { UnsafeRawPointer($0.baseAddress) },
@@ -40,23 +46,32 @@ final class TimelineEntriesCache {
             firstUnreadID: firstUnreadID,
             readReceipts: readReceipts,
             groupMemberCount: groupMemberCount,
-            followingTypingSenderID: followingTypingSenderID
+            followingTypingSenderID: followingTypingSenderID,
+            isThread: isThread,
+            continuesIntoOutgoing: continuesIntoOutgoing
         )
         if inputs == self.inputs, quotedMessages == self.quotedMessages {
             return entries
         }
-        entries = TimelineEntry.entries(
-            for: messages,
-            firstUnreadID: firstUnreadID,
-            quotedMessages: quotedMessages,
-            followingTypingSenderID: followingTypingSenderID
-        )
-        deliveryCaption = TimelineEntry.deliveryCaption(
+        newestSeenCaption = TimelineEntry.newestSeenCaption(
             in: messages,
             readReceipts: readReceipts,
             groupMemberCount: groupMemberCount
         )
-        newestSeenCaption = TimelineEntry.newestSeenCaption(
+        // The newest row's sender typing again carries on its bubbles,
+        // unless the caption of who has seen it sits between them.
+        let typingContinues = followingTypingSenderID != nil
+            && followingTypingSenderID == messages.last?.senderID
+            && newestSeenCaption == nil
+        entries = TimelineEntry.entries(
+            for: messages,
+            firstUnreadID: firstUnreadID,
+            quotedMessages: quotedMessages,
+            followingTypingSenderID: followingTypingSenderID,
+            isThread: isThread,
+            followingRowContinues: continuesIntoOutgoing || typingContinues
+        )
+        deliveryCaption = TimelineEntry.deliveryCaption(
             in: messages,
             readReceipts: readReceipts,
             groupMemberCount: groupMemberCount

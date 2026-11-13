@@ -78,7 +78,7 @@ struct VideoAttachmentView: View {
             }
         }
         .mediaBubbleFrame(size)
-        .clipShape(.rect(cornerRadius: 12))
+        .messageBubbleClip(isOutgoing: message.isSender)
         .onScrollVisibilityChange(threshold: 0.25) { isVisible = $0 }
         .task(id: loadRequest) {
             guard let request = loadRequest else { return }

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ImageAttachmentView: View {
     let attachment: Attachment
+    let isOutgoing: Bool
 
     var body: some View {
         let size = MediaBubbleSize.fitting(attachment.size)
@@ -20,7 +21,6 @@ struct ImageAttachmentView: View {
         }
         .mediaBubbleFrame(size)
         .subtleBackground()
-        .clipShape(.rect(cornerRadius: 12))
-        .contentShape(.rect(cornerRadius: 12))
+        .messageBubbleClip(isOutgoing: isOutgoing)
     }
 }

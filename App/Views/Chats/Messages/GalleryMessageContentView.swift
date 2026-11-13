@@ -9,15 +9,20 @@ import SwiftUI
 struct GalleryMessageContentView: View {
     let messages: [Message]
     let chat: Chat
+    /// The stack's outer corners, where it meets the rows beside it.
+    @Environment(\.messageBubbleJoins) private var bubbleJoins
 
     var body: some View {
         let photos = messages.filter(\.isGalleryPhoto)
         let captionMessage = messages.first { $0.hasText && !$0.isAlbumAnnouncement }
         if let primary = captionMessage ?? photos.first {
             let isOutgoing = primary.isSender
+            // The grid and the caption are bubbles of their own, joined.
+            let bubbleCount = captionMessage == nil ? 1 : 2
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 ImageGalleryAttachmentView(messages: photos)
                     .modifier(TypingBubbleGeometry())
+                    .environment(\.messageBubbleJoins, bubbleJoins.bubble(at: 0, of: bubbleCount))
 
                 if let captionMessage, let caption = captionMessage.visibleText {
                     // The grid takes over the typing bubble; the caption has a
@@ -25,11 +30,12 @@ struct GalleryMessageContentView: View {
                     MessageTextView(text: captionMessage.formattedText ?? caption, isOutgoing: isOutgoing, expansionID: captionMessage.id)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
                         .environment(\.typingBubbleNamespace, nil)
+                        .environment(\.messageBubbleJoins, bubbleJoins.bubble(at: 1, of: bubbleCount))
                         .sendEffect(forConfirmed: isOutgoing ? captionMessage.id : nil)
                 }
             }
             #if !os(macOS)
-            .contentShape(.contextMenuPreview, .rect(cornerRadius: 12))
+            .contentShape(.contextMenuPreview, ChatVisualStyle.bubbleShape(isOutgoing: isOutgoing, joins: bubbleJoins))
             #endif
             .modifier(ReactionTargetHighlight(messageID: primary.id))
             .contextMenu {

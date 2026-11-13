@@ -84,6 +84,7 @@ func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtTy
 	if message.Text != "" {
 		message.FormattedText = messageMarkdownText(content)
 	}
+	applyLinkPreview(message, &content)
 	return nil
 }
 

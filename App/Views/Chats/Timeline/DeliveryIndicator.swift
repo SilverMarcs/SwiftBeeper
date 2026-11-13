@@ -8,8 +8,9 @@ enum DeliveryIndicator: Equatable {
     case sent
     case delivered
     case seen
-    /// In a group, who has seen it, by first name.
-    case seenBy([String])
+    /// In a group, who has seen it, ordered by first name. Shown as their
+    /// avatars; `label` names them for accessibility.
+    case seenBy([DeliveryReader])
     /// In a group, everyone else has seen it.
     case seenByAll
 
@@ -22,7 +23,7 @@ enum DeliveryIndicator: Equatable {
         case .sent: "Sent"
         case .delivered: "Delivered"
         case .seen: "Seen"
-        case .seenBy(let names): "Seen by \(Self.nameList(names))"
+        case .seenBy(let readers): "Seen by \(Self.nameList(readers.map { Self.firstName(of: $0.name) }))"
         case .seenByAll: "Seen by all"
         }
     }

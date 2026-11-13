@@ -28,7 +28,8 @@ struct ImageGalleryAttachmentView: View {
         // Columns share the width, up to the bubble's; a narrow column
         // shrinks the squares instead of overflowing.
         .frame(maxWidth: MediaBubbleSize.maxWidth)
-        .clipShape(.rect(cornerRadius: 12))
-        .contentShape(.rect(cornerRadius: 12))
+        // The grid's outer corners take the bubble's shape; the tiles'
+        // inner ones stay square across the narrow gaps.
+        .messageBubbleClip(isOutgoing: messages.first?.isSender == true)
     }
 }

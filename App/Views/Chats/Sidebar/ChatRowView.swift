@@ -39,16 +39,16 @@ struct ChatRowView: View {
                 }
 
                 HStack {
-                    if let previewText = chat.previewText {
-                        ChatRowPreviewText(chat: chat, previewText: previewText)
-                            #if os(iOS)
-                            .font(.callout)
-                            #else
-                            .font(.body)
-                            #endif
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2, reservesSpace: true)
-                    }
+                    // Typing swaps text within these reserved lines, so the
+                    // row never changes height for it.
+                    ChatRowPreview(chat: chat)
+                        #if os(iOS)
+                        .font(.callout)
+                        #else
+                        .font(.body)
+                        #endif
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2, reservesSpace: true)
 
                     Spacer()
 
@@ -57,14 +57,7 @@ struct ChatRowView: View {
                     }
 
                     if chat.unreadCount > 0 {
-                        let isMuted = chat.isMuted == true
-                        Text(chat.unreadCount > 99 ? "99+" : "\(chat.unreadCount)")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(isMuted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.white))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(isMuted ? Color.secondary.opacity(0.25) : .accentColor, in: .capsule)
+                        ChatUnreadCountBadge(count: chat.unreadCount, isMuted: chat.isMuted == true)
                     } else if chat.isMarkedUnread == true {
                         Image(systemName: "circle.fill")
                             .font(.caption2)

@@ -37,7 +37,7 @@ struct FileAttachmentView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .bubbleBackground(isOutgoing: isOutgoing)
-            .clipShape(.rect(cornerRadius: 12))
+            .messageBubbleClip(isOutgoing: isOutgoing)
         }
         .buttonStyle(.plain)
         .quickLookPreview($previewURL)

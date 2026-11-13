@@ -8,7 +8,7 @@ struct AttachmentView: View {
     var body: some View {
         switch attachment.type {
         case .image:
-            ImageAttachmentView(attachment: attachment)
+            ImageAttachmentView(attachment: attachment, isOutgoing: message.isSender)
         case .video, .reel:
             VideoAttachmentView(attachment: attachment, message: message)
         case .audio:

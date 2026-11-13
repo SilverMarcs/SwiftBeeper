@@ -77,7 +77,7 @@ struct AudioAttachmentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .bubbleBackground(isOutgoing: message.isSender)
-        .clipShape(.rect(cornerRadius: 12))
+        .messageBubbleClip(isOutgoing: message.isSender)
     }
 
     private func loadAudio() async {

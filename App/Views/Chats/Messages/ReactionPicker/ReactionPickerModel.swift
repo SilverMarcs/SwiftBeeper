@@ -12,9 +12,11 @@ final class ReactionPickerModel: Identifiable {
     private(set) var isSending = false
     private(set) var errorMessage: String?
     private var previousReaction: String?
+    private let toggleFeedback: ReactionToggleFeedback?
 
-    init(message: Message, chat: Chat) {
+    init(message: Message, chat: Chat, toggleFeedback: ReactionToggleFeedback? = nil) {
         id = message.id
+        self.toggleFeedback = toggleFeedback
         chatID = message.chatID
         if let selfID = chat.participants?.items.first(where: { $0.isSelf == true })?.id {
             previousReaction = message.reactions?.first { $0.participantID == selfID }?.reactionKey
@@ -36,9 +38,11 @@ final class ReactionPickerModel: Identifiable {
     func choose(_ value: String) {
         guard isChoosing, !isSending else { return }
         text = value
-        guard reactionKey != nil else { return }
+        guard let reactionKey else { return }
         // Stop receiving keyboard input before starting the network request.
         isChoosing = false
+        // Once per pick, not per retry; picking the reaction already there changes nothing.
+        if reactionKey != previousReaction { toggleFeedback?.play() }
         retry()
     }
 

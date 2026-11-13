@@ -8,7 +8,7 @@ struct ThreadParticipantsView: View {
         if !participants.isEmpty {
             HStack(spacing: -4) {
                 ForEach(participants) { participant in
-                    ProfileAvatarView(name: participant.displayName, imageURLString: participant.imgURL, dimension: 18)
+                    ProfileAvatarView(participant: participant, dimension: 18)
                 }
             }
             .accessibilityHidden(true)

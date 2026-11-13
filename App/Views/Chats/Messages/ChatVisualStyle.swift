@@ -9,15 +9,31 @@ enum ChatVisualStyle {
     static let bubbleHorizontalPadding: CGFloat = 12
     static let bubbleVerticalPadding: CGFloat = 8
     static let bubbleCornerRadius: CGFloat = 15
+    static let bubbleJoinedCornerRadius: CGFloat = 5
     #else
     static let bubbleHorizontalPadding: CGFloat = 13
     static let bubbleVerticalPadding: CGFloat = 10
     static let bubbleCornerRadius: CGFloat = 20
+    static let bubbleJoinedCornerRadius: CGFloat = 6
     #endif
 
-    /// Outgoing replies take a wash of the accent color their bubble is filled with.
-    static func replyPreviewFill(isOutgoing: Bool) -> AnyShapeStyle {
-        if isOutgoing {
+    /// A bubble's outline: round all over, except on the sender's side
+    /// (leading for incoming, trailing for outgoing), where it meets the
+    /// bubbles it joins with a tighter corner.
+    static func bubbleShape(isOutgoing: Bool, joins: MessageBubbleJoins) -> UnevenRoundedRectangle {
+        let top = joins.contains(.above) ? bubbleJoinedCornerRadius : bubbleCornerRadius
+        let bottom = joins.contains(.below) ? bubbleJoinedCornerRadius : bubbleCornerRadius
+        let full = bubbleCornerRadius
+        return UnevenRoundedRectangle(cornerRadii: isOutgoing
+            ? RectangleCornerRadii(topLeading: full, bottomLeading: full, bottomTrailing: bottom, topTrailing: top)
+            : RectangleCornerRadii(topLeading: top, bottomLeading: bottom, bottomTrailing: full, topTrailing: full))
+    }
+
+    /// A quote is a faded copy of the bubble it quotes: the user's own message
+    /// takes a wash of the accent color its bubble is filled with, wherever
+    /// the reply sits.
+    static func replyPreviewFill(quotesOwnMessage: Bool) -> AnyShapeStyle {
+        if quotesOwnMessage {
             return AnyShapeStyle(Color.accentColor.quaternary)
         }
         return AnyShapeStyle(.quinary)
