@@ -72,6 +72,16 @@ func (s *Dispatcher) loadRoomPage(ctx context.Context, position *roomPosition) (
 // their whole membership in Go. It also records each room's account in
 // lookup.roomAccounts.
 func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Room, limit int, lookup *accountLookup) (map[id.RoomID]*chatSummary, error) {
+	result, err := s.loadChatMemberSummaries(ctx, rooms, limit, lookup)
+	if err != nil || len(rooms) == 0 {
+		return result, err
+	}
+	return result, s.loadChatPreviews(ctx, rooms, result)
+}
+
+// loadChatMemberSummaries is loadChatSummaries without previews: member
+// samples and counts, and each room's account in lookup.roomAccounts.
+func (s *Dispatcher) loadChatMemberSummaries(ctx context.Context, rooms []*database.Room, limit int, lookup *accountLookup) (map[id.RoomID]*chatSummary, error) {
 	result := make(map[id.RoomID]*chatSummary, len(rooms))
 	if len(rooms) == 0 {
 		return result, nil
@@ -140,6 +150,11 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 	for _, room := range rooms {
 		lookup.roomAccounts[room.ID] = inferAccountForRoom(room.ID, result[room.ID].accountMembers, lookup)
 	}
+	return result, nil
+}
+
+// loadChatPreviews adds each room's preview message to its summary.
+func (s *Dispatcher) loadChatPreviews(ctx context.Context, rooms []*database.Room, result map[id.RoomID]*chatSummary) error {
 	var previewRowIDs []database.EventRowID
 	for _, room := range rooms {
 		if room.PreviewEventRowID > 0 {
@@ -147,11 +162,11 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 		}
 	}
 	if len(previewRowIDs) == 0 {
-		return result, nil
+		return nil
 	}
 	events, err := s.rt.Client().DB.Event.GetByRowIDs(ctx, previewRowIDs...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	byRoomPreview := make(map[id.RoomID]*database.Event, len(events))
 	for _, evt := range events {
@@ -167,16 +182,16 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 		}
 		replacement, err := s.newestTimelineMessage(ctx, evt.RoomID, me)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		events[index] = replacement
 	}
 	events = slices.DeleteFunc(events, func(evt *database.Event) bool { return evt == nil })
 	if err = s.populateLastEditRefs(ctx, events); err != nil {
-		return nil, err
+		return err
 	}
 	if err = s.populateTimelinePositions(ctx, events); err != nil {
-		return nil, err
+		return err
 	}
 	names := s.loadNamesForEvents(ctx, events)
 	byRoom := make(map[id.RoomID]*database.Event, len(events))
@@ -195,7 +210,7 @@ func (s *Dispatcher) loadChatSummaries(ctx context.Context, rooms []*database.Ro
 			}
 		}
 	}
-	return result, nil
+	return nil
 }
 
 // syncedChatSummaries maps the rooms in upserted to sidebar chats. Sync can

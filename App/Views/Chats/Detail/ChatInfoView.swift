@@ -1,7 +1,9 @@
 import SwiftUI
 
 /// The one details screen for a chat. A DM leads with the other person; a group
-/// leads with the group and lists its members.
+/// leads with the group and lists its members. Both continue with shared
+/// media, a DM with the groups you share with the person, and end with
+/// leaving or deleting the chat.
 struct ChatInfoView: View {
     let chat: Chat
     let onOpenChat: (Chat) -> Void
@@ -9,6 +11,7 @@ struct ChatInfoView: View {
     @Environment(\.dismiss) private var dismiss
     /// A fetch with more participants, when the passed chat holds only a preview.
     @State private var detailedParticipants: ChatParticipants?
+    @State private var model = ChatInfoModel()
 
     private static let participantPreviewLimit = 15
 
@@ -32,8 +35,18 @@ struct ChatInfoView: View {
                     .listRowInsets(.init())
                 }
 
+                ChatInfoMediaSection(info: model.info)
+
                 if chat.isGroupChat, let participants = detailedParticipants ?? chat.participants {
                     ChatInfoMembersSection(chat: chat, participants: participants, previewLimit: Self.participantPreviewLimit)
+                }
+
+                if !chat.isGroupChat {
+                    ChatInfoCommonGroupsSection(groups: model.commonGroups, onOpenChat: openChat)
+                }
+
+                ChatInfoRemovalSection(chat: chat, canDeleteChat: model.info?.canDeleteChat == true) {
+                    dismiss()
                 }
             }
             .formStyle(.grouped)
@@ -43,13 +56,22 @@ struct ChatInfoView: View {
                 switch destination {
                 case .participant(let participant):
                     ParticipantInfoView(participant: participant, sourceChat: chat, onOpenChat: openChat)
+                case .media(let kind):
+                    ChatMediaBrowserView(chatID: chat.id, kind: kind)
                 }
             }
             .toolbar {
                 InfoSheetCloseButton { dismiss() }
             }
         }
-        .frame(minWidth: 400, minHeight: 450)
+        .frame(minWidth: 400, minHeight: 520)
+        .task(id: chat.id) {
+            await model.loadInfo(chatID: chat.id)
+        }
+        .task(id: chat.id) {
+            guard !chat.isGroupChat, let otherParticipant = chat.otherParticipant else { return }
+            await model.loadCommonGroups(participantID: otherParticipant.id, sourceChatID: chat.id)
+        }
         .task(id: chat.id) {
             guard chat.isGroupChat, chat.participants?.hasMore == true else { return }
             let detail = try? await APIClient.getChat(chatID: chat.id, maxParticipantCount: Self.participantPreviewLimit)

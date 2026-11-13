@@ -11,6 +11,7 @@ struct ParticipantInfoView: View {
     @State private var directChat: Chat?
     @State private var lookupError: String?
     @State private var messageError: String?
+    @State private var model = ChatInfoModel()
 
     var body: some View {
         let isSelf = participant.isSelf == true || participant.id == chatStore.currentUserProfile?.id
@@ -43,12 +44,20 @@ struct ParticipantInfoView: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(.init())
             }
+
+            if !isSelf {
+                ChatInfoCommonGroupsSection(groups: model.commonGroups, onOpenChat: onOpenChat)
+            }
         }
         .formStyle(.grouped)
         .infoScreenChrome(title: "Contact Info")
         .task(id: participant.id) {
             guard !isSelf else { return }
             await lookUpDirectChat()
+        }
+        .task(id: participant.id) {
+            guard !isSelf else { return }
+            await model.loadCommonGroups(participantID: participant.id, sourceChatID: sourceChat.id)
         }
         .alert("Could Not Open Chat", isPresented: Binding(
             get: { messageError != nil },

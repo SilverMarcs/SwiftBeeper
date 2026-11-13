@@ -254,6 +254,30 @@ type MessageAttachmentInput struct {
 	Size     AttachmentSize `json:"size"`
 }
 
+// ChatInfoOutput is what a chat's info screen shows below its header.
+type ChatInfoOutput struct {
+	// Counts of the locally stored messages in each browsable kind.
+	MediaCount int `json:"mediaCount"`
+	FileCount  int `json:"fileCount"`
+	LinkCount  int `json:"linkCount"`
+	// CanDeleteChat is set when the room's bridge deletes the chat on its
+	// network; otherwise deleting only leaves the room.
+	CanDeleteChat bool `json:"canDeleteChat"`
+}
+
+// ChatMessagePageOutput is one page of a chat's media, files or links,
+// newest first.
+type ChatMessagePageOutput struct {
+	Items   []Message `json:"items"`
+	HasMore bool      `json:"hasMore"`
+	// Cursor continues after this page's oldest row; empty when the page
+	// is empty.
+	Cursor string `json:"cursor,omitempty"`
+	// HasServerHistory is true while older history can still be fetched
+	// into the local store, where later pages can find it.
+	HasServerHistory bool `json:"hasServerHistory"`
+}
+
 type ActionSuccessOutput struct {
 	Success bool `json:"success"`
 }

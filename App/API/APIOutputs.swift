@@ -62,6 +62,11 @@ struct ListMessagesOutput: Decodable {
     /// False once the server has returned the start of the chat. Until then,
     /// older history may exist beyond the local database.
     let hasServerHistory: Bool
+    /// For a page read around a message or after a cursor: where the next
+    /// newer page starts, and whether there is one. A page without newer
+    /// messages beyond it reaches the newest message.
+    let newestCursor: String?
+    let hasMoreNewer: Bool?
 }
 
 struct GetMessagesOutput: Decodable {
@@ -85,4 +90,34 @@ struct SendMessageOutput: Decodable {
     /// The network takes no media captions, so the media went without its
     /// text; send the text on its own after the remaining media.
     let captionRejected: Bool?
+}
+
+/// What a chat's info screen shows below its header, from the local database.
+struct ChatInfoOutput: Decodable, Equatable {
+    let mediaCount: Int
+    let fileCount: Int
+    let linkCount: Int
+    /// Whether the chat's network deletes the chat itself; otherwise deleting
+    /// only leaves it here.
+    let canDeleteChat: Bool
+
+    func count(of kind: ChatMediaKind) -> Int {
+        switch kind {
+        case .media: mediaCount
+        case .files: fileCount
+        case .links: linkCount
+        }
+    }
+}
+
+/// One page of a chat's media, files or links, newest first.
+struct ChatMessagePage: Decodable {
+    let items: [Message]
+    let hasMore: Bool
+    /// Continues after this page's oldest row, even on the last page, for
+    /// history fetched from the server later. Nil when the page is empty.
+    let cursor: String?
+    /// Whether older history can still be fetched from the server, where
+    /// later pages can find it.
+    let hasServerHistory: Bool
 }

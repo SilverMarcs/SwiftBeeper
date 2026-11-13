@@ -75,6 +75,16 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.getChat(ctx, input)
 	case "find-direct-chat":
 		return s.findDirectChat(ctx, input)
+	case "get-chat-info":
+		return s.getChatInfo(ctx, input)
+	case "list-chat-media":
+		return s.listChatMedia(ctx, input)
+	case "list-common-chats":
+		return s.listCommonChats(ctx, input)
+	case "delete-chat":
+		return s.deleteChat(ctx, input)
+	case "leave-chat":
+		return s.leaveChat(ctx, input)
 	case "archive-chat":
 		return s.archiveChat(ctx, input)
 	case "mute-chat":
