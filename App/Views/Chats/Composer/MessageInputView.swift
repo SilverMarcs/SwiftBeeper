@@ -12,8 +12,8 @@ struct MessageInputView: View {
     /// The conversation's failure, shown above the field.
     let error: String?
 
-    @FocusState private var isMessageFieldFocused: Bool
-    @State private var selection: TextSelection?
+    /// Whether the editor is first responder, mirrored into the composer.
+    @State private var isMessageFieldFocused = false
     /// Where a sent bubble flies from. Kept here rather than on the composer:
     /// the field stays put while another chat's composer takes it over, so its
     /// frame wouldn't change to reach the new one.
@@ -49,32 +49,16 @@ struct MessageInputView: View {
                     .fixedSize()
                     .offset(y: -1)
 
-                    if composer.activeMessage != nil {
-                        Button {
-                            input.cancelAction(in: composer)
-                        } label: {
-                            Label("Cancel", systemImage: "xmark.circle.fill")
-                                .labelStyle(.iconOnly)
-                                .font(.largeTitle)
-                                .foregroundStyle(.white.opacity(0.7), .clear)
-                                .glassEffect(.regular.tint(.red.opacity(0.6)))
-                        }
-                        .buttonStyle(.plain)
-                        .keyboardShortcut(.cancelAction)
-                        .offset(y: -1)
-                        .scaleEffect(0.9)
-                    }
-
                     HStack(alignment: .bottom, spacing: 0) {
-                        TextField(
-                            composer.prompt,
+                        MacComposerTextView(
                             text: Bindable(composer).text,
-                            selection: $selection,
-                            axis: .vertical
+                            isFocused: $isMessageFieldFocused,
+                            selection: composer.selection,
+                            mentions: composer.draft.mentions.map(\.range),
+                            placeholder: composer.prompt,
+                            onSelectionChange: { composer.selection = $0 },
+                            onReturn: submit
                         )
-                            .textFieldStyle(.plain)
-                            .focused($isMessageFieldFocused)
-                            .lineLimit(1 ... 7)
                             .padding(.horizontal, 4)
                             .padding(8)
                             .onGeometryChange(for: CGRect.self) { geometry in
@@ -82,15 +66,10 @@ struct MessageInputView: View {
                             } action: { frame in
                                 fieldFrame = frame
                             }
-                            .onSubmit(submit)
-                            // Return sends; Shift-Return starts a new line. The
-                            // field treats both as submit unless intercepted.
-                            .onKeyPress(.return, phases: [.down, .repeat]) { press in
-                                guard press.modifiers.contains(.shift) else { return .ignored }
-                                NSApp.sendAction(#selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil)
-                                return .handled
+                            .composerMentionPopover(composer, isFocused: isMessageFieldFocused) { _ in
+                                // The mention's insertion already placed the caret.
+                                focusMessageField()
                             }
-                            .composerMentionPopover(composer, isFocused: isMessageFieldFocused, restoreCursor: restoreMentionCursor)
 
                         ComposerDictationButton(composer: composer, isInline: true)
                             .buttonStyle(.plain)
@@ -111,11 +90,8 @@ struct MessageInputView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
         .pasteHandler(composer)
-        .onChange(of: selection) { _, newValue in
-            updateComposerSelection(newValue)
-        }
-        // Mirror focus into the composer so the timeline can scroll when the
-        // keyboard appears (FocusState is view-local).
+        // Mirror focus into the composer, which paste and the timeline read.
+        // The field keeps its own, as another chat's composer can take it over.
         .onChange(of: isMessageFieldFocused) { _, focused in
             composer.isFocused = focused
         }
@@ -129,7 +105,6 @@ struct MessageInputView: View {
             // The field stays while another chat's composer takes it over.
             input.composer(for: oldTarget).isFocused = false
             composer.isFocused = isMessageFieldFocused
-            selection = nil
             focusMessageField()
         }
         // Reply, Edit, and notification drafts ask for focus.
@@ -175,25 +150,6 @@ struct MessageInputView: View {
     /// Sends or saves the draft.
     private func submit() {
         input.submit(composer, sourceFrame: fieldFrame)
-    }
-
-    private func restoreMentionCursor(_ offset: Int) {
-        guard let range = Range(NSRange(location: offset, length: 0), in: composer.text) else { return }
-        selection = TextSelection(insertionPoint: range.lowerBound)
-        focusMessageField()
-    }
-
-    private func updateComposerSelection(_ newValue: TextSelection?) {
-        Task { @MainActor in
-            // Selection can arrive while the text binding is still writing.
-            // Wait for that write, then use only the latest selection.
-            await Task.yield()
-            guard selection == newValue else { return }
-            let text = composer.text
-            guard let newValue, case .selection(let range) = newValue.indices,
-                  range.lowerBound >= text.startIndex, range.upperBound <= text.endIndex else { return }
-            composer.selection = NSRange(range, in: text)
-        }
     }
 
     private func focusMessageField() {
