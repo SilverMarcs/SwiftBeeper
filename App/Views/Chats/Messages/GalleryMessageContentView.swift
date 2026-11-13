@@ -37,7 +37,7 @@ struct GalleryMessageContentView: View {
             #if !os(macOS)
             .contentShape(.contextMenuPreview, ChatVisualStyle.bubbleShape(isOutgoing: isOutgoing, joins: bubbleJoins))
             #endif
-            .modifier(ReactionTargetHighlight(messageID: primary.id))
+            .modifier(ReactionEmojiInputHost(messageID: primary.id))
             .contextMenu {
                 MessageContextMenu(
                     message: primary,

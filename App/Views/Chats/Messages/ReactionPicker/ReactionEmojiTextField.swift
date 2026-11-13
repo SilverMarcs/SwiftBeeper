@@ -14,8 +14,8 @@ final class ReactionEmojiTextField: UITextField {
         autocapitalizationType = .none
         returnKeyType = .done
         addTarget(self, action: #selector(textChanged), for: .editingChanged)
+        // Tapping elsewhere or hiding the keyboard ends editing, and the pick.
         addTarget(self, action: #selector(cancel), for: [.editingDidEnd, .editingDidEndOnExit])
-        inputAccessoryView = makeCancelBar()
     }
 
     required init?(coder: NSCoder) {
@@ -41,16 +41,6 @@ final class ReactionEmojiTextField: UITextField {
 
     override var keyCommands: [UIKeyCommand]? {
         [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(cancel))]
-    }
-
-    private func makeCancelBar() -> UIToolbar {
-        let bar = UIToolbar()
-        bar.items = [
-            UIBarButtonItem(systemItem: .flexibleSpace),
-            UIBarButtonItem(title: String(localized: "Cancel Reaction"), style: .plain, target: self, action: #selector(cancel))
-        ]
-        bar.sizeToFit()
-        return bar
     }
 
     @objc private func textChanged() {

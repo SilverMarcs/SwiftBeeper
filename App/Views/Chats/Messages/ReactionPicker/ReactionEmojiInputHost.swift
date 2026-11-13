@@ -1,19 +1,15 @@
 import SwiftUI
 
-/// Keeps the reaction's target visible after its context menu has dismissed.
-struct ReactionTargetHighlight: ViewModifier {
+/// Hosts the hidden emoji input behind a reaction's target while the user
+/// picks an emoji for it. The timeline dims every other row meanwhile, as it
+/// does for a reply or edit; tapping the timeline or leaving the keyboard
+/// cancels the pick.
+struct ReactionEmojiInputHost: ViewModifier {
     @Environment(\.reactionPicker) private var picker
     let messageID: String
 
     func body(content: Content) -> some View {
         content
-            .overlay {
-                if let picker, picker.id == messageID {
-                    RoundedRectangle(cornerRadius: ChatVisualStyle.bubbleCornerRadius)
-                        .strokeBorder(.tint, lineWidth: 2)
-                        .allowsHitTesting(false)
-                }
-            }
             .background {
                 if let picker, picker.id == messageID, picker.isChoosing {
                     #if os(macOS)

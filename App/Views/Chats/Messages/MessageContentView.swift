@@ -50,7 +50,7 @@ struct MessageContentView: View {
         #if !os(macOS)
         .contentShape(.contextMenuPreview, ChatVisualStyle.bubbleShape(isOutgoing: isOutgoing, joins: bubbleJoins))
         #endif
-        .modifier(ReactionTargetHighlight(messageID: message.id))
+        .modifier(ReactionEmojiInputHost(messageID: message.id))
         .contextMenu {
             MessageContextMenu(message: message, chat: chat)
         }
