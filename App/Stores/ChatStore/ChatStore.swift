@@ -155,8 +155,8 @@ final class ChatStore {
     /// Quoted IDs already looked up for the open chat, found or not, so a
     /// quote older than the local database costs one miss, not one per update.
     @ObservationIgnored var requestedQuotedMessageIDs: Set<Message.ID> = []
-    /// Furthest sortKey another participant has read in the open chat.
-    var lastReadByOtherSortKey: String?
+    /// How far each other participant has read the open chat.
+    var readReceipts: [ReadReceipt] = []
     var typingParticipants: [ChatParticipant] = []
     var typingBubble: TypingBubble?
     /// Preserve the typing row's identity after its real message arrives.
@@ -426,8 +426,8 @@ final class ChatStore {
                 if incoming.contains(where: { $0.threadRootID != nil }) { refreshUnreadThreads() }
                 Task { await loadQuotedMessages(for: visible) }
             }
-        case .receiptUpdated(let chatID, let readKey):
-            if chatID == selectedChatID { lastReadByOtherSortKey = readKey }
+        case .receiptUpdated(let chatID, let receipts):
+            if chatID == selectedChatID, readReceipts != receipts { readReceipts = receipts }
         case .typingUpdated(let chatID, let participants):
             if chatID == selectedChatID { updateTyping(participants) }
         case .failed(let message):

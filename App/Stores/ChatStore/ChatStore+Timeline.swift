@@ -30,7 +30,8 @@ extension ChatStore {
             guard generation == timelineGeneration else { return }
 
             messagesError = nil
-            if let readKey = response.lastReadByOtherSortKey { lastReadByOtherSortKey = readKey }
+            let receipts = response.readReceipts ?? []
+            if readReceipts != receipts { readReceipts = receipts }
             // Resolve old quotes before the rows render, so they never flash
             // a placeholder. The lookup is local and takes milliseconds.
             await loadQuotedMessages(for: response.items)
@@ -170,7 +171,7 @@ extension ChatStore {
         isLoadingOlderMessages = false
         isLoadingServerHistory = false
         isLoadingMessages = false
-        lastReadByOtherSortKey = nil
+        readReceipts = []
         messageRevealRequest = nil
         hasMoreNewerMessages = false
         isLoadingNewerMessages = false

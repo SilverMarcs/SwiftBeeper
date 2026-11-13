@@ -11,7 +11,8 @@ final class TimelineEntriesCache {
         let messagesStorage: UnsafeRawPointer?
         let messageCount: Int
         let firstUnreadID: String?
-        let lastReadByOtherSortKey: String?
+        let readReceipts: [ReadReceipt]
+        let groupMemberCount: Int?
         let followingTypingSenderID: String?
     }
 
@@ -19,13 +20,15 @@ final class TimelineEntriesCache {
     private var messages: [Message] = []
     private var quotedMessages: [Message.ID: Message] = [:]
     private var entries: [TimelineEntry] = []
-    /// The caption for the newest message, from the same inputs as the rows.
-    private(set) var deliveryIndicator: DeliveryIndicator?
+    /// The caption below the user's newest message, from the same inputs as
+    /// the rows.
+    private(set) var deliveryCaption: DeliveryCaption?
 
     func entries(
         for messages: [Message],
         firstUnreadID: String?,
-        lastReadByOtherSortKey: String?,
+        readReceipts: [ReadReceipt],
+        groupMemberCount: Int?,
         quotedMessages: [Message.ID: Message],
         followingTypingSenderID: String?
     ) -> [TimelineEntry] {
@@ -33,7 +36,8 @@ final class TimelineEntriesCache {
             messagesStorage: messages.withUnsafeBufferPointer { UnsafeRawPointer($0.baseAddress) },
             messageCount: messages.count,
             firstUnreadID: firstUnreadID,
-            lastReadByOtherSortKey: lastReadByOtherSortKey,
+            readReceipts: readReceipts,
+            groupMemberCount: groupMemberCount,
             followingTypingSenderID: followingTypingSenderID
         )
         if inputs == self.inputs, quotedMessages == self.quotedMessages {
@@ -42,11 +46,14 @@ final class TimelineEntriesCache {
         entries = TimelineEntry.entries(
             for: messages,
             firstUnreadID: firstUnreadID,
-            lastReadByOtherSortKey: lastReadByOtherSortKey,
             quotedMessages: quotedMessages,
             followingTypingSenderID: followingTypingSenderID
         )
-        deliveryIndicator = TimelineEntry.deliveryIndicator(in: messages, lastReadByOtherSortKey: lastReadByOtherSortKey)
+        deliveryCaption = TimelineEntry.deliveryCaption(
+            in: messages,
+            readReceipts: readReceipts,
+            groupMemberCount: groupMemberCount
+        )
         self.inputs = inputs
         self.messages = messages
         self.quotedMessages = quotedMessages

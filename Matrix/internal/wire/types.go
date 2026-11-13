@@ -187,14 +187,21 @@ type ListChatsOutput struct {
 	Pinned  []Chat `json:"pinned,omitempty"`
 }
 
+// ReadReceipt is how far another participant has read a chat.
+type ReadReceipt struct {
+	UserID string `json:"userID"`
+	Name   string `json:"name"`
+	// SortKey is the furthest message they have read.
+	SortKey string `json:"sortKey"`
+}
+
 type ListMessagesOutput struct {
 	Items        []Message `json:"items"`
 	HasMore      bool      `json:"hasMore"`
 	OldestCursor string    `json:"oldestCursor,omitempty"`
-	// LastReadByOtherSortKey is the sortKey of the furthest message that at least
-	// one other participant has read. Outgoing messages with sortKey <= this value
-	// have been seen by the other side. Empty string if no read receipt exists.
-	LastReadByOtherSortKey string `json:"lastReadByOtherSortKey,omitempty"`
+	// ReadReceipts holds how far each other participant has read. Outgoing
+	// messages with a sortKey up to a receipt's have been seen by that person.
+	ReadReceipts []ReadReceipt `json:"readReceipts,omitempty"`
 	// HasServerHistory is false once the homeserver has returned the start of
 	// the room; until then older history may exist beyond the local timeline.
 	HasServerHistory bool `json:"hasServerHistory"`

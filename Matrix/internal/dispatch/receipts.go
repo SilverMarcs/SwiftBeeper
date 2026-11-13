@@ -105,26 +105,45 @@ func (s *Dispatcher) loadLastReadSortKeys(ctx context.Context, roomIDs ...id.Roo
 	return result, rows.Err()
 }
 
-// loadLastReadByOther returns the furthest timeline position another person has
-// read. Bridge bots are excluded: their receipts mean delivery, not reading.
-func (s *Dispatcher) loadLastReadByOther(ctx context.Context, roomID id.RoomID) string {
+// loadReadReceipts returns how far each other person has read, by timeline
+// position, named as the room knows them. Bridge bots are excluded: their
+// receipts mean delivery, not reading.
+func (s *Dispatcher) loadReadReceipts(ctx context.Context, roomID id.RoomID) []wire.ReadReceipt {
 	cli := s.rt.Client()
 	if cli == nil || cli.Account == nil {
-		return ""
+		return nil
 	}
+	// A user holds one receipt per thread; the furthest is how far they read.
 	const query = `
-		SELECT COALESCE(MAX(t.rowid), 0)
+		SELECT r.user_id, MAX(t.rowid),
+		       COALESCE(NULLIF(TRIM(json_extract(member.content,'$.displayname')),''),'')
 		FROM receipt r
 		JOIN event e ON e.event_id = r.event_id AND e.room_id = r.room_id
 		JOIN timeline t ON t.event_rowid = e.rowid AND t.room_id = r.room_id
+		LEFT JOIN current_state cs ON cs.room_id = r.room_id AND cs.event_type = 'm.room.member' AND cs.state_key = r.user_id
+		LEFT JOIN event member ON member.rowid = cs.event_rowid
 		WHERE r.room_id = ? AND r.receipt_type = 'm.read' AND r.user_id != ? AND t.rowid > 0
 		  AND SUBSTR(SUBSTR(r.user_id,2,INSTR(r.user_id,':')-2),-3)<>'bot'
+		GROUP BY r.user_id
 	`
-	var maxRead int64
-	if err := cli.DB.QueryRow(ctx, query, roomID, cli.Account.UserID).Scan(&maxRead); err != nil || maxRead == 0 {
-		return ""
+	rows, err := cli.DB.Query(ctx, query, roomID, cli.Account.UserID)
+	if err != nil {
+		return nil
 	}
-	return strconv.FormatInt(maxRead, 10)
+	defer rows.Close()
+	var receipts []wire.ReadReceipt
+	for rows.Next() {
+		var userID, name string
+		var position int64
+		if rows.Scan(&userID, &position, &name) != nil || position == 0 {
+			continue
+		}
+		if name == "" {
+			name = id.UserID(userID).Localpart()
+		}
+		receipts = append(receipts, wire.ReadReceipt{UserID: userID, Name: name, SortKey: strconv.FormatInt(position, 10)})
+	}
+	return receipts
 }
 
 // isUnreadAfter reports whether a message's sort key lies past a read

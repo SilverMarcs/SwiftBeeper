@@ -40,7 +40,6 @@ struct TimelineEntry: Identifiable, Equatable {
     static func entries(
         for messages: [Message],
         firstUnreadID: String?,
-        lastReadByOtherSortKey: String?,
         quotedMessages: [Message.ID: Message] = [:],
         followingTypingSenderID: String? = nil
     ) -> [TimelineEntry] {
@@ -106,16 +105,73 @@ struct TimelineEntry: Identifiable, Equatable {
         return messages.first { $0.isUnread == true }?.id
     }
 
-    /// The caption for the newest message, when the user sent it: "Read" once the
+    /// A message on its own, as the quoted-message overlay shows it: with its
+    /// sender's name and avatar, outside any run or gallery.
+    static func standalone(_ message: Message, linkedMessage: Message?, threadRoot: Message?) -> TimelineEntry {
+        TimelineEntry(
+            message: message,
+            galleryMessages: [],
+            showsTimestamp: false,
+            isFirstInGroup: true,
+            isLastInGroup: true,
+            startsSenderRun: false,
+            linkedMessage: linkedMessage,
+            threadRoot: threadRoot
+        )
+    }
+
+    /// The caption below the user's newest message. In a direct chat it shows
+    /// only when that message is the chat's newest. In a group it says who
+    /// has seen the message, wherever it is, and until anyone has, how far a
+    /// newest message got. `groupMemberCount` is nil outside groups.
+    static func deliveryCaption(
+        in messages: [Message],
+        readReceipts: [ReadReceipt],
+        groupMemberCount: Int?
+    ) -> DeliveryCaption? {
+        guard let groupMemberCount else {
+            let lastRead = readReceipts.map(\.numericSortKey).max()
+            guard let newest = messages.last,
+                  let indicator = deliveryIndicator(in: messages, lastReadByOther: lastRead) else { return nil }
+            return DeliveryCaption(indicator: indicator, messageID: newest.id)
+        }
+        guard let index = messages.lastIndex(where: \.isSender) else { return nil }
+        let message = messages[index]
+        guard message.deliveryStatus != .failed else { return nil }
+
+        var readers: [String: String] = [:]
+        for receipt in readReceipts where receipt.numericSortKey >= message.numericSortKey {
+            readers[receipt.userID] = receipt.name
+        }
+        // Writing after the message means having seen it, receipt or not.
+        // Servers don't turn that into a receipt for others to see.
+        for later in messages[(index + 1)...] where !isBridgeBot(later.senderID) {
+            readers[later.senderID] = readers[later.senderID] ?? later.senderDisplayName
+        }
+        guard !readers.isEmpty else {
+            guard index == messages.endIndex - 1,
+                  let indicator = deliveryIndicator(in: messages, lastReadByOther: nil) else { return nil }
+            return DeliveryCaption(indicator: indicator, messageID: message.id)
+        }
+        if groupMemberCount > 1, readers.count >= groupMemberCount - 1 {
+            return DeliveryCaption(indicator: .seenByAll, messageID: message.id)
+        }
+        let names = readers.values
+            .map(DeliveryIndicator.firstName(of:))
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        return DeliveryCaption(indicator: .seenBy(names), messageID: message.id)
+    }
+
+    /// The caption for the newest message, when the user sent it: "Seen" once the
     /// other side's receipt reaches it, otherwise what its bridge reported. A
     /// message the homeserver has but the bridge hasn't reported on yet is
     /// still sending, in a chat whose bridge reports at all; elsewhere, the
     /// homeserver having it is as sent as it gets. A failed message shows its
     /// failure instead, and a reply after it needs no caption.
-    static func deliveryIndicator(in messages: [Message], lastReadByOtherSortKey: String?) -> DeliveryIndicator? {
+    private static func deliveryIndicator(in messages: [Message], lastReadByOther: Int64?) -> DeliveryIndicator? {
         guard let newest = messages.last, newest.isSender else { return nil }
-        if let readSortKey = lastReadByOtherSortKey.flatMap({ Int64($0) }), newest.numericSortKey <= readSortKey {
-            return .read
+        if let lastReadByOther, newest.numericSortKey <= lastReadByOther {
+            return .seen
         }
         switch newest.deliveryStatus {
         case .delivered: return .delivered
@@ -125,5 +181,11 @@ struct TimelineEntry: Identifiable, Equatable {
             let bridgeReports = messages.contains { $0.deliveryStatus != nil }
             return bridgeReports ? .sending : .sent
         }
+    }
+
+    /// Bridge bots post notices but don't read; the core leaves them out of
+    /// receipts and member counts by the same rule.
+    private static func isBridgeBot(_ userID: String) -> Bool {
+        userID.dropFirst().prefix { $0 != ":" }.hasSuffix("bot")
     }
 }

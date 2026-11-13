@@ -16,7 +16,7 @@ enum RealtimeEvent {
     case chatUpserted(Chat)
     case chatDeleted(chatID: String)
     case messagesUpserted(chatID: String, messages: [Message])
-    case receiptUpdated(chatID: String, lastReadByOtherSortKey: String)
+    case receiptUpdated(chatID: String, receipts: [ReadReceipt])
     case typingUpdated(chatID: String, participants: [ChatParticipant])
     case failed(String)
 }
@@ -25,13 +25,12 @@ enum RealtimeEvent {
 struct EventEnvelope: Decodable {
     let type: String
     let chatID: String?
-    let entries: [[String: String]]?
     let seq: Int?
     /// The `sync.status` signal's status.
     let status: String?
 
     enum CodingKeys: String, CodingKey {
-        case type, chatID, entries, seq, status
+        case type, chatID, seq, status
     }
 
     init(from decoder: Decoder) throws {
@@ -40,9 +39,6 @@ struct EventEnvelope: Decodable {
         chatID = try? container.decodeIfPresent(String.self, forKey: .chatID)
         seq = try? container.decodeIfPresent(Int.self, forKey: .seq)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
-        // Message events carry non-string values in entries; only receipt
-        // events read this field, so fall back to nil on a type mismatch.
-        entries = try? container.decodeIfPresent([[String: String]].self, forKey: .entries)
     }
 }
 

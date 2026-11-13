@@ -4,7 +4,8 @@ import Foundation
 enum TimelineItem: Identifiable {
     case message(TimelineEntry, rowID: String)
     case outgoing(OutgoingTimelineEntry)
-    /// "Sending…" through "Read", below the newest row when the user sent it.
+    /// "Sending…" through "Seen", below the newest row when the user sent
+    /// it, or in a group who has seen the user's newest message.
     case deliveryCaption(DeliveryIndicator)
     case typing(TypingBubble, isFirstInGroup: Bool)
 
@@ -45,6 +46,7 @@ enum TimelineItem: Identifiable {
         messages: [TimelineEntry],
         outgoing: [OutgoingTimelineEntry],
         deliveryCaption: DeliveryIndicator?,
+        deliveryCaptionRowID: Message.ID?,
         typing: TypingBubble?,
         messageRowIDs: [Message.ID: String]
     ) -> [TimelineItem] {
@@ -53,7 +55,11 @@ enum TimelineItem: Identifiable {
         }
         items += outgoing.map { .outgoing($0) }
         if let deliveryCaption {
-            items.append(.deliveryCaption(deliveryCaption))
+            // Below its message's row, or else below the newest.
+            let rowIndex = deliveryCaptionRowID.flatMap { rowID in
+                messages.firstIndex { $0.id == rowID }
+            }
+            items.insert(.deliveryCaption(deliveryCaption), at: rowIndex.map { $0 + 1 } ?? items.endIndex)
         }
         if let typing {
             let isFirstInGroup = !outgoing.isEmpty || messages.last?.message.senderID != typing.participant.id

@@ -119,7 +119,7 @@ extension ThreadStore: TimelineSource {
     var typingBubble: TypingBubble? { nil }
     var typingMessageRowIDs: [Message.ID: String] { [:] }
     var quotedMessages: [Message.ID: Message] { [:] }
-    var lastReadByOtherSortKey: String? { nil }
+    var readReceipts: [ReadReceipt] { [] }
     var showsUnreadDivider: Bool { false }
     var messageRevealRequest: MessageRevealRequest? { nil }
     /// A thread always loads whole, up to its newest reply.

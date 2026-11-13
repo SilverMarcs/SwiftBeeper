@@ -119,9 +119,10 @@ final class RealtimeService {
             }
         case "receipt.updated":
             trackSequence(in: envelope)
-            if let chatID = envelope.chatID,
-               let readKey = envelope.entries?.first?["lastReadByOtherSortKey"] {
-                onEvent(.receiptUpdated(chatID: chatID, lastReadByOtherSortKey: readKey))
+            // One entry per reader, together every reader's position.
+            let receipts = (try? decoder.decode(EntriesPayload<ReadReceipt>.self, from: data))?.entries ?? []
+            if let chatID = envelope.chatID, !receipts.isEmpty {
+                onEvent(.receiptUpdated(chatID: chatID, receipts: receipts))
             }
         case "typing.updated":
             trackSequence(in: envelope)

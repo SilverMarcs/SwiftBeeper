@@ -136,9 +136,9 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 			output.NewestCursor = req.After
 		}
 	}
-	// The app reads the other side's position only with the newest page.
+	// The app reads the others' positions only with the newest page.
 	if req.Cursor == "" && !isPartial {
-		output.LastReadByOtherSortKey = s.loadLastReadByOther(ctx, roomID)
+		output.ReadReceipts = s.loadReadReceipts(ctx, roomID)
 	}
 	return output, nil
 }

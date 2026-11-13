@@ -68,7 +68,7 @@ struct MessageRowView: View {
                     .accessibilityHint("Opens the thread")
                     .modifier(TypingBubbleContentReveal())
                 } else if message.linkedMessageID?.isEmpty == false {
-                    ReplyPreviewView(linkedMessage: entry.linkedMessage, isOutgoing: isOutgoing)
+                    ReplyPreviewView(linkedMessage: entry.linkedMessage, reply: message, isOutgoing: isOutgoing)
                         .modifier(TypingBubbleContentReveal())
                 }
 

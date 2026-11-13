@@ -24,11 +24,6 @@ type syncChange struct {
 	IDs []string
 }
 
-type receiptUpdate struct {
-	ChatID                 string `json:"chatID"`
-	LastReadByOtherSortKey string `json:"lastReadByOtherSortKey"`
-}
-
 func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 	if rules := syncComplete.AccountData[event.AccountDataPushRules]; rules != nil && h.pushRulesChanged(rules.Content) {
 		// A rule can change without any room events, including in another client.
@@ -77,8 +72,9 @@ func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 			}
 			sendChange(h, change.Type, change.ChatID, entries)
 		case realtimeTypeReceiptUpdated:
-			if key := dispatcher.loadLastReadByOther(context.Background(), id.RoomID(change.ChatID)); key != "" {
-				sendChange(h, change.Type, change.ChatID, []receiptUpdate{{ChatID: change.ChatID, LastReadByOtherSortKey: key}})
+			// One entry per reader; together they are every reader's position.
+			if receipts := dispatcher.loadReadReceipts(context.Background(), id.RoomID(change.ChatID)); len(receipts) > 0 {
+				sendChange(h, change.Type, change.ChatID, receipts)
 			}
 		case realtimeTypeChatUpserted:
 			// A missing summary sends no entries, which tells the app to reload.

@@ -27,6 +27,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @State private var expandedMessages = ExpandedMessages()
     /// Keeps the reader's row in place when older pages land above it.
     @State private var scrollAnchor = TimelineScrollAnchor()
+    /// The quoted message a tapped reply preview shows over the timeline.
+    @State private var quotedMessage: QuotedMessageContext?
     private let bottomAnchorID = "timeline-bottom"
 
     var body: some View {
@@ -38,20 +40,26 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             let timelineEntries = entriesCache.entries(
                 for: messages,
                 firstUnreadID: firstUnreadID,
-                lastReadByOtherSortKey: source.lastReadByOtherSortKey,
+                readReceipts: source.readReceipts,
+                groupMemberCount: chat.isGroupChat ? chat.participants.map { $0.total ?? $0.items.count } : nil,
                 quotedMessages: source.quotedMessages,
                 followingTypingSenderID: outgoingMessages.isEmpty ? typingBubble?.participant.id : nil
             )
             let outgoingTimelineEntries = OutgoingTimelineEntry.entries(for: outgoingMessages, following: messages)
+            let confirmedCaption = entriesCache.deliveryCaption
             // A just-sent bubble lands before its caption appears below it,
             // as in Messages.
             let deliveryCaption = inputManager.sendAnimator.flights.isEmpty
-                ? DeliveryIndicator.newest(outgoing: outgoingMessages, confirmed: entriesCache.deliveryIndicator)
+                ? DeliveryIndicator.newest(outgoing: outgoingMessages, confirmed: confirmedCaption?.indicator)
                 : nil
             let timelineItems = TimelineItem.items(
                 messages: timelineEntries,
                 outgoing: outgoingTimelineEntries,
                 deliveryCaption: deliveryCaption,
+                // An optimistic row's caption sits below it, at the end.
+                deliveryCaptionRowID: outgoingMessages.isEmpty
+                    ? confirmedCaption.map { TimelineEntry.rowID(for: $0.messageID, in: timelineEntries) }
+                    : nil,
                 typing: source.hasLoadedTimeline ? typingBubble : nil,
                 messageRowIDs: source.typingMessageRowIDs
             )
@@ -118,15 +126,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     #endif
                 }
                 .scrollDisabled(activeComposerMessageID != nil)
-                .environment(\.scrollToMessage, ScrollToMessageAction { messageID in
-                    // A reply to a folded-in photo jumps to its gallery row.
-                    let rowID = TimelineEntry.rowID(for: messageID, in: timelineEntries)
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo(rowID, anchor: .center)
-                    }
-                })
-                .savesAttachments()
-                .showsReactionDetails()
                 // Recreate only the viewport when a timeline opens or its first database page arrives
                 // A message picked from search, once its page has loaded. The
                 // rows just laid out, so let them settle before scrolling; a
@@ -235,6 +234,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: target, initial: true) { _, _ in
+                    quotedMessage = nil
                     scrollAnchor.reset()
                     firstUnreadID = nil
                     isNearBottom = true
@@ -288,6 +288,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
                     guard let newValue else { return }
+                    // Replying to or editing a message from the overlay
+                    // returns to the timeline, where that message is focused.
+                    dismissQuotedMessage()
                     #if os(iOS)
                     // With the keyboard already up no focus change follows, so
                     // place the target now. Otherwise ScrollOnComposerFocus
@@ -323,6 +326,27 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                         }
                     }
                 }
+                // Outside the scroll modifiers above, so they never pick up
+                // a scroll view in the overlay's messages.
+                .overlay {
+                    if let quotedMessage {
+                        QuotedMessageOverlay(context: quotedMessage, chat: rowChat, dismiss: dismissQuotedMessage)
+                            .transition(.opacity)
+                    }
+                }
+                .environment(\.showQuotedMessage, ShowQuotedMessageAction { quoted, reply in
+                    let context = QuotedMessageContext(
+                        quoted: quoted,
+                        reply: reply,
+                        entries: timelineEntries,
+                        quotedMessages: source.quotedMessages
+                    )
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                        quotedMessage = context
+                    }
+                })
+                .savesAttachments()
+                .showsReactionDetails()
                 #if os(iOS)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     ComposerBar(composer: composer, chat: chat, error: source.timelineError)
@@ -372,6 +396,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// them there.
     private var isFollowingLatest: Bool {
         isNearBottom || isScrollingToLatest
+    }
+
+    private func dismissQuotedMessage() {
+        guard quotedMessage != nil else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+            quotedMessage = nil
+        }
     }
 
     private func scrollToLatest(with proxy: ScrollViewProxy, animated: Bool = true) {

@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// The quoted message above a reply. Tapping it scrolls to that message, or
-/// runs `action` when one is given.
+/// The quoted message above a reply. Tapping it shows that message above
+/// `reply`, or runs `action` when one is given.
 struct ReplyPreviewView: View {
-    @Environment(\.scrollToMessage) private var scrollToMessage
+    @Environment(\.showQuotedMessage) private var showQuotedMessage
 
     let linkedMessage: Message?
+    /// The message that quotes it; nil for an optimistic row.
+    var reply: Message?
     let isOutgoing: Bool
     var action: (() -> Void)?
 
@@ -14,7 +16,7 @@ struct ReplyPreviewView: View {
             if let action {
                 action()
             } else if let linkedMessage {
-                scrollToMessage(linkedMessage.id)
+                showQuotedMessage(linkedMessage, reply: reply)
             }
         } label: {
             HStack(spacing: 6) {
@@ -32,7 +34,7 @@ struct ReplyPreviewView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .strikethrough(linkedMessage?.hasRetainedDeletedContent == true)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
             // The accent bar is a flexible shape; without this, a VStack

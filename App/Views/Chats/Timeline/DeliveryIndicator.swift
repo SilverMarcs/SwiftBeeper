@@ -7,14 +7,23 @@ enum DeliveryIndicator: Equatable {
     case sending
     case sent
     case delivered
-    case read
+    case seen
+    /// In a group, who has seen it, by first name.
+    case seenBy([String])
+    /// In a group, everyone else has seen it.
+    case seenByAll
+
+    /// Names a group caption lists before counting the rest.
+    private static let listedNameLimit = 3
 
     var label: String {
         switch self {
         case .sending: "Sending…"
         case .sent: "Sent"
         case .delivered: "Delivered"
-        case .read: "Read"
+        case .seen: "Seen"
+        case .seenBy(let names): "Seen by \(Self.nameList(names))"
+        case .seenByAll: "Seen by all"
         }
     }
 
@@ -24,5 +33,21 @@ enum DeliveryIndicator: Equatable {
     static func newest(outgoing: [OutgoingMessage], confirmed: DeliveryIndicator?) -> DeliveryIndicator? {
         guard let last = outgoing.last else { return confirmed }
         return last.state == .sending ? .sending : nil
+    }
+
+    /// The first word of a name, unless that isn't a name at all, such as
+    /// the country code of a phone number.
+    static func firstName(of name: String) -> String {
+        guard let first = name.split(whereSeparator: \.isWhitespace).first,
+              first.contains(where: \.isLetter) else { return name }
+        return String(first)
+    }
+
+    /// "Daniel, Julian, and Sahab", or "Daniel, Julian, Sahab, and 2 others".
+    private static func nameList(_ names: [String]) -> String {
+        guard names.count > listedNameLimit else { return names.formatted(.list(type: .and)) }
+        let others = names.count - listedNameLimit
+        let listed = Array(names.prefix(listedNameLimit)) + [others == 1 ? "1 other" : "\(others) others"]
+        return listed.formatted(.list(type: .and))
     }
 }
