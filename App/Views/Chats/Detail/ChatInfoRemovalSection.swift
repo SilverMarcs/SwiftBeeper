@@ -29,6 +29,9 @@ struct ChatInfoRemovalSection: View {
                 }
             }
         }
+        // A form row tints its label's icon with the list item tint (the app
+        // accent) even for a destructive role, which only reddens the title.
+        .listItemTint(.red)
         .disabled(isRemoving)
         .confirmationDialog(
             pendingRemoval?.confirmationTitle ?? "",
