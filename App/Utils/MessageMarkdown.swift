@@ -67,20 +67,28 @@ extension String {
         return blocks
     }
 
-    /// Inline Markdown for a chat list preview. Links keep their label but
-    /// lose their destination so a tap selects the row instead of opening it.
+    /// Plain text for a chat list preview, with Markdown removed: block
+    /// syntax is flattened into lines, and inline formatting keeps its text
+    /// without its styling. Links keep their label but lose their destination
+    /// so a tap selects the row instead of opening it.
     var previewAttributed: AttributedString {
         let source = utf8.count > previewSourceLimit ? String(prefix(previewSourceLimit)) : self
-        guard source.contains(where: inlineMarkdownMarkers.contains) else { return AttributedString(source) }
-
         let key = source as NSString
         if let cached = previewTextCache.object(forKey: key) { return cached.value }
-        var attributed = (try? AttributedString(
-            markdown: source,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(source)
-        attributed.prefixMentionLabels()
-        attributed.link = nil
+
+        let text = MessageBlockParser.previewSource(source)
+        var attributed: AttributedString
+        if text.contains(where: inlineMarkdownMarkers.contains) {
+            attributed = (try? AttributedString(
+                markdown: text,
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            )) ?? AttributedString(text)
+            attributed.prefixMentionLabels()
+            attributed.link = nil
+            attributed.inlinePresentationIntent = nil
+        } else {
+            attributed = AttributedString(text)
+        }
         previewTextCache.setObject(CacheBox(attributed), forKey: key)
         return attributed
     }

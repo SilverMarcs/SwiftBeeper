@@ -147,7 +147,7 @@ enum MessageBlockParser {
 
     /// A list line's number, when ordered, its text, and how far its text is
     /// indented. Bullets are `*`, `-`, `+` or `•` followed by a space.
-    private static func listItem(_ line: Substring) -> (number: Int?, text: Substring, contentIndent: Int)? {
+    static func listItem(_ line: Substring) -> (number: Int?, text: Substring, contentIndent: Int)? {
         let indent = line.prefix { $0 == " " }.count
         guard indent <= 3 else { return nil }
         let rest = line.dropFirst(indent)
@@ -170,7 +170,7 @@ enum MessageBlockParser {
     }
 
     /// A heading's level and text: one to six `#` and a space.
-    private static func heading(_ line: Substring) -> (level: Int, text: Substring)? {
+    static func heading(_ line: Substring) -> (level: Int, text: Substring)? {
         let indent = line.prefix { $0 == " " }.count
         guard indent <= 3 else { return nil }
         let rest = line.dropFirst(indent)
@@ -182,14 +182,14 @@ enum MessageBlockParser {
     }
 
     /// Three or more of the same `-`, `*` or `_` and nothing else.
-    private static func isRule(_ line: Substring) -> Bool {
+    static func isRule(_ line: Substring) -> Bool {
         let marks = line.filter { !$0.isWhitespace }
         guard marks.count >= 3, let first = marks.first, "-*_".contains(first) else { return false }
         return marks.allSatisfy { $0 == first }
     }
 
     /// The fence a line opens or closes, such as "```".
-    private static func fenceMarker(_ line: Substring) -> String? {
+    static func fenceMarker(_ line: Substring) -> String? {
         let trimmed = line.drop { $0 == " " }
         let ticks = trimmed.prefix { $0 == "`" }.count
         return ticks >= 3 ? String(repeating: "`", count: ticks) : nil
@@ -199,7 +199,7 @@ enum MessageBlockParser {
     /// Up to three leading spaces are allowed, as in CommonMark. Unlike
     /// CommonMark, a space (or another `>` for nesting) must follow the marker
     /// so emoticons such as `>_<` or `>:(` starting a message stay plain text.
-    private static func quoteContent(of line: Substring) -> Substring? {
+    static func quoteContent(of line: Substring) -> Substring? {
         let indent = line.prefix { $0 == " " }.count
         guard indent <= 3 else { return nil }
         let marked = line.dropFirst(indent)

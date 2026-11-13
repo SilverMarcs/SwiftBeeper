@@ -80,8 +80,7 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
 
     /// Preview source. Messages with mentions use the formatted body, so a
     /// mention shows its name as in the timeline; everything else uses the
-    /// plain body, since list and heading markers would read as clutter in
-    /// two lines.
+    /// plain body. `previewAttributed` removes Markdown from either.
     var previewText: String? {
         guard let preview else { return nil }
         if preview.hasText, let formattedText = preview.formattedText, formattedText.hasMentionLinks {

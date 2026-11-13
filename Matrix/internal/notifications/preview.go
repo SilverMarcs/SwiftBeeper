@@ -294,7 +294,7 @@ func messageSummary(typ string, message *event.MessageEventContent) string {
 		}
 		return "Sticker"
 	}
-	caption := strings.TrimSpace(message.GetCaption())
+	caption := plainText(strings.TrimSpace(message.GetCaption()))
 	withCaption := func(emoji, name string) string {
 		if caption == "" {
 			return emoji + " " + name
@@ -326,7 +326,8 @@ func messageSummary(typ string, message *event.MessageEventContent) string {
 	case event.MsgLocation:
 		return "📍 Location"
 	}
-	return message.Body
+	// Formatted messages carry their Markdown source as the plain body.
+	return plainText(message.Body)
 }
 
 // isEmojiOnly reports whether s is one or more emoji, with their joiners,
