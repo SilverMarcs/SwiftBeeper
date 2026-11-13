@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The reactions below a message's bubbles, one pill per reaction. Tapping a
-/// pill adds or takes back the user's own; holding one lists who reacted.
+/// The reactions below a message's bubbles, one pill per reaction, reaching
+/// up over the bubbles' bottom edge. Tapping a pill adds or takes back the
+/// user's own; holding one lists who reacted.
 struct ReactionPillsView: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -9,6 +10,10 @@ struct ReactionPillsView: View {
     /// The row's messages: one, or a gallery's photos and caption.
     let messages: [Message]
     let chat: Chat
+    /// How far the pills reach up over the view above them. The negative
+    /// padding takes the overlap out of the row's height as well, so rows
+    /// below sit where the pills end.
+    let topOverlap: CGFloat
 
     var body: some View {
         let pills = ReactionPill.pills(for: messages, selfIDs: selfIDs)
@@ -29,6 +34,8 @@ struct ReactionPillsView: View {
                         .transition(transition)
                     }
                 }
+                .padding(.horizontal, ChatVisualStyle.bubbleHorizontalPadding)
+                .padding(.top, -topOverlap)
                 // The first pill arrives with its layout.
                 .transition(transition)
             }

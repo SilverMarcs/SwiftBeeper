@@ -24,11 +24,7 @@ struct ReactionPillLabel: View {
             }
         }
         .font(.subheadline)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background { ReactionPillFill(isOwn: pill.isOwn) }
-        .clipShape(.capsule)
-        .contentShape(.capsule)
+        .reactionPillChrome(isOwn: pill.isOwn)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }

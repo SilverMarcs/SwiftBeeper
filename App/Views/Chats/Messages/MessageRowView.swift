@@ -9,6 +9,8 @@ struct MessageRowView: View {
     @Environment(\.composer) private var composer
 
     @State private var profileSheetParticipant: ChatParticipant?
+    /// Between the sender's name, the bubbles, and what follows them.
+    private static let stackSpacing: CGFloat = 4
     @State private var pendingDirectChat: Chat?
 
     var body: some View {
@@ -43,7 +45,7 @@ struct MessageRowView: View {
                 }
             }
 
-            VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: isOutgoing ? .trailing : .leading, spacing: Self.stackSpacing) {
                 if showsSenderName || isThreadBroadcast || isForwarded {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         if showsSenderName {
@@ -88,9 +90,13 @@ struct MessageRowView: View {
                 .environment(\.messageBubbleJoins, entry.bubbleJoins)
 
                 // Outside the bubbles' context menu, so holding a pill opens
-                // the sheet of who reacted instead.
-                ReactionPillsView(messages: entry.messages, chat: chat)
-                    .padding(.horizontal, ChatVisualStyle.bubbleHorizontalPadding)
+                // the sheet of who reacted instead. The pills reach up over
+                // the bubbles' bottom edge, past the stack's spacing.
+                ReactionPillsView(
+                    messages: entry.messages,
+                    chat: chat,
+                    topOverlap: Self.stackSpacing + ChatVisualStyle.reactionPillOverlap
+                )
 
                 if !isInThread, let thread = message.thread, thread.replyCount > 0 {
                     ThreadSummaryButton(message: message, summary: thread, chat: chat)

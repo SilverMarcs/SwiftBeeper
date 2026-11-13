@@ -19,11 +19,7 @@ struct ReactionOverflowButton: View {
                 .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(hiddenCount)))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background { ReactionPillFill(isOwn: false) }
-                .clipShape(.capsule)
-                        .contentShape(.capsule)
+                .reactionPillChrome(isOwn: false)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(hiddenCount) more reactions")

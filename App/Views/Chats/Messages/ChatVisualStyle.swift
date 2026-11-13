@@ -17,6 +17,12 @@ enum ChatVisualStyle {
     static let bubbleJoinedCornerRadius: CGFloat = 6
     #endif
 
+    /// How far reaction pills, ring included, reach up over the bottom of
+    /// the bubbles they react to.
+    static let reactionPillOverlap: CGFloat = 6
+    /// The ring of the timeline's background around each reaction pill.
+    static let reactionPillRingWidth: CGFloat = 2
+
     /// A bubble's outline: round all over, except on the sender's side
     /// (leading for incoming, trailing for outgoing), where it meets the
     /// bubbles it joins with a tighter corner.
