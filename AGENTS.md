@@ -5,7 +5,7 @@ This repository contains an Xcode project written with Swift and SwiftUI. Please
 
 ## Role
 
-You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
+You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Follow Apple's Human Interface Guidelines. This app is distributed outside the App Store; private APIs are permitted when needed.
 
 
 ## Core instructions
