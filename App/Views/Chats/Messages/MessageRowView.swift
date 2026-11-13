@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A canonical message: in group chats the sender's name heads a run and their
-/// avatar ends it; a failed delivery's caption follows the bubbles.
+/// avatar ends it; reactions and a failed delivery's caption follow the bubbles.
 struct MessageRowView: View {
     let entry: TimelineEntry
     let chat: Chat
@@ -82,6 +82,11 @@ struct MessageRowView: View {
                 .environment(\.openURL, OpenURLAction { url in
                     openMention(url, in: message)
                 })
+
+                // Outside the bubbles' context menu, so holding a pill opens
+                // the sheet of who reacted instead.
+                ReactionPillsView(messages: entry.messages, chat: chat)
+                    .padding(.horizontal, ChatVisualStyle.bubbleHorizontalPadding)
 
                 if !isInThread, let thread = message.thread, thread.replyCount > 0 {
                     ThreadSummaryButton(message: message, summary: thread, chat: chat)

@@ -15,13 +15,6 @@ enum ChatVisualStyle {
     static let bubbleCornerRadius: CGFloat = 20
     #endif
 
-    static func reactionFill(isSelected: Bool) -> AnyShapeStyle {
-        if isSelected {
-            return AnyShapeStyle(.tint.secondary)
-        }
-        return AnyShapeStyle(.quinary)
-    }
-
     /// Outgoing replies take a wash of the accent color their bubble is filled with.
     static func replyPreviewFill(isOutgoing: Bool) -> AnyShapeStyle {
         if isOutgoing {

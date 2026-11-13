@@ -52,6 +52,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             let deliveryCaption = inputManager.sendAnimator.flights.isEmpty
                 ? DeliveryIndicator.newest(outgoing: outgoingMessages, confirmed: confirmedCaption?.indicator)
                 : nil
+            // A message the user is sending is newer than the one seen.
+            let seenCaption = outgoingMessages.isEmpty ? entriesCache.newestSeenCaption : nil
             let timelineItems = TimelineItem.items(
                 messages: timelineEntries,
                 outgoing: outgoingTimelineEntries,
@@ -60,6 +62,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 deliveryCaptionRowID: outgoingMessages.isEmpty
                     ? confirmedCaption.map { TimelineEntry.rowID(for: $0.messageID, in: timelineEntries) }
                     : nil,
+                seenCaption: seenCaption,
                 typing: source.hasLoadedTimeline ? typingBubble : nil,
                 messageRowIDs: source.typingMessageRowIDs
             )
@@ -282,10 +285,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .onChange(of: TimelineDeliveryCaptionTracker(
                     target: target,
                     hasRows: !messages.isEmpty || !outgoingMessages.isEmpty,
-                    showsCaption: deliveryCaption != nil
+                    captionCount: (deliveryCaption == nil ? 0 : 1) + (seenCaption == nil ? 0 : 1)
                 )) { oldTracker, newTracker in
                     guard source.hasLoadedTimeline, oldTracker.target == newTracker.target, oldTracker.hasRows,
-                          !oldTracker.showsCaption, newTracker.showsCaption, isFollowingLatest else { return }
+                          newTracker.captionCount > oldTracker.captionCount, isFollowingLatest else { return }
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in

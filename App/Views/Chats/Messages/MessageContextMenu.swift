@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reactions, who reacted, reply, copy, edit, save, and delete for one message. For a photo
+/// Reactions, reply, copy, edit, save, and delete for one message. For a photo
 /// gallery, save and delete also cover the photos folded in after it.
 struct MessageContextMenu: View {
     @Environment(ChatStore.self) private var chatStore
@@ -8,7 +8,6 @@ struct MessageContextMenu: View {
     @Environment(\.composer) private var composer
     @Environment(\.saveAttachment) private var saveAttachment
     @Environment(\.saveAttachmentToPhotos) private var saveAttachmentToPhotos
-    @Environment(\.showReactionDetails) private var showReactionDetails
     @Environment(\.showReactionPicker) private var showReactionPicker
 
     let message: Message
@@ -46,12 +45,6 @@ struct MessageContextMenu: View {
             if let composer, chatStore.canEdit(message, in: chat) {
                 Button("Edit", systemImage: "pencil") {
                     input.startEditing(message, in: composer)
-                }
-            }
-
-            if !message.visibleReactions.isEmpty {
-                Button("Show Reactions", systemImage: "face.smiling") {
-                    showReactionDetails(message, in: chat)
                 }
             }
 

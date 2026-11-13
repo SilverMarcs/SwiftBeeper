@@ -1,21 +1,14 @@
 import SwiftUI
 
-/// A message's bubbles: its attachments and text, or its deleted form. Reactions
-/// sit on the last bubble, and the context menu covers the whole stack.
+/// A message's bubbles: its attachments and text, or its deleted form. The
+/// context menu covers the whole stack; reactions sit below it, in the row.
 struct MessageContentView: View {
     let message: Message
     let chat: Chat
     @Environment(\.typingBubbleNamespace) private var typingBubbleNamespace
 
-    private enum Bubble: Equatable {
-        case attachment(String?)
-        case text
-    }
-
     var body: some View {
         let isOutgoing = message.isSender
-        let reactionsAlignment: Alignment = isOutgoing ? .bottomLeading : .bottomTrailing
-        let lastBubble = lastBubble
         VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
             if message.isDeletedMessage {
                 Group {
@@ -32,18 +25,10 @@ struct MessageContentView: View {
                 .messageTextSelection(id: message.id)
                 .fixedSize(horizontal: false, vertical: true)
                 .messageBubbleChrome(isOutgoing: isOutgoing)
-                .overlay(alignment: reactionsAlignment) {
-                    ReactionsBarView(message: message, chat: chat)
-                }
             } else {
                 ForEach((message.attachments ?? []).enumerated(), id: \.element.id) { index, attachment in
                     AttachmentView(attachment: attachment, message: message, chat: chat)
                         .modifier(TypingBubbleGeometry(isEnabled: index == 0))
-                        .overlay(alignment: reactionsAlignment) {
-                            if lastBubble == .attachment(attachment.id) {
-                                ReactionsBarView(message: message, chat: chat)
-                            }
-                        }
                 }
 
                 if let visibleText = message.visibleText {
@@ -53,9 +38,6 @@ struct MessageContentView: View {
                         // caption has a separate background and must not match too.
                         .environment(\.typingBubbleNamespace, message.attachments?.isEmpty != false ? typingBubbleNamespace : nil)
                         .sendEffect(forConfirmed: isOutgoing ? message.id : nil)
-                        .overlay(alignment: reactionsAlignment) {
-                            ReactionsBarView(message: message, chat: chat)
-                        }
                 }
             }
         }
@@ -66,11 +48,5 @@ struct MessageContentView: View {
         .contextMenu {
             MessageContextMenu(message: message, chat: chat)
         }
-    }
-
-    /// Text renders below attachments, so it carries the reactions when present.
-    private var lastBubble: Bubble? {
-        if message.hasText { return .text }
-        return message.attachments?.last.map { .attachment($0.id) }
     }
 }

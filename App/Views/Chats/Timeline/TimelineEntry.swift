@@ -162,6 +162,31 @@ struct TimelineEntry: Identifiable, Equatable {
         return DeliveryCaption(indicator: .seenBy(names), messageID: message.id)
     }
 
+    /// In a group whose newest message someone else sent, who else has seen
+    /// it: never the user, whose receipts aren't among them, nor its sender.
+    /// Nil until anyone has, and outside groups (`groupMemberCount` nil).
+    static func newestSeenCaption(
+        in messages: [Message],
+        readReceipts: [ReadReceipt],
+        groupMemberCount: Int?
+    ) -> DeliveryIndicator? {
+        guard let groupMemberCount, let newest = messages.last, !newest.isSender else { return nil }
+        var readers: [String: String] = [:]
+        for receipt in readReceipts
+        where receipt.numericSortKey >= newest.numericSortKey && receipt.userID != newest.senderID {
+            readers[receipt.userID] = receipt.name
+        }
+        guard !readers.isEmpty else { return nil }
+        // Everyone but the user and the sender.
+        if groupMemberCount > 2, readers.count >= groupMemberCount - 2 {
+            return .seenByAll
+        }
+        let names = readers.values
+            .map(DeliveryIndicator.firstName(of:))
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        return .seenBy(names)
+    }
+
     /// The caption for the newest message, when the user sent it: "Seen" once the
     /// other side's receipt reaches it, otherwise what its bridge reported. A
     /// message the homeserver has but the bridge hasn't reported on yet is

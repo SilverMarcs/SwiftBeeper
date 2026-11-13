@@ -7,6 +7,8 @@ enum TimelineItem: Identifiable {
     /// "Sending…" through "Seen", below the newest row when the user sent
     /// it, or in a group who has seen the user's newest message.
     case deliveryCaption(DeliveryIndicator)
+    /// In a group, who has seen the newest message when someone else sent it.
+    case seenCaption(DeliveryIndicator)
     case typing(TypingBubble, isFirstInGroup: Bool)
 
     var id: String {
@@ -16,6 +18,7 @@ enum TimelineItem: Identifiable {
         // One identity for every step and every message, so a step replaces
         // the last in place, even across an optimistic row's confirmation.
         case .deliveryCaption: "delivery-caption"
+        case .seenCaption: "seen-caption"
         case .typing(let bubble, _): bubble.id
         }
     }
@@ -26,19 +29,22 @@ enum TimelineItem: Identifiable {
         switch self {
         case .message(let entry, _): entry.message.id
         case .outgoing(let entry): entry.id
-        case .deliveryCaption, .typing: nil
+        case .deliveryCaption, .seenCaption, .typing: nil
         }
     }
 
     var isDeliveryCaption: Bool {
-        if case .deliveryCaption = self { true } else { false }
+        switch self {
+        case .deliveryCaption, .seenCaption: true
+        case .message, .outgoing, .typing: false
+        }
     }
 
     var hasTypingIdentity: Bool {
         switch self {
         case .message(let entry, let rowID): rowID != entry.id
         case .typing: true
-        case .outgoing, .deliveryCaption: false
+        case .outgoing, .deliveryCaption, .seenCaption: false
         }
     }
 
@@ -47,11 +53,16 @@ enum TimelineItem: Identifiable {
         outgoing: [OutgoingTimelineEntry],
         deliveryCaption: DeliveryIndicator?,
         deliveryCaptionRowID: Message.ID?,
+        seenCaption: DeliveryIndicator?,
         typing: TypingBubble?,
         messageRowIDs: [Message.ID: String]
     ) -> [TimelineItem] {
         var items = messages.map { entry in
             TimelineItem.message(entry, rowID: messageRowIDs[entry.id] ?? entry.id)
+        }
+        if let seenCaption {
+            // Below the newest message, ahead of any optimistic rows.
+            items.append(.seenCaption(seenCaption))
         }
         items += outgoing.map { .outgoing($0) }
         if let deliveryCaption {

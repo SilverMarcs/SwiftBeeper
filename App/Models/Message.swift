@@ -153,21 +153,21 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         } ?? []
     }
 
-    /// Visible reactions grouped by key, in key order; nil when there are none.
-    var groupedReactions: [GroupedReaction]? {
-        let visibleReactions = visibleReactions
-        guard !visibleReactions.isEmpty else { return nil }
-        return Dictionary(grouping: visibleReactions, by: \.reactionKey)
-            .map { key, group in
-                GroupedReaction(reactionKey: key, count: group.count, participantIDs: group.map(\.participantID))
+    /// Visible reactions grouped by key: the most reacted first, ties in the
+    /// order they were first reacted with. Empty when there are none.
+    var groupedReactions: [GroupedReaction] {
+        var groups: [GroupedReaction] = []
+        var indexByKey: [String: Int] = [:]
+        for reaction in visibleReactions {
+            if let index = indexByKey[reaction.reactionKey] {
+                groups[index].participantIDs.append(reaction.participantID)
+            } else {
+                indexByKey[reaction.reactionKey] = groups.count
+                groups.append(GroupedReaction(reactionKey: reaction.reactionKey, participantIDs: [reaction.participantID]))
             }
-            .sorted { $0.reactionKey < $1.reactionKey }
+        }
+        return groups.enumerated()
+            .sorted { ($0.element.count, $1.offset) > ($1.element.count, $0.offset) }
+            .map(\.element)
     }
-}
-
-struct GroupedReaction: Identifiable {
-    var id: String { reactionKey }
-    let reactionKey: String
-    let count: Int
-    let participantIDs: [String]
 }

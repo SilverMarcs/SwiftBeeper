@@ -23,6 +23,8 @@ final class TimelineEntriesCache {
     /// The caption below the user's newest message, from the same inputs as
     /// the rows.
     private(set) var deliveryCaption: DeliveryCaption?
+    /// Who has seen the newest message in a group, when someone else sent it.
+    private(set) var newestSeenCaption: DeliveryIndicator?
 
     func entries(
         for messages: [Message],
@@ -50,6 +52,11 @@ final class TimelineEntriesCache {
             followingTypingSenderID: followingTypingSenderID
         )
         deliveryCaption = TimelineEntry.deliveryCaption(
+            in: messages,
+            readReceipts: readReceipts,
+            groupMemberCount: groupMemberCount
+        )
+        newestSeenCaption = TimelineEntry.newestSeenCaption(
             in: messages,
             readReceipts: readReceipts,
             groupMemberCount: groupMemberCount

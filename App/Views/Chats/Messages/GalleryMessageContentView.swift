@@ -2,7 +2,8 @@ import SwiftUI
 
 /// A run of photos folded into one bubble, with the run's text below the
 /// grid, whether the network sent it as a caption or as its own part. Each
-/// part is still its own message, so each keeps its own reactions; reply,
+/// part is still its own message, so each keeps its own reactions, which the
+/// row lists below the bubble; reply,
 /// react, copy, and edit from the context menu address the text, or the first
 /// photo without one, while save and delete cover the whole set.
 struct GalleryMessageContentView: View {
@@ -14,15 +15,9 @@ struct GalleryMessageContentView: View {
         let captionMessage = messages.first { $0.hasText && !$0.isAlbumAnnouncement }
         if let primary = captionMessage ?? photos.first {
             let isOutgoing = primary.isSender
-            let reactionsAlignment: Alignment = isOutgoing ? .bottomLeading : .bottomTrailing
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 ImageGalleryAttachmentView(messages: photos)
                     .modifier(TypingBubbleGeometry())
-                    .overlay(alignment: reactionsAlignment) {
-                        if captionMessage == nil {
-                            GalleryReactionsView(messages: messages, chat: chat)
-                        }
-                    }
 
                 if let captionMessage, let caption = captionMessage.visibleText {
                     // The grid takes over the typing bubble; the caption has a
@@ -31,9 +26,6 @@ struct GalleryMessageContentView: View {
                         .messageBubbleChrome(isOutgoing: isOutgoing)
                         .environment(\.typingBubbleNamespace, nil)
                         .sendEffect(forConfirmed: isOutgoing ? captionMessage.id : nil)
-                        .overlay(alignment: reactionsAlignment) {
-                            GalleryReactionsView(messages: messages, chat: chat)
-                        }
                 }
             }
             #if !os(macOS)
