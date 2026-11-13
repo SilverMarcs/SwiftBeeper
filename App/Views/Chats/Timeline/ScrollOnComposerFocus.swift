@@ -1,10 +1,10 @@
 #if os(iOS)
 import SwiftUI
 
-/// Scrolls the timeline when the composer gains focus: to the message being
-/// replied to or edited, so it sits just above the keyboard, or otherwise to
-/// the newest message, which `scrollToLatest` skips for a reader who
-/// scrolled back.
+/// Scrolls the timeline to the newest message when the composer gains focus,
+/// which `scrollToLatest` skips for a reader who scrolled back. A message
+/// being replied to or edited is kept above the composer by the timeline
+/// itself, as the keyboard's safe area arrives.
 ///
 /// Focus is observed here rather than in `ChatTimelineView.body`, so a focus
 /// change re-evaluates only this modifier. Interactive keyboard dismissal ends
@@ -17,14 +17,12 @@ struct ScrollOnComposerFocus: ViewModifier {
 
     let composer: Composer
     let scrollToLatest: () -> Void
-    let scrollToComposerMessage: (Message.ID) -> Void
 
     func body(content: Content) -> some View {
         content
             .onChange(of: composer.isFocused) { _, focused in
                 scrollTask?.cancel()
-                guard focused else { return }
-                let composerMessageID = composer.activeMessage?.id
+                guard focused, composer.activeMessage == nil else { return }
                 // The wait lets the keyboard's safe area apply first.
                 scrollTask = Task { @MainActor in
                     do {
@@ -32,12 +30,8 @@ struct ScrollOnComposerFocus: ViewModifier {
                     } catch {
                         return
                     }
-                    guard !Task.isCancelled, composer.activeMessage?.id == composerMessageID else { return }
-                    if let composerMessageID {
-                        scrollToComposerMessage(composerMessageID)
-                    } else {
-                        scrollToLatest()
-                    }
+                    guard !Task.isCancelled, composer.activeMessage == nil else { return }
+                    scrollToLatest()
                 }
             }
             // Another conversation's composer takes over this viewport.
@@ -51,18 +45,10 @@ struct ScrollOnComposerFocus: ViewModifier {
 }
 
 extension View {
-    /// Scrolls to the reply/edit target, or the newest message, when the
-    /// search-field or inline composer gains focus.
-    func scrollsOnComposerFocus(
-        _ composer: Composer,
-        scrollToLatest: @escaping () -> Void,
-        scrollToComposerMessage: @escaping (Message.ID) -> Void
-    ) -> some View {
-        modifier(ScrollOnComposerFocus(
-            composer: composer,
-            scrollToLatest: scrollToLatest,
-            scrollToComposerMessage: scrollToComposerMessage
-        ))
+    /// Scrolls to the newest message when the composer gains focus without
+    /// a reply or edit.
+    func scrollsOnComposerFocus(_ composer: Composer, scrollToLatest: @escaping () -> Void) -> some View {
+        modifier(ScrollOnComposerFocus(composer: composer, scrollToLatest: scrollToLatest))
     }
 }
 #endif

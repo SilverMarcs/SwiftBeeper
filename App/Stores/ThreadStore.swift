@@ -129,6 +129,8 @@ extension ThreadStore: TimelineSource {
     func loadNewerTimeline() async {}
     func showLatestTimeline() {}
     func finishMessageReveal() {}
+    /// Thread replies quote nothing beyond what the thread holds.
+    func loadQuotedMessages(for messages: [Message]) async {}
     var isLoadingOlderTimeline: Bool { false }
     var canLoadServerHistory: Bool { false }
     var timelineError: String? { error }

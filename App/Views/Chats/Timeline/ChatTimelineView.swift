@@ -27,8 +27,19 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @State private var selectableMessages = SelectableMessages()
     /// Keeps the reader's row in place when older pages land above it.
     @State private var scrollAnchor = TimelineScrollAnchor()
-    /// The quoted message a tapped reply preview shows over the timeline.
-    @State private var quotedMessage: QuotedMessageContext?
+    /// The reply whose tapped quote the timeline focuses on, with the
+    /// messages it quotes above it.
+    @State private var quotedFocus: QuotedMessageFocus?
+    /// The quote focus and chain length the timeline last made room for, so
+    /// it scrolls once for each rather than on every frame of its own scroll.
+    @State private var revealedQuotedChainKey: String?
+    /// The timeline's top inset, under the header, where rows stop being visible.
+    @State private var topContentInset: CGFloat = 0
+    #if os(iOS)
+    /// Brings a new reply or edit target above the composer once its context
+    /// menu has dismissed.
+    @State private var composerRevealTask: Task<Void, Never>?
+    #endif
     private let bottomAnchorID = "timeline-bottom"
 
     var body: some View {
@@ -76,6 +87,18 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 messageRowIDs: source.typingMessageRowIDs
             )
             let activeComposerMessageID = composer.activeMessage?.id
+            // A quote stays shown only while its reply is in the timeline.
+            let quoteFocus = quotedFocus.flatMap { focus in
+                timelineEntries.contains { $0.id == focus.rowID } ? focus : nil
+            }
+            let quotedChain = quoteFocus.map {
+                QuotedMessageChain.entries(from: $0.quoted, timeline: timelineEntries, quotedMessages: source.quotedMessages)
+            } ?? []
+            // The oldest quote in the chain, when it quotes one not loaded yet.
+            let unresolvedQuote = quotedChain.first.flatMap { $0.linkedMessage == nil && $0.message.linkedMessageID?.isEmpty == false ? $0.message : nil }
+            // The row the timeline focuses on, dimming the rest.
+            let focusedRowID = quoteFocus?.rowID
+                ?? activeComposerMessageID.map { TimelineEntry.rowID(for: $0, in: timelineEntries) }
             // Rows get the chat without its preview and unread state, so each
             // new message or read doesn't re-render every row.
             let rowChat = chat.forTimelineRows
@@ -95,12 +118,16 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                             }
 
                             ForEach(timelineItems) { item in
+                                let isQuoteReply = quoteFocus != nil && item.scrollTargetID == quoteFocus?.rowID
                                 TimelineItemRow(
                                     item: item,
                                     chat: rowChat,
                                     firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
-                                    activeComposerMessageID: activeComposerMessageID
+                                    focusedRowID: focusedRowID,
+                                    quotedChain: isQuoteReply ? quotedChain : []
                                 )
+                                // Its quotes float over the rows above it.
+                                .zIndex(isQuoteReply ? 1 : 0)
                                 // The caption comes and goes at once; the
                                 // scroll below it is the motion.
                                 .transition(item.isDeliveryCaption ? .identity : .opacity)
@@ -126,6 +153,23 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                             .id(bottomAnchorID)
                             .accessibilityHidden(true)
                     }
+                    // Receded rows let taps through to this, which returns
+                    // from a shown quote or a reply to the timeline. An edit
+                    // ends only from its toolbar button, so a stray tap
+                    // can't throw away the changes.
+                    .background {
+                        if quoteFocus != nil {
+                            Button("Close", action: dismissQuotedMessage)
+                                .buttonStyle(TimelineFocusBackdropStyle(label: "Close"))
+                                .keyboardShortcut(.cancelAction)
+                        } else if composer.replyingTo != nil, !composer.isEditing {
+                            // The toolbar's Cancel Reply has the Escape key.
+                            Button("Cancel Reply") {
+                                inputManager.cancelAction(in: composer)
+                            }
+                            .buttonStyle(TimelineFocusBackdropStyle(label: "Cancel Reply"))
+                        }
+                    }
                     #if os(iOS)
                     .followsComposerOnKeyboard(composer, restingPosition: restingPosition)
                     .dismissesComposerOnTap { [composer] in
@@ -137,7 +181,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     }
                     #endif
                 }
-                .scrollDisabled(activeComposerMessageID != nil)
+                .scrollDisabled(focusedRowID != nil)
                 .timelineSwipeActionsContainer()
                 .showsReactionPicker()
                 // Recreate only the viewport when a timeline opens or its first database page arrives
@@ -172,17 +216,26 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     // stays where they are.
                     guard restingPosition.isAtEnd else { return }
                     scrollToLatest(with: proxy)
-                } scrollToComposerMessage: { messageID in
-                    scrollAboveKeyboard(messageID, with: proxy)
                 }
                 // The composer growing, as the keyboard comes up or the draft
-                // gains a line, takes a timeline kept at its end along; the
-                // keyboard follower draws the move in step with the composer.
+                // gains a line, keeps the message being replied to or edited
+                // just above it, and otherwise takes a timeline kept at its
+                // end along; the keyboard follower draws that move in step
+                // with the composer. Following the safe area itself, rather
+                // than focus, places the message however the keyboard came
+                // up, including when a context menu brings it back.
                 .onScrollGeometryChange(for: CGFloat.self, of: \.contentInsets.bottom) { oldInset, newInset in
-                    guard newInset > oldInset, restingPosition.isAtEnd, activeComposerMessageID == nil else { return }
-                    scrollToLatest(with: proxy, animated: false)
+                    guard newInset > oldInset else { return }
+                    if let activeComposerMessageID {
+                        scrollAboveComposer(TimelineEntry.rowID(for: activeComposerMessageID, in: timelineEntries), with: proxy)
+                    } else if restingPosition.isAtEnd {
+                        scrollToLatest(with: proxy, animated: false)
+                    }
                 }
                 #endif
+                .onScrollGeometryChange(for: CGFloat.self, of: \.contentInsets.top) { _, inset in
+                    topContentInset = inset
+                }
                 // Load the next older page a screen ahead of the top, so it
                 // usually lands before the reader gets there.
                 .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -248,7 +301,11 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: target, initial: true) { _, _ in
-                    quotedMessage = nil
+                    quotedFocus = nil
+                    revealedQuotedChainKey = nil
+                    #if os(iOS)
+                    composerRevealTask?.cancel()
+                    #endif
                     scrollAnchor.reset()
                     firstUnreadID = nil
                     isNearBottom = true
@@ -301,22 +358,40 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
-                    guard let newValue else { return }
-                    // Replying to or editing a message from the overlay
-                    // returns to the timeline, where that message is focused.
-                    dismissQuotedMessage()
                     #if os(iOS)
-                    // With the keyboard already up no focus change follows, so
-                    // place the target now. Otherwise ScrollOnComposerFocus
-                    // places it once the keyboard rises, leaving it untouched
-                    // while the context menu dismisses.
-                    guard composer.isFocused else { return }
-                    scrollAboveKeyboard(newValue, with: proxy)
+                    composerRevealTask?.cancel()
+                    #endif
+                    guard let newValue else { return }
+                    // Replying to or editing a quoted message returns to the
+                    // timeline, where that message is focused.
+                    dismissQuotedMessage()
+                    let rowID = TimelineEntry.rowID(for: newValue, in: timelineEntries)
+                    #if os(iOS)
+                    // The keyboard rising places the message as its safe area
+                    // arrives. With the keyboard already up, or staying down,
+                    // nothing else will, so place it once the context menu
+                    // has dismissed: moving it sooner sends the menu's
+                    // preview back to where the message was.
+                    composerRevealTask = Task {
+                        do {
+                            try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
+                        } catch {
+                            return
+                        }
+                        guard composer.activeMessage?.id == newValue else { return }
+                        scrollAboveComposer(rowID, with: proxy)
+                    }
                     #else
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(newValue, anchor: .center)
+                        proxy.scrollTo(rowID, anchor: .center)
                     }
                     #endif
+                }
+                // Each quote the chain reaches that isn't loaded is read in
+                // turn, so the chain grows until it's whole.
+                .task(id: unresolvedQuote?.id) {
+                    guard let unresolvedQuote else { return }
+                    await source.loadQuotedMessages(for: [unresolvedQuote])
                 }
                 .animation(.default, value: activeComposerMessageID)
                 .overlay {
@@ -340,24 +415,32 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                         }
                     }
                 }
-                // Outside the scroll modifiers above, so they never pick up
-                // a scroll view in the overlay's messages.
-                .overlay {
-                    if let quotedMessage {
-                        QuotedMessageOverlay(context: quotedMessage, chat: rowChat, dismiss: dismissQuotedMessage)
-                            .showsReactionPicker()
-                            .transition(.opacity)
-                    }
+                #if os(iOS)
+                // Above the composer, in the safe area it and the keyboard
+                // leave, without changing the composer's height.
+                .overlay(alignment: .bottom) {
+                    ComposerMentionSuggestions(composer: composer)
                 }
+                #endif
                 .environment(\.showQuotedMessage, ShowQuotedMessageAction { quoted, reply in
-                    let context = QuotedMessageContext(
-                        quoted: quoted,
-                        reply: reply,
-                        entries: timelineEntries,
-                        quotedMessages: source.quotedMessages
-                    )
+                    // Optimistic rows have no reply to stay in place, and a
+                    // reply or edit keeps the timeline's focus.
+                    guard let reply, composer.activeMessage == nil else { return }
+                    let focus = QuotedMessageFocus(rowID: TimelineEntry.rowID(for: reply.id, in: timelineEntries), quoted: quoted)
+                    revealedQuotedChainKey = nil
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-                        quotedMessage = context
+                        quotedFocus = focus
+                    }
+                })
+                // A chain reaching above the header moves its reply down,
+                // as far as the bottom, to make room for it.
+                .environment(\.revealQuotedMessageChain, RevealQuotedMessageChainAction { top, count in
+                    guard let quoteFocus, top < topContentInset else { return }
+                    let key = "\(quoteFocus.rowID)-\(count)"
+                    guard revealedQuotedChainKey != key else { return }
+                    revealedQuotedChainKey = key
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                        proxy.scrollTo(quoteFocus.rowID, anchor: .bottom)
                     }
                 })
                 .savesAttachments()
@@ -414,9 +497,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     }
 
     private func dismissQuotedMessage() {
-        guard quotedMessage != nil else { return }
+        guard quotedFocus != nil else { return }
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-            quotedMessage = nil
+            quotedFocus = nil
         }
     }
 
@@ -433,11 +516,12 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     }
 
     #if os(iOS)
-    /// Aligns the reply/edit target's bottom edge with the composer above the
-    /// keyboard. A message taller than the viewport keeps its end visible.
-    private func scrollAboveKeyboard(_ messageID: Message.ID, with proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.25)) {
-            proxy.scrollTo(messageID, anchor: .bottom)
+    /// Aligns the reply/edit target's bottom edge with the composer, above
+    /// the keyboard when it's up. A message taller than the viewport keeps
+    /// its end visible.
+    private func scrollAboveComposer(_ rowID: Message.ID, with proxy: ScrollViewProxy) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+            proxy.scrollTo(rowID, anchor: .bottom)
         }
     }
     #endif

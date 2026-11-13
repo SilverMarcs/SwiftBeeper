@@ -46,4 +46,7 @@ protocol TimelineSource: AnyObject {
     func showLatestTimeline()
     /// Called once the timeline has scrolled to `messageRevealRequest`.
     func finishMessageReveal()
+    /// Reads the messages `messages` quote into `quotedMessages`, when
+    /// neither holds them yet.
+    func loadQuotedMessages(for messages: [Message]) async
 }
