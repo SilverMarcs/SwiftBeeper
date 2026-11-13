@@ -4,6 +4,7 @@ import SwiftUI
 /// Searching shows matching chats, then matching messages.
 struct ChatListView: View {
     @Environment(ChatStore.self) private var chatStore
+    @AppStorage(ChatNetworkIcons.storageKey) private var showsNetworkIcons = true
     /// How many rows before the end the next page starts loading.
     private static let prefetchDistance = 10
 
@@ -13,12 +14,13 @@ struct ChatListView: View {
         // The next page loads while this row scrolls in, well before the end.
         let prefetchChatID = displayedChats.dropLast(Self.prefetchDistance).last?.id
         let isSearching = chatStore.isSearchActive
+        let networkImageURLs = showsNetworkIcons ? chatStore.networkImageURLsByAccountID : [:]
         List(selection: Bindable(chatStore).selectedChatID) {
             if isSearching {
                 if !displayedChats.isEmpty {
                     Section("Chats") {
                         ForEach(displayedChats) { chat in
-                            ChatListRow(chat: chat)
+                            ChatListRow(chat: chat, networkImageURL: chat.accountID.flatMap { networkImageURLs[$0] })
                         }
                     }
                 }
@@ -26,7 +28,7 @@ struct ChatListView: View {
                 MessageSearchSection()
             } else {
                 ForEach(displayedChats) { chat in
-                    ChatListRow(chat: chat)
+                    ChatListRow(chat: chat, networkImageURL: chat.accountID.flatMap { networkImageURLs[$0] })
                         .onAppear {
                             guard chat.id == prefetchChatID, chatStore.hasMoreChats, !chatStore.isSearchActive else { return }
                             Task { await chatStore.loadMoreChats() }

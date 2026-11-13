@@ -27,10 +27,22 @@ struct SessionOutput: Decodable, Equatable {
     let accounts: [Account]
 }
 
+/// One login: the Matrix account itself, or one network login on a bridge.
+/// A bridge with several logins, such as two Slack workspaces, has one
+/// account for each, and each chat names its login's `accountID`.
 struct Account: Decodable, Identifiable, Equatable {
     let accountID: String
+    /// The bridge, such as "slackgo". Its logins share it.
+    let bridgeID: String
     let user: ChatParticipant
+    /// The network's name, such as "WhatsApp".
     let network: String
+    /// How the bridge names the login, such as a phone number.
+    let loginName: String?
+    /// The network's logo as its bridge publishes it; nil when it doesn't.
+    let networkImgURL: String?
+    /// The login's workspace, on networks like Slack where each login is one.
+    let workspace: AccountWorkspace?
     let capabilities: AccountCapabilities
 
     var id: String { accountID }

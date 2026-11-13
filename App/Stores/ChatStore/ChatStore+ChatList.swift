@@ -15,36 +15,27 @@ extension ChatStore {
         return pins + chats.filter { !pinnedIDs.contains($0.id) }
     }
 
-    var availableServiceFilters: [ChatFilter] {
-        guard !connectedAccounts.isEmpty else {
-            return [
-                .service(serviceID: "whatsapp", name: "WhatsApp"),
-                .service(serviceID: "telegram", name: "Telegram"),
-                .service(serviceID: "facebookgo", name: "Facebook"),
-                .service(serviceID: "instagramgo", name: "Instagram"),
-                .service(serviceID: "signal", name: "Signal"),
-                .service(serviceID: "discordgo", name: "Discord"),
-                .service(serviceID: "slackgo", name: "Slack"),
-                .service(serviceID: "linkedin", name: "LinkedIn"),
-                .service(serviceID: "gmessages", name: "Google Messages"),
-                .service(serviceID: "gvoice", name: "Google Voice"),
-                .service(serviceID: "twitter", name: "Twitter/X"),
-                .service(serviceID: "imessage", name: "iMessage")
-            ]
-        }
-
-        var seen: Set<String> = []
-        return connectedAccounts.compactMap { account in
-            guard seen.insert(account.accountID).inserted else { return nil }
-            return .service(serviceID: account.accountID, name: account.network)
-        }
+    /// A filter for each connected login, by network and then name, so a
+    /// network's logins (such as two Slack workspaces) sit together.
+    var networkFilters: [NetworkFilter] {
+        let loginCounts = Dictionary(grouping: connectedAccounts, by: \.network).mapValues(\.count)
+        return connectedAccounts
+            .map { (network: $0.network, filter: NetworkFilter(account: $0, sharesNetwork: loginCounts[$0.network, default: 0] > 1)) }
+            .sorted { left, right in
+                let byNetwork = left.network.localizedStandardCompare(right.network)
+                guard byNetwork == .orderedSame else { return byNetwork == .orderedAscending }
+                let byTitle = left.filter.title.localizedStandardCompare(right.filter.title)
+                guard byTitle == .orderedSame else { return byTitle == .orderedAscending }
+                return (left.filter.subtitle ?? "").localizedStandardCompare(right.filter.subtitle ?? "") == .orderedAscending
+            }
+            .map(\.filter)
     }
 
-    /// The inbox the selected filter lists; a service filter lists its primary inbox.
+    /// The inbox the selected filter lists; a network filter lists its primary inbox.
     private var selectedInboxFilter: InboxFilter {
         switch selectedFilter {
         case .inbox(let inbox): inbox
-        case .service: .primary
+        case .network: .primary
         }
     }
 
@@ -434,8 +425,8 @@ extension ChatStore {
 
     /// Mirrors the core's inbox and exact account filtering for chat events.
     private func chatBelongsToCurrentFilter(_ chat: Chat) -> Bool {
-        if case .service(let accountID, _) = selectedFilter,
-           chat.accountID != accountID {
+        if case .network(let network) = selectedFilter,
+           chat.accountID != network.accountID {
             return false
         }
         switch selectedInboxFilter {

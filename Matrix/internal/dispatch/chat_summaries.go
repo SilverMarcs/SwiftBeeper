@@ -147,8 +147,12 @@ func (s *Dispatcher) loadChatMemberSummaries(ctx context.Context, rooms []*datab
 	if err != nil {
 		return nil, err
 	}
+	bridges, err := s.loadRoomBridges(ctx, roomArgs)
+	if err != nil {
+		return nil, err
+	}
 	for _, room := range rooms {
-		lookup.roomAccounts[room.ID] = inferAccountForRoom(room.ID, result[room.ID].accountMembers, lookup)
+		lookup.roomAccounts[room.ID] = inferAccountForRoom(room.ID, result[room.ID].accountMembers, bridges[room.ID], lookup)
 	}
 	return result, nil
 }

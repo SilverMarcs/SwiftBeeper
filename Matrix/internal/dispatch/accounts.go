@@ -38,13 +38,17 @@ type bridgeRunState struct {
 }
 
 type bridgeRemoteState struct {
+	RemoteName    string         `json:"remote_name"`
 	RemoteProfile map[string]any `json:"remote_profile"`
 	StateEvent    string         `json:"state_event"`
+	Info          map[string]any `json:"info"`
 }
 
-// accountLookup assigns rooms to accounts by the bridge ghosts in them.
+// accountLookup assigns rooms to accounts by their bridge info, or by the
+// bridge ghosts in them.
 type accountLookup struct {
 	accounts []wire.Account
+	// Each bridge's logins, in bridge state order.
 	byBridge map[string][]wire.Account
 	// Bridge IDs longest first, so the most specific prefix matches.
 	bridgeIDs []string
@@ -71,6 +75,8 @@ func (s *Dispatcher) getSession(ctx context.Context) (any, error) {
 		user = newUser(string(cli.Account.UserID), profile.DisplayName, profile.AvatarURL.String(), "", true)
 	}
 
+	// Logos and workspaces are only shown, so a failure leaves them out.
+	_ = s.fillNetworkDetails(ctx, accounts)
 	return wire.SessionOutput{User: user, Accounts: accounts}, nil
 }
 
@@ -128,6 +134,7 @@ func (s *Dispatcher) loadAccounts(ctx context.Context) ([]wire.Account, error) {
 
 	accounts := []wire.Account{{
 		AccountID: matrixAccountID,
+		BridgeID:  matrixAccountID,
 		Network:   "Beeper",
 		User:      newUser(string(cli.Account.UserID), "", "", "", true),
 	}}
@@ -144,16 +151,35 @@ func (s *Dispatcher) loadAccounts(ctx context.Context) ([]wire.Account, error) {
 			if remoteState == "DELETED" || remoteState == "LOGGED_OUT" {
 				continue
 			}
-			accounts = append(accounts, wire.Account{
-				AccountID:    bridgeID,
+			account := wire.Account{
+				AccountID:    loginAccountID(bridgeID, remoteID),
+				BridgeID:     bridgeID,
 				Network:      networkFromBridgeID(bridgeID),
+				LoginName:    strings.TrimSpace(remote.RemoteName),
 				User:         userFromBridgeProfile(remoteID, remote.RemoteProfile),
 				Capabilities: capabilitiesForBridge(bridgeID),
-			})
+			}
+			if teamID := firstString(remote.Info, "slack_team_id"); teamID != "" {
+				account.Workspace = &wire.Workspace{ID: teamID, Name: workspaceName(remote.RemoteName)}
+			}
+			accounts = append(accounts, account)
 		}
 	}
 	s.accountsCache.set(cli.Account.UserID, content, accounts)
 	return slices.Clone(accounts), nil
+}
+
+// loginAccountID identifies one login on a bridge. Remote IDs are unique only
+// within their bridge.
+func loginAccountID(bridgeID, remoteID string) string {
+	return bridgeID + "/" + remoteID
+}
+
+// workspaceName is the team in a Slack login's remote name, which reads
+// "Team - email".
+func workspaceName(remoteName string) string {
+	name, _, _ := strings.Cut(remoteName, " - ")
+	return strings.TrimSpace(name)
 }
 
 func sortedMapKeys[Value any](values map[string]Value) []string {
@@ -173,11 +199,21 @@ func capabilitiesForBridge(bridgeID string) wire.AccountCapabilities {
 	}
 }
 
-// inferAccountForRoom picks the account whose bridge ghosts are in the room,
-// falling back to a bridge named in the room's server, then the Matrix account.
-func inferAccountForRoom(roomID id.RoomID, members []wire.User, lookup *accountLookup) string {
+// inferAccountForRoom picks the login the room's bridge info names, falling
+// back to the bridge whose ghosts are in the room, then a bridge named in the
+// room's server, then the Matrix account.
+func inferAccountForRoom(roomID id.RoomID, members []wire.User, bridges []roomBridge, lookup *accountLookup) string {
 	if len(lookup.accounts) == 0 {
 		return ""
+	}
+	receiver := ""
+	for _, bridge := range bridges {
+		if logins := lookup.byBridge[bridge.protocolID]; len(logins) > 0 {
+			return loginForReceiver(logins, bridge.receiver)
+		}
+		if receiver == "" {
+			receiver = bridge.receiver
+		}
 	}
 	for _, member := range members {
 		if member.IsSelf {
@@ -190,17 +226,31 @@ func inferAccountForRoom(roomID id.RoomID, members []wire.User, lookup *accountL
 		}
 		for _, bridgeID := range lookup.bridgeIDs {
 			if strings.HasPrefix(localpart, bridgeID+"_") {
-				return lookup.byBridge[bridgeID][0].AccountID
+				return loginForReceiver(lookup.byBridge[bridgeID], receiver)
 			}
 		}
 	}
 	_, server, _ := strings.Cut(string(roomID), ":")
 	for _, bridgeID := range lookup.bridgeIDs {
 		if strings.Contains(server, bridgeID) {
-			return lookup.byBridge[bridgeID][0].AccountID
+			return loginForReceiver(lookup.byBridge[bridgeID], receiver)
 		}
 	}
 	return lookup.accounts[0].AccountID
+}
+
+// loginForReceiver picks the bridge login whose remote ID is the room's
+// receiver. A room without one, such as a Discord server channel several
+// logins share, goes to the bridge's first login.
+func loginForReceiver(logins []wire.Account, receiver string) string {
+	if receiver != "" {
+		for _, login := range logins {
+			if login.User.ID == receiver {
+				return login.AccountID
+			}
+		}
+	}
+	return logins[0].AccountID
 }
 
 func networkFromBridgeID(bridgeID string) string {
@@ -230,6 +280,10 @@ func networkFromBridgeID(bridgeID string) string {
 		return "Google Voice"
 	case "imessage", "imessagecloud":
 		return "iMessage"
+	case "wechat":
+		return "WeChat"
+	case "chatgpt-dots":
+		return "ChatGPT"
 	case "":
 		return "Unknown"
 	default:

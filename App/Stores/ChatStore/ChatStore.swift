@@ -217,9 +217,30 @@ final class ChatStore {
     /// Whether the chat list may still be behind the server.
     var isCatchingUp: Bool { isSignedIn && syncStatus.isCatchingUp }
 
+    /// The login a chat's `accountID` names, with its network's name and logo.
+    func account(forAccountID accountID: String?) -> Account? {
+        guard let accountID else { return nil }
+        return connectedAccounts.first { $0.accountID == accountID }
+    }
+
+    /// The image badging each login's chat avatars: its workspace's icon on
+    /// networks like Slack, otherwise its network's logo. Logins with
+    /// neither, such as the Matrix account, are left out.
+    var networkImageURLsByAccountID: [String: String] {
+        var urls: [String: String] = [:]
+        for account in connectedAccounts {
+            let url = [account.workspace?.imgURL, account.networkImgURL]
+                .lazy
+                .compactMap { $0?.trimmed }
+                .first { !$0.isEmpty }
+            if let url { urls[account.accountID] = url }
+        }
+        return urls
+    }
+
     /// The bridged network name for a connected account, such as "WhatsApp".
     func networkName(forAccountID accountID: String?) -> String? {
-        connectedAccounts.first { $0.accountID == accountID }?.network
+        account(forAccountID: accountID)?.network
     }
 
     // MARK: - Lifecycle

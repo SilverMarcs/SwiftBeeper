@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage("autoplay") private var autoplay = true
     @AppStorage("muteOnPlay") private var muteOnPlay = false
     @AppStorage(MessageTextSelection.storageKey) private var selectsMessageText = true
+    @AppStorage(ChatNetworkIcons.storageKey) private var showsNetworkIcons = true
 
     var body: some View {
         NavigationStack {
@@ -15,6 +16,16 @@ struct SettingsView: View {
 
                 if sessionStore.isSignedIn {
                     NotificationSettingsSection()
+                }
+
+                Section {
+                    Toggle(isOn: $showsNetworkIcons) {
+                        Label("Show Network Icons", systemImage: "app.badge")
+                    }
+                } header: {
+                    Text("Chat List")
+                } footer: {
+                    Text("Marks each chat's avatar with the logo of its network, such as WhatsApp or Slack.")
                 }
 
                 Section {

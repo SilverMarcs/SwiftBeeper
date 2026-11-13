@@ -4,13 +4,15 @@ import SwiftUI
 /// swipe and context-menu actions.
 struct ChatRowView: View {
     let chat: Chat
+    /// The logo badging the avatar; nil shows the plain avatar.
+    let networkImageURL: String?
 
     var body: some View {
         HStack(spacing: 8) {
             #if os(macOS)
-            ChatAvatarView(chat: chat, dimension: 43)
+            NetworkBadgedAvatarView(chat: chat, dimension: 43, networkImageURL: networkImageURL)
             #else
-            ChatAvatarView(chat: chat, dimension: 48)
+            NetworkBadgedAvatarView(chat: chat, dimension: 48, networkImageURL: networkImageURL)
             #endif
 
             VStack(alignment: .leading, spacing: 4) {

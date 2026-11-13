@@ -15,11 +15,32 @@ type User struct {
 	Username string `json:"username"`
 }
 
+// Account is one login: the Matrix account itself, or one network login on a
+// bridge. A bridge with several logins, such as two Slack workspaces, has one
+// account for each.
 type Account struct {
-	AccountID    string              `json:"accountID"`
-	User         User                `json:"user"`
-	Network      string              `json:"network"`
+	// AccountID is unique per login. Chats carry it to name their login.
+	AccountID string `json:"accountID"`
+	// BridgeID names the bridge, such as "slackgo"; its logins share it.
+	BridgeID string `json:"bridgeID"`
+	User     User   `json:"user"`
+	Network  string `json:"network"`
+	// LoginName is how the bridge names the login, such as a phone number.
+	LoginName string `json:"loginName,omitempty"`
+	// NetworkImgURL is the network's logo as its bridge publishes it, an
+	// mxc:// URI. Empty when the bridge publishes none.
+	NetworkImgURL string `json:"networkImgURL,omitempty"`
+	// Workspace is the team the login is in, on networks like Slack where
+	// each login is one workspace.
+	Workspace    *Workspace          `json:"workspace,omitempty"`
 	Capabilities AccountCapabilities `json:"capabilities"`
+}
+
+// Workspace is a Slack-style team one login belongs to.
+type Workspace struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	ImgURL string `json:"imgURL,omitempty"`
 }
 
 type AccountCapabilities struct {
