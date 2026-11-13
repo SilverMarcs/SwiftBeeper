@@ -10,13 +10,19 @@ struct MessageTextView: View {
     var expansionID: String?
     @Environment(\.displayScale) private var displayScale
     @Environment(\.expandedMessages) private var expandedMessages
+    @Environment(\.selfMentionUserID) private var selfMentionUserID
 
     var body: some View {
+        // The user's own messages don't need their mentions of themselves found.
+        let highlightedUserID = isOutgoing ? nil : selfMentionUserID
         MessageTextLayout(displayScale: displayScale) {
-            if let expansionID, let expandedMessages, let preview = text.collapsedMessageBlocks {
+            if let expansionID, let expandedMessages, let preview = text.collapsedMessageBlocks(highlightingMentionOf: highlightedUserID) {
                 let isExpanded = expandedMessages.contains(expansionID)
                 VStack(alignment: .trailing, spacing: 3) {
-                    MessageBlocksText(blocks: isExpanded ? text.messageBlocks : preview, isOutgoing: isOutgoing)
+                    MessageBlocksText(
+                        blocks: isExpanded ? text.messageBlocks(highlightingMentionOf: highlightedUserID) : preview,
+                        isOutgoing: isOutgoing
+                    )
                     Button(isExpanded ? "Show Less" : "Show More") {
                         expandedMessages.toggle(expansionID)
                     }
@@ -25,7 +31,7 @@ struct MessageTextView: View {
                     .foregroundStyle(isOutgoing ? .white : .primary)
                 }
             } else {
-                MessageBlocksText(blocks: text.messageBlocks, isOutgoing: isOutgoing)
+                MessageBlocksText(blocks: text.messageBlocks(highlightingMentionOf: highlightedUserID), isOutgoing: isOutgoing)
             }
         }
     }
