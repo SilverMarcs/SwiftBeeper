@@ -1,17 +1,23 @@
 import SwiftUI
 
-/// Two to four member avatars arranged inside one circle.
+/// Two to five member avatars of varying sizes floating inside one circle,
+/// with the first member largest at the top left.
 struct GroupChatAvatarView: View {
     let title: String
     let participants: [ChatParticipant]
     let dimension: CGFloat
 
+    /// The most member avatars the collage shows.
+    private static let maximumAvatarCount = 5
+
     /// Each avatar's size and center offset as fractions of `dimension`,
-    /// indexed by avatar count minus two.
+    /// indexed by avatar count minus two. Every bubble sits fully inside the
+    /// circle with a small gap between neighbours.
     private static let layouts: [[(size: CGFloat, x: CGFloat, y: CGFloat)]] = [
-        [(0.56, -0.16, -0.08), (0.56, 0.16, 0.12)],
-        [(0.46, -0.17, -0.16), (0.42, 0.18, -0.04), (0.44, -0.02, 0.2)],
-        [(0.4, -0.18, -0.16), (0.38, 0.19, -0.08), (0.38, -0.16, 0.18), (0.36, 0.17, 0.2)],
+        [(0.5, -0.13, -0.11), (0.36, 0.2, 0.2)],
+        [(0.5, -0.13, -0.13), (0.36, 0.24, 0.14), (0.28, -0.12, 0.27)],
+        [(0.48, -0.14, -0.14), (0.36, 0.25, 0.08), (0.32, -0.08, 0.26), (0.22, 0.22, -0.26)],
+        [(0.48, -0.145, -0.145), (0.22, 0.24, -0.25), (0.345, 0.25, 0.075), (0.26, -0.06, 0.27), (0.16, -0.305, 0.205)],
     ]
 
     var body: some View {
@@ -35,9 +41,9 @@ struct GroupChatAvatarView: View {
         .clipShape(.circle)
     }
 
-    /// Up to four members, padded with initials-only avatars to at least two.
+    /// Up to five members, padded with initials-only avatars to at least two.
     private var avatars: [(name: String, imageURL: String?)] {
-        let members = participants.prefix(4).map { (name: $0.displayName, imageURL: $0.imgURL) }
+        let members = participants.prefix(Self.maximumAvatarCount).map { (name: $0.displayName, imageURL: $0.imgURL) }
         switch members.count {
         case 0: return [(title, nil), ("Group", nil)]
         case 1: return [members[0], (title, nil)]
