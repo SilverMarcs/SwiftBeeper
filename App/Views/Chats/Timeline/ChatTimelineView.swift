@@ -158,18 +158,18 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     // ends only from its toolbar button, so a stray tap
                     // can't throw away the changes.
                     .background {
-                        if quoteFocus != nil {
-                            Button("Close", action: dismissQuotedMessage)
-                                .buttonStyle(TimelineFocusBackdropStyle(label: "Close"))
-                                .keyboardShortcut(.cancelAction)
-                        } else if composer.replyingTo != nil, !composer.isEditing {
-                            // The toolbar's Cancel Reply has the Escape key.
-                            Button("Cancel Reply") {
-                                inputManager.cancelAction(in: composer)
-                            }
-                            .buttonStyle(TimelineFocusBackdropStyle(label: "Cancel Reply"))
+                        if let dismiss = dismissFocusAction(quoteFocus: quoteFocus, composer: composer) {
+                            Button(dismiss.label, action: dismiss.callAsFunction)
+                                .buttonStyle(TimelineFocusBackdropStyle(label: dismiss.label))
+                                // The toolbar's Cancel Reply has the Escape
+                                // key while replying.
+                                .keyboardShortcut(quoteFocus != nil ? .cancelAction : nil)
                         }
                     }
+                    .environment(\.dismissTimelineFocus, dismissFocusAction(
+                        quoteFocus: quoteFocus,
+                        composer: composer
+                    ))
                     #if os(iOS)
                     .followsComposerOnKeyboard(composer, restingPosition: restingPosition)
                     .dismissesComposerOnTap { [composer] in
@@ -494,6 +494,20 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// them there.
     private var isFollowingLatest: Bool {
         isNearBottom || isScrollingToLatest
+    }
+
+    /// What a tap around the focused messages returns from: a shown quote,
+    /// or else a reply. Nil while editing or when nothing is focused.
+    private func dismissFocusAction(quoteFocus: QuotedMessageFocus?, composer: Composer) -> DismissTimelineFocusAction? {
+        if let quoteFocus {
+            return DismissTimelineFocusAction(id: "quote-\(quoteFocus.rowID)", label: "Close", action: dismissQuotedMessage)
+        }
+        if let reply = composer.replyingTo, !composer.isEditing {
+            return DismissTimelineFocusAction(id: "reply-\(reply.id)", label: "Cancel Reply") { [inputManager] in
+                inputManager.cancelAction(in: composer)
+            }
+        }
+        return nil
     }
 
     private func dismissQuotedMessage() {
