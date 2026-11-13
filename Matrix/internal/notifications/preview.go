@@ -274,24 +274,81 @@ func notificationBody(ctx context.Context, cli *mautrix.Client, req Request, sen
 		message = *message.NewContent
 	}
 	message.RemoveReplyFallback()
-	body := message.Body
-	switch message.MsgType {
-	case event.MsgImage:
-		body = "Photo"
-	case event.MsgVideo:
-		body = "Video"
-	case event.MsgAudio:
-		body = "Audio message"
-	case event.MsgFile:
-		body = "File: " + body
-	}
-	if typ == event.EventSticker.Type {
-		body = "Sticker"
-	}
+	body := messageSummary(typ, &message)
 	if strings.TrimSpace(body) == "" {
 		body = "New message"
 	}
 	return body, "", nil
+}
+
+// messageSummary is a message's notification text. Media leads with an emoji
+// for its kind, then the authored caption, or the kind's name without one.
+// Matrix media fills Body with the filename when there's no caption, so the
+// caption comes from GetCaption rather than Body.
+func messageSummary(typ string, message *event.MessageEventContent) string {
+	if typ == event.EventSticker.Type {
+		// A sticker's body is its alt text, which bridges set to the emoji
+		// it stands for.
+		if alt := strings.TrimSpace(message.Body); isEmojiOnly(alt) {
+			return alt + " Sticker"
+		}
+		return "Sticker"
+	}
+	caption := strings.TrimSpace(message.GetCaption())
+	withCaption := func(emoji, name string) string {
+		if caption == "" {
+			return emoji + " " + name
+		}
+		return emoji + " " + caption
+	}
+	switch message.MsgType {
+	case event.MsgImage:
+		if message.Info != nil && (message.Info.MauGIF || message.Info.MimeType == "image/gif") {
+			return withCaption("🎞️", "GIF")
+		}
+		return withCaption("📷", "Photo")
+	case event.MsgVideo:
+		if message.Info != nil && message.Info.MauGIF {
+			return withCaption("🎞️", "GIF")
+		}
+		return withCaption("🎥", "Video")
+	case event.MsgAudio:
+		if message.MSC3245Voice != nil {
+			return withCaption("🎤", "Voice message")
+		}
+		return withCaption("🎵", "Audio")
+	case event.MsgFile:
+		name := strings.TrimSpace(message.GetFileName())
+		if name == "" {
+			name = "File"
+		}
+		return withCaption("📎", name)
+	case event.MsgLocation:
+		return "📍 Location"
+	}
+	return message.Body
+}
+
+// isEmojiOnly reports whether s is one or more emoji, with their joiners,
+// variation selectors and skin tone modifiers.
+func isEmojiOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	hasEmoji := false
+	for _, r := range s {
+		switch {
+		case r == 0x200D || r == 0xFE0F || (r >= 0x1F3FB && r <= 0x1F3FF) || (r >= 0xE0020 && r <= 0xE007F):
+			// Zero-width joiner, emoji presentation, skin tones, flag tags.
+		case (r >= 0x1F000 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) || (r >= 0x2B00 && r <= 0x2BFF) ||
+			(r >= 0x2190 && r <= 0x21FF) || (r >= 0x2300 && r <= 0x23FF) || r == 0x00A9 || r == 0x00AE ||
+			r == 0x203C || r == 0x2049 || r == 0x2122 || r == 0x2139 || r == 0x3030 || r == 0x303D:
+			hasEmoji = true
+		default:
+			return false
+		}
+	}
+	return hasEmoji
 }
 
 func truncate(s string, limit int) string {
