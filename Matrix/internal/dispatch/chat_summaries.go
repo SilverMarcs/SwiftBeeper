@@ -97,11 +97,17 @@ func (s *Dispatcher) loadChatMemberSummaries(ctx context.Context, rooms []*datab
 		ghostClauses = append(ghostClauses, "cs.state_key GLOB ?")
 		ghostArgs = append(ghostArgs, "@"+bridge+"_*:*")
 	}
+	// A sample as small as the chat list's only draws group avatars, so it
+	// takes members with a photo first; longer lists keep name order.
+	avatarOrder := ""
+	if limit <= chatPreviewParticipants {
+		avatarOrder = "COALESCE(TRIM(json_extract(e.content,'$.avatar_url')),'')='',"
+	}
 	// Include the first bridge ghost even if it falls outside the avatar sample,
 	// so a small participant limit cannot change a room's network/account.
 	query := `WITH members AS (
         SELECT cs.room_id, cs.state_key, e.content,
-          ROW_NUMBER() OVER (PARTITION BY cs.room_id ORDER BY COALESCE(NULLIF(TRIM(json_extract(e.content,'$.displayname')),''),cs.state_key),cs.state_key) AS rank,
+          ROW_NUMBER() OVER (PARTITION BY cs.room_id ORDER BY ` + avatarOrder + `COALESCE(NULLIF(TRIM(json_extract(e.content,'$.displayname')),''),cs.state_key),cs.state_key) AS rank,
           COUNT(*) OVER (PARTITION BY cs.room_id) AS total,
           (` + strings.Join(ghostClauses, " OR ") + `) AS ghost
         FROM current_state cs JOIN event e ON e.rowid=cs.event_rowid
@@ -130,9 +136,12 @@ func (s *Dispatcher) loadChatMemberSummaries(ctx context.Context, rooms []*datab
 		}
 		summary := result[roomID]
 		summary.total = total
+		// A member event the core can't read still counts towards the
+		// total, so it stays listed, by its user ID, rather than leaving the
+		// list looking incomplete.
 		var member event.MemberEventContent
 		if json.Unmarshal(content, &member) != nil {
-			continue
+			member = event.MemberEventContent{}
 		}
 		summary.isDirect = summary.isDirect || member.IsDirect
 		user := userFromMemberEvent(userID, member, self)

@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Two to five member avatars of varying sizes floating inside one circle,
-/// with the first member largest at the top left.
+/// with the first member largest at the top left. Members with photos come
+/// first; initials stand in only when too few have one.
 struct GroupChatAvatarView: View {
     let title: String
     /// Colours the title's initials when they stand in for a member.
@@ -44,9 +45,13 @@ struct GroupChatAvatarView: View {
         .clipShape(.circle)
     }
 
-    /// Up to five members, padded with initials-only avatars to at least two.
+    /// Up to five members with photos. Only when fewer than two have one do
+    /// members without, then the title, fill in as initials, to at least two.
     private var avatars: [(name: String, colorID: String, imageURL: String?)] {
-        let members = participants.prefix(Self.maximumAvatarCount).map { (name: $0.displayName, colorID: $0.id, imageURL: $0.imgURL) }
+        let withPhotos = participants.filter { $0.imgURL?.isBlank == false }
+        let withoutPhotos = participants.filter { $0.imgURL?.isBlank != false }
+        let shown = withPhotos.count >= 2 ? withPhotos : withPhotos + withoutPhotos.prefix(2 - withPhotos.count)
+        let members = shown.prefix(Self.maximumAvatarCount).map { (name: $0.displayName, colorID: $0.id, imageURL: $0.imgURL) }
         switch members.count {
         case 0: return [(title, chatID, nil), ("Group", "Group", nil)]
         case 1: return [members[0], (title, chatID, nil)]
