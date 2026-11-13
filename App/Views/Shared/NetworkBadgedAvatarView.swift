@@ -11,7 +11,7 @@ struct NetworkBadgedAvatarView: View {
 
     var body: some View {
         if let networkImageURL {
-            let badge = dimension * 0.4
+            let badge = dimension * 0.3
             let gap = dimension * 0.04
             let cutout = badge + gap * 2
             ChatAvatarView(chat: chat, dimension: dimension)

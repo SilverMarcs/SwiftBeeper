@@ -8,14 +8,9 @@ struct ChatHeaderNameButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                Text(title)
-                    .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .imageScale(.small)
-                    .foregroundStyle(.secondary)
-            }
-            .font(.subheadline.bold())
+            Text(title)
+                .lineLimit(1)
+                .font(.subheadline.bold())
         }
         .buttonStyle(.glass)
         .accessibilityHint("Shows chat info")

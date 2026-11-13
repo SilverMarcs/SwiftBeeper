@@ -23,8 +23,6 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Chat List")
-                } footer: {
-                    Text("Marks each chat's avatar with the logo of its network, such as WhatsApp or Slack.")
                 }
 
                 Section("Playback") {
