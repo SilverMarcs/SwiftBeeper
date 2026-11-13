@@ -8,8 +8,12 @@ struct TimelineItemRow: View {
     /// edits its message, or while its quote is shown; every other row
     /// recedes. Nil leaves the timeline as it is.
     let focusedRowID: Message.ID?
-    /// For the focused reply whose quote was tapped, the messages it quotes.
-    let quotedChain: [TimelineEntry]
+    /// For the reply whose quote was tapped, the messages it shows above
+    /// itself.
+    let quotedChain: QuotedMessageChainPresentation?
+    /// Whether this row's message is shown in that chain, leaving its own
+    /// place empty.
+    let quotedChainState: QuotedChainRowState
     @Environment(\.reactionPicker) private var reactionPicker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var bubbleNamespace
@@ -26,7 +30,8 @@ struct TimelineItemRow: View {
                     chat: chat,
                     showsUnreadDivider: entry.message.id == firstUnreadID,
                     focusedRowID: focusedRowID,
-                    quotedChain: quotedChain
+                    quotedChain: quotedChain,
+                    quotedChainState: quotedChainState
                 )
                 // Reply navigation still addresses the canonical message ID.
                 .id(entry.message.id)

@@ -5,6 +5,13 @@ enum ChatVisualStyle {
     /// Duration of the incoming bubble's expansion.
     static let typingBubbleExpansionDuration = 0.35
 
+    /// How a tapped quote's messages move between their rows and the chain
+    /// above the reply, and the timeline recedes around them. Reduce Motion
+    /// keeps only a short fade.
+    static func quotedMessageAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.35)
+    }
+
     #if os(macOS)
     static let bubbleHorizontalPadding: CGFloat = 12
     static let bubbleVerticalPadding: CGFloat = 8

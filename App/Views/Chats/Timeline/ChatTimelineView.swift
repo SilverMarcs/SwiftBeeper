@@ -27,6 +27,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @State private var selectableMessages = SelectableMessages()
     /// Keeps the reader's row in place when older pages land above it.
     @State private var scrollAnchor = TimelineScrollAnchor()
+    /// Where rows sit, for the quoted messages a tapped quote moves up.
+    @State private var rowFrames = TimelineRowFrames()
     /// The reply whose tapped quote the timeline focuses on, with the
     /// messages it quotes above it.
     @State private var quotedFocus: QuotedMessageFocus?
@@ -96,8 +98,18 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             } ?? []
             // The oldest quote in the chain, when it quotes one not loaded yet.
             let unresolvedQuote = quotedChain.first.flatMap { $0.linkedMessage == nil && $0.message.linkedMessageID?.isEmpty == false ? $0.message : nil }
-            // The row the timeline focuses on, dimming the rest.
-            let focusedRowID = quoteFocus?.rowID
+            // The row the timeline focuses on, dimming the rest. A chain on
+            // its way back to the timeline no longer holds it.
+            let presentedQuoteFocus = quoteFocus?.isPresented == true ? quoteFocus : nil
+            let quotedChainPresentation = quoteFocus.map {
+                QuotedMessageChainPresentation(id: $0.id, entries: quotedChain, origins: $0.origins, isPresented: $0.isPresented)
+            }
+            // Rows whose message the chain shows stand empty meanwhile, the
+            // ones off screen at the tap included, as it may scroll them in.
+            let quotedChainRowIDs = quoteFocus.map {
+                QuotedMessageChain.rowIDs(of: quotedChain, in: timelineEntries, replyRowID: $0.rowID)
+            } ?? []
+            let focusedRowID = presentedQuoteFocus?.rowID
                 ?? activeComposerMessageID.map { TimelineEntry.rowID(for: $0, in: timelineEntries) }
             // Rows get the chat without its preview and unread state, so each
             // new message or read doesn't re-render every row.
@@ -124,7 +136,15 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     chat: rowChat,
                                     firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
                                     focusedRowID: focusedRowID,
-                                    quotedChain: isQuoteReply ? quotedChain : []
+                                    quotedChain: isQuoteReply ? quotedChainPresentation : nil,
+                                    // Its bubble is shown up in the chain. One
+                                    // that moves stays hidden until it's back;
+                                    // the rest fade back in as the chain fades.
+                                    quotedChainState: item.scrollTargetID.flatMap { rowID -> QuotedChainRowState? in
+                                        guard let quoteFocus, quotedChainRowIDs.contains(rowID) else { return nil }
+                                        let moves = quoteFocus.origins[rowID] != nil
+                                        return quoteFocus.isPresented || moves ? .shownAbove(moves: moves) : nil
+                                    } ?? .inTimeline
                                 )
                                 // Its quotes float over the rows above it.
                                 .zIndex(isQuoteReply ? 1 : 0)
@@ -136,10 +156,19 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                 } action: { frame in
                                     guard let rowID = item.scrollTargetID else { return }
                                     scrollAnchor.update(rowID, frame: frame)
+                                    rowFrames.update(rowID, visibleFrame: frame)
+                                }
+                                .onGeometryChange(for: CGFloat.self) { geometry in
+                                    geometry.frame(in: .timelineContent).maxY
+                                } action: { maxY in
+                                    guard let rowID = item.scrollTargetID else { return }
+                                    rowFrames.update(rowID, contentBottomEdge: maxY)
                                 }
                                 .onDisappear {
                                     guard let rowID = item.scrollTargetID else { return }
                                     scrollAnchor.update(rowID, frame: nil)
+                                    rowFrames.update(rowID, visibleFrame: nil)
+                                    rowFrames.update(rowID, contentBottomEdge: nil)
                                 }
                             }
                         }
@@ -153,21 +182,24 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                             .id(bottomAnchorID)
                             .accessibilityHidden(true)
                     }
+                    // Where a quoted message's copy finds the row it moves
+                    // from, however the timeline scrolls meanwhile.
+                    .coordinateSpace(.timelineContent)
                     // Receded rows let taps through to this, which returns
                     // from a shown quote or a reply to the timeline. An edit
                     // ends only from its toolbar button, so a stray tap
                     // can't throw away the changes.
                     .background {
-                        if let dismiss = dismissFocusAction(quoteFocus: quoteFocus, composer: composer) {
+                        if let dismiss = dismissFocusAction(quoteFocus: presentedQuoteFocus, composer: composer) {
                             Button(dismiss.label, action: dismiss.callAsFunction)
                                 .buttonStyle(TimelineFocusBackdropStyle(label: dismiss.label))
                                 // The toolbar's Cancel Reply has the Escape
                                 // key while replying.
-                                .keyboardShortcut(quoteFocus != nil ? .cancelAction : nil)
+                                .keyboardShortcut(presentedQuoteFocus != nil ? .cancelAction : nil)
                         }
                     }
                     .environment(\.dismissTimelineFocus, dismissFocusAction(
-                        quoteFocus: quoteFocus,
+                        quoteFocus: presentedQuoteFocus,
                         composer: composer
                     ))
                     #if os(iOS)
@@ -264,6 +296,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     geometry
                 } action: { _, geometry in
                     scrollAnchor.update(geometry)
+                    rowFrames.containerHeight = geometry.containerSize.height
                 }
                 // Older rows or the history header changed above the reader:
                 // put the row they were looking at back where it was.
@@ -303,6 +336,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .onChange(of: target, initial: true) { _, _ in
                     quotedFocus = nil
                     revealedQuotedChainKey = nil
+                    rowFrames.reset()
                     #if os(iOS)
                     composerRevealTask?.cancel()
                     #endif
@@ -426,16 +460,22 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     // Optimistic rows have no reply to stay in place, and a
                     // reply or edit keeps the timeline's focus.
                     guard let reply, composer.activeMessage == nil else { return }
-                    let focus = QuotedMessageFocus(rowID: TimelineEntry.rowID(for: reply.id, in: timelineEntries), quoted: quoted)
+                    let rowID = TimelineEntry.rowID(for: reply.id, in: timelineEntries)
+                    let chain = QuotedMessageChain.entries(from: quoted, timeline: timelineEntries, quotedMessages: source.quotedMessages)
+                    // Quoted messages on screen move up from their rows;
+                    // with Reduce Motion every one fades in.
+                    let origins = reduceMotion ? [:] : rowFrames.visibleBottomEdges(
+                        of: QuotedMessageChain.rowIDs(of: chain, in: timelineEntries, replyRowID: rowID)
+                    )
                     revealedQuotedChainKey = nil
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-                        quotedFocus = focus
+                    withAnimation(ChatVisualStyle.quotedMessageAnimation(reduceMotion: reduceMotion)) {
+                        quotedFocus = QuotedMessageFocus(rowID: rowID, quoted: quoted, origins: origins)
                     }
                 })
                 // A chain reaching above the header moves its reply down,
                 // as far as the bottom, to make room for it.
                 .environment(\.revealQuotedMessageChain, RevealQuotedMessageChainAction { top, count in
-                    guard let quoteFocus, top < topContentInset else { return }
+                    guard let quoteFocus = presentedQuoteFocus, top < topContentInset else { return }
                     let key = "\(quoteFocus.rowID)-\(count)"
                     guard revealedQuotedChainKey != key else { return }
                     revealedQuotedChainKey = key
@@ -510,9 +550,14 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         return nil
     }
 
+    /// Sends the chain's messages back to their rows, then removes it.
     private func dismissQuotedMessage() {
-        guard quotedFocus != nil else { return }
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+        guard let focus = quotedFocus, focus.isPresented else { return }
+        withAnimation(ChatVisualStyle.quotedMessageAnimation(reduceMotion: reduceMotion)) {
+            quotedFocus?.isPresented = false
+        } completion: {
+            // A quote tapped meanwhile keeps its own chain.
+            guard quotedFocus?.id == focus.id else { return }
             quotedFocus = nil
         }
     }

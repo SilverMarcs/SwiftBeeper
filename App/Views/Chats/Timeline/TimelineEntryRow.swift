@@ -9,8 +9,11 @@ struct TimelineEntryRow: View {
     let showsUnreadDivider: Bool
     let focusedRowID: Message.ID?
     /// The messages this reply quotes, floated above it while its quote is
-    /// shown. Empty otherwise.
-    let quotedChain: [TimelineEntry]
+    /// shown. Nil otherwise.
+    let quotedChain: QuotedMessageChainPresentation?
+    /// Whether this message is shown above a reply whose quote was tapped:
+    /// its bubble moved there, and the row keeps only its space.
+    let quotedChainState: QuotedChainRowState
     @Environment(\.dismissTimelineFocus) private var dismissTimelineFocus
 
     var body: some View {
@@ -31,7 +34,16 @@ struct TimelineEntryRow: View {
             }
 
             MessageRowView(entry: entry, chat: chat)
+                // Its own quote recedes: what it stands for is shown above.
+                .environment(\.recedesReplyPreview, quotedChain?.isPresented == true)
                 .timelineFocus(isIdle || isFocusedRow)
+                // Under its copy above, which starts over it and ends back
+                // over it, so the bubble seems to move: it hides and returns
+                // at once. One whose copy only fades fades with it.
+                .opacity(quotedChainState.isShownAbove ? 0 : 1)
+                .transaction(value: quotedChainState) { transaction in
+                    if quotedChainState.moves { transaction.animation = nil }
+                }
                 .timelineRowPadding(startsSenderRun: entry.startsSenderRun)
                 // The swipe actions below take taps across the row's whole
                 // width, so the focused row returns to the timeline from the
@@ -54,11 +66,14 @@ struct TimelineEntryRow: View {
                 // edge, reaching up; an alignment guide in an overlay isn't
                 // honoured everywhere and left it covering the reply.
                 .overlay(alignment: .top) {
-                    if !quotedChain.isEmpty {
-                        QuotedMessageChainView(entries: quotedChain, chat: chat)
+                    if let quotedChain {
+                        QuotedMessageChainView(presentation: quotedChain, chat: chat)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(height: 0, alignment: .bottom)
-                            .transition(.opacity)
+                            // Each tap starts its own chain from the rows.
+                            .id(quotedChain.id)
+                            // Its messages move and fade by themselves.
+                            .transition(.identity)
                     }
                 }
         }

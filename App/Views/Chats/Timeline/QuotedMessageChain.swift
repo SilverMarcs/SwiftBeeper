@@ -37,4 +37,17 @@ enum QuotedMessageChain {
             )
         }
     }
+
+    /// The timeline rows the chain's messages have to themselves, which give
+    /// up their bubble to the chain while it shows. A gallery's photo isn't
+    /// one: the rest of its row would go with it. Nor is the reply's own.
+    static func rowIDs(of chain: [TimelineEntry], in timeline: [TimelineEntry], replyRowID: Message.ID) -> Set<Message.ID> {
+        var rowIDs = Set<Message.ID>()
+        for quoted in chain where quoted.id != replyRowID {
+            if let row = timeline.first(where: { $0.id == quoted.id }), row.galleryMessages.isEmpty {
+                rowIDs.insert(row.id)
+            }
+        }
+        return rowIDs
+    }
 }
