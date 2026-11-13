@@ -23,35 +23,26 @@ struct ChatDetailView: View {
             // keeps its offset from the top, leaving the newest message 52pt
             // above the composer until the next touch.
             .toolbarTitleDisplayMode(.inline)
+            // Messages' header: the avatar centred in the bar, the name in a
+            // capsule just below it. A safe-area bar, unlike an inset, extends
+            // the scroll edge effect down behind the capsule.
+            .safeAreaBar(edge: .top, spacing: 0) {
+                if let selectedChat {
+                    ChatHeaderNameButton(title: selectedChat.displayTitle) {
+                        showingChatInfo = true
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .toolbar {
                 if let selectedChat {
-                    #if os(macOS)
-                    ToolbarItem(placement: .navigation) {
-                        ChatTitleButton(chat: selectedChat) {
+                    ToolbarItem(placement: .principal) {
+                        ChatHeaderAvatarButton(chat: selectedChat) {
                             showingChatInfo = true
                         }
-                        .padding(.horizontal)
                     }
                     .sharedBackgroundVisibility(.hidden)
-
-                    #else
-                    // iPad: avatar + name lives in the leading (navigation) slot.
-                    // iPhone: stays centered in the title slot.
-                    ToolbarItem(placement: isIPad ? .navigation : .principal) {
-                        Button {
-                            showingChatInfo = true
-                        } label: {
-                            HStack {
-                                ChatAvatarView(chat: selectedChat, dimension: 28)
-                                Text(selectedChat.displayTitle)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .frame(maxWidth: isIPhone ? 180 : nil)
-                            }
-                        }
-                    }
-
-                    #endif
 
                     if !chatStore.unreadThreads.isEmpty {
                         ToolbarItem(placement: .primaryAction) {
