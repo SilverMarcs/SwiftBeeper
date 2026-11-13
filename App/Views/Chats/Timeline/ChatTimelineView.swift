@@ -126,6 +126,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     #endif
                 }
                 .scrollDisabled(activeComposerMessageID != nil)
+                .timelineSwipeActionsContainer()
                 // Recreate only the viewport when a timeline opens or its first database page arrives
                 // A message picked from search, once its page has loaded. The
                 // rows just laid out, so let them settle before scrolling; a

@@ -27,6 +27,8 @@ struct TimelineEntryRow: View {
             MessageRowView(entry: entry, chat: chat)
                 .timelineFocus(isComposerIdle || activeComposerMessageID == entry.message.id)
                 .timelineRowPadding(startsSenderRun: entry.startsSenderRun)
+                // The dividers above stay put while the message slides.
+                .messageSwipeActions(entry.message, in: chat, isEnabled: isComposerIdle)
         }
     }
 }
