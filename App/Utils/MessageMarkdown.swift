@@ -79,6 +79,7 @@ extension String {
             markdown: source,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(source)
+        attributed.prefixMentionLabels()
         attributed.link = nil
         previewTextCache.setObject(CacheBox(attributed), forKey: key)
         return attributed
@@ -86,11 +87,34 @@ extension String {
 }
 
 private extension AttributedString {
+    /// Mentions read as `@Name`. Clients label user links with a bare display
+    /// name, a name already starting with @, or with the @ typed just before
+    /// the link, so the @ is added only when neither is there. It joins the
+    /// link run so it shares the mention's styling.
+    mutating func prefixMentionLabels() {
+        var unprefixed: [(index: AttributedString.Index, attributes: AttributeContainer)] = []
+        for (link, range) in runs[\.link] {
+            guard let link, MessageMentionLink(link) != nil else { continue }
+            let label = self[range].characters
+            guard let first = label.first(where: { !$0.isWhitespace }), !first.isMentionSign else { continue }
+            if range.lowerBound > startIndex, characters[characters.index(before: range.lowerBound)].isMentionSign {
+                continue
+            }
+            unprefixed.append((range.lowerBound, self[range].runs.first?.attributes ?? AttributeContainer()))
+        }
+
+        // Last first, so earlier indices stay valid.
+        for mention in unprefixed.reversed() {
+            insert(AttributedString("@", attributes: mention.attributes), at: mention.index)
+        }
+    }
+
     /// Turns bare URLs into links without moving them into separate bubbles.
     /// Long destinations keep their full target while displaying a compact
     /// host/path label. Markdown links with an authored label keep it.
     mutating func condenseAndStyleLinks() {
         condenseBareLinkLabels()
+        prefixMentionLabels()
 
         if let detector = sharedLinkDetector {
             let plainText = String(characters)
@@ -142,6 +166,13 @@ private extension AttributedString {
             replacement.link = bareLink.url
             replaceSubrange(bareLink.range, with: replacement)
         }
+    }
+}
+
+private extension Character {
+    /// An @, including the full-width form some keyboards type.
+    var isMentionSign: Bool {
+        self == "@" || self == "＠"
     }
 }
 
