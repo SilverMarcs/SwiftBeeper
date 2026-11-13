@@ -36,7 +36,7 @@ extension ChatStore {
             await loadQuotedMessages(for: response.items)
             guard generation == timelineGeneration else { return }
             reconcileOutgoingMessages(with: response.items, chatID: chatID)
-            upsertMessages(response.items)
+            upsertMessages(messagesInLoadedWindow(response.items))
             hasLoadedTimeline = true
             hasMoreServerHistory = response.hasServerHistory
             if olderMessagesCursor == nil {
@@ -171,6 +171,10 @@ extension ChatStore {
         isLoadingServerHistory = false
         isLoadingMessages = false
         lastReadByOtherSortKey = nil
+        messageRevealRequest = nil
+        hasMoreNewerMessages = false
+        isLoadingNewerMessages = false
+        newerMessagesCursor = nil
         closeThread()
         refreshUnreadThreads()
         messagesError = nil

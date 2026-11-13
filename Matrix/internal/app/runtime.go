@@ -47,11 +47,20 @@ func New(cfg Config) (*Runtime, error) {
 // Start opens the database and the signed-in session, if any. Swift calls it
 // once per process.
 func (r *Runtime) Start(ctx context.Context) error {
-	return r.rt.Start(ctx)
+	if err := r.rt.Start(ctx); err != nil {
+		return err
+	}
+	// Only the app searches; extensions share the store and its triggers
+	// without building the index themselves.
+	if r.cfg.MemoryLimitMB == 0 {
+		go r.dispatcher.PrepareMessageSearch(context.Background())
+	}
+	return nil
 }
 
 func (r *Runtime) Stop() {
 	r.setActive(false)
+	r.dispatcher.ResetMessageSearch()
 	r.rt.Stop()
 }
 
@@ -102,6 +111,8 @@ func (r *Runtime) Execute(ctx context.Context, command Command, input json.RawMe
 		return r.dispatcher.NotificationReply(ctx, command.RoomID, command.EventID, command.Text)
 	case "logout":
 		r.setActive(false)
+		// Logging out deletes the store, index included.
+		r.dispatcher.ResetMessageSearch()
 		if err := r.rt.Logout(ctx); err != nil {
 			return nil, err
 		}

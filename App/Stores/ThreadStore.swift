@@ -121,6 +121,14 @@ extension ThreadStore: TimelineSource {
     var quotedMessages: [Message.ID: Message] { [:] }
     var lastReadByOtherSortKey: String? { nil }
     var showsUnreadDivider: Bool { false }
+    var messageRevealRequest: MessageRevealRequest? { nil }
+    /// A thread always loads whole, up to its newest reply.
+    var hasMoreNewerTimeline: Bool { false }
+    var timelineWindowID: UUID { Self.wholeThreadWindowID }
+    private static let wholeThreadWindowID = UUID()
+    func loadNewerTimeline() async {}
+    func showLatestTimeline() {}
+    func finishMessageReveal() {}
     var isLoadingOlderTimeline: Bool { false }
     var canLoadServerHistory: Bool { false }
     var timelineError: String? { error }

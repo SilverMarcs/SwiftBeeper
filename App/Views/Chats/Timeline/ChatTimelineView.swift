@@ -128,7 +128,21 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .savesAttachments()
                 .showsReactionDetails()
                 // Recreate only the viewport when a timeline opens or its first database page arrives
-                .id("\(target.chatID)-\(target.threadRootID ?? "")-\(source.hasLoadedTimeline)")
+                // A message picked from search, once its page has loaded. The
+                // rows just laid out, so let them settle before scrolling; a
+                // viewport rebuilt for another stretch asks again on appearing.
+                .onChange(of: source.messageRevealRequest, initial: true) { _, request in
+                    guard let request else { return }
+                    let rowID = TimelineEntry.rowID(for: request.messageID, in: timelineEntries)
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(150))
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(rowID, anchor: .center)
+                        }
+                        source.finishMessageReveal()
+                    }
+                }
+                .id("\(target.chatID)-\(target.threadRootID ?? "")-\(source.hasLoadedTimeline)-\(source.timelineWindowID)")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.bottom, for: .alignment)
                 #if os(macOS)
@@ -168,6 +182,17 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     Self.isNearBottom(geometry)
                 } action: { _, nearBottom in
                     isNearBottom = nearBottom
+                }
+                // A stretch that stops short of the newest loads its next
+                // newer page a screen ahead of the bottom. The value is the
+                // content height while that close, so a page too short to
+                // move the reader away still asks for the next one.
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    let isNearEnd = geometry.contentSize.height - geometry.visibleRect.maxY < geometry.containerSize.height
+                    return isNearEnd ? geometry.contentSize.height : 0
+                } action: { _, nearEndHeight in
+                    guard nearEndHeight > 0, source.hasMoreNewerTimeline else { return }
+                    Task { await source.loadNewerTimeline() }
                 }
                 .onScrollGeometryChange(for: ScrollGeometry.self) { geometry in
                     geometry
@@ -222,9 +247,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
                 .onChange(of: MessageListTracker(
                     count: messages.count + outgoingMessages.count,
-                    lastID: outgoingMessages.last?.timelineKey ?? messages.last?.id
+                    lastID: outgoingMessages.last?.timelineKey ?? messages.last?.id,
+                    stopsShortOfLatest: source.hasMoreNewerTimeline
                 )) { oldTracker, newTracker in
                     guard source.hasLoadedTimeline, oldTracker.lastID != nil else { return }
+                    // A newer page landing below the reader isn't a new
+                    // message to follow down.
+                    guard !oldTracker.stopsShortOfLatest else { return }
                     // Scroll when the newest row changes and the count did not
                     // shrink: pagination keeps lastID stable and deletions shrink
                     // the count, so both are skipped.
@@ -284,6 +313,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                             Button("Try Again") {
                                 Task { await source.loadTimeline() }
                             }
+                        }
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if source.hasMoreNewerTimeline {
+                        JumpToLatestButton {
+                            source.showLatestTimeline()
                         }
                     }
                 }
@@ -366,4 +402,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
 private struct MessageListTracker: Equatable {
     let count: Int
     let lastID: String?
+    /// Whether the timeline held an older stretch of the conversation.
+    let stopsShortOfLatest: Bool
 }

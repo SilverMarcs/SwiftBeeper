@@ -26,6 +26,7 @@ type Dispatcher struct {
 	// The accounts parsed from the last bridge state read.
 	accountsCache accountsCache
 	threads       threadFollows
+	searchIndex   messageSearchIndex
 }
 
 func New(rt *gomuksruntime.Runtime) *Dispatcher {
@@ -75,6 +76,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.getChat(ctx, input)
 	case "find-direct-chat":
 		return s.findDirectChat(ctx, input)
+	case "search-messages":
+		return s.searchMessages(ctx, input)
 	case "get-chat-info":
 		return s.getChatInfo(ctx, input)
 	case "list-chat-media":

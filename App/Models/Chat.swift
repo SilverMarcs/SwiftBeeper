@@ -126,17 +126,6 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
     }
 
     var lastActivityText: String? {
-        guard let lastActivity else { return nil }
-        let calendar = Calendar.app
-        if calendar.isDateInToday(lastActivity) {
-            return lastActivity.formatted(date: .omitted, time: .shortened)
-        }
-        if calendar.isDateInYesterday(lastActivity) {
-            return "Yesterday"
-        }
-        if let daysAgo = calendar.dateComponents([.day], from: lastActivity, to: .now).day, daysAgo < 7 {
-            return lastActivity.formatted(.dateTime.weekday(.abbreviated))
-        }
-        return lastActivity.formatted(date: .numeric, time: .omitted)
+        lastActivity?.chatListText
     }
 }

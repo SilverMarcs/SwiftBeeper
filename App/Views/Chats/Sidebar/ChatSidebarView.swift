@@ -5,17 +5,30 @@ struct ChatSidebarView: View {
     @Environment(ChatStore.self) private var chatStore
 
     @State private var showingSettings = false
+    @FocusState private var isSearchFocused: Bool
+    @State private var isSearchPresented = false
 
     var body: some View {
         @Bindable var chatStore = chatStore
 
         ChatListView()
-            .searchable(text: $chatStore.searchQuery, placement: isIPhone ? .automatic : .sidebar, prompt: "Search chats")
+            .searchable(
+                text: $chatStore.searchQuery,
+                isPresented: $isSearchPresented,
+                placement: isIPhone ? .automatic : .sidebar,
+                prompt: "Search chats and messages"
+            )
+            .searchFocused($isSearchFocused)
+            // Search runs as you type; the Search key only puts the keyboard
+            // away to read the results.
+            .onSubmit(of: .search) { isSearchFocused = false }
             .searchPresentationToolbarBehavior(.avoidHidingContent)
             .task(id: [chatStore.searchQuery, chatStore.selectedFilter.id, chatStore.session.uuidString]) {
                 await chatStore.searchChats()
             }
-            .navigationTitle("Chats")
+            // Searching starts once the field is focused, before any text;
+            // kept results, as after opening one, still read as a search.
+            .navigationTitle(isSearchFocused || isSearchPresented || chatStore.isSearchActive ? "Search" : "Chats")
             .toolbarTitleDisplayMode(isIPad ? .inline : .inlineLarge)
             .toolbar(removing: .sidebarToggle)
             .toolbar {

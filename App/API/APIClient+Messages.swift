@@ -5,10 +5,16 @@ extension APIClient {
         try await executeRaw("resolve-media", arguments: MessageArguments(chatID: chatID, messageID: messageID))
     }
 
-    /// The newest page of messages, or the page older than `cursor`.
-    static func listMessages(chatID: String, cursor: String? = nil) async throws -> ListMessagesOutput {
-        struct Arguments: Encodable { let chatID: String; let cursor: String? }
-        return try await execute("list-messages", arguments: Arguments(chatID: chatID, cursor: cursor))
+    /// The newest page of messages, the page older than `cursor`, the page
+    /// newer than `after`, or a page centered on the message `around`.
+    static func listMessages(
+        chatID: String,
+        cursor: String? = nil,
+        after: String? = nil,
+        around: String? = nil
+    ) async throws -> ListMessagesOutput {
+        struct Arguments: Encodable { let chatID: String; let cursor: String?; let after: String?; let around: String? }
+        return try await execute("list-messages", arguments: Arguments(chatID: chatID, cursor: cursor, after: after, around: around))
     }
 
     /// Fetches older history from the server into the local database, where

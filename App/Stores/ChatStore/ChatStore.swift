@@ -51,6 +51,14 @@ final class ChatStore {
 
     var searchQuery = ""
     var searchResults: [Chat]?
+    /// Messages matching the search, below the matching chats; nil until the
+    /// search has run.
+    var messageSearchResults: [Message]?
+    /// The chats of `messageSearchResults`, light copies for their rows.
+    var messageSearchChats: [Chat.ID: Chat] = [:]
+    var hasMoreMessageSearchResults = false
+    var isLoadingMoreMessageSearchResults = false
+    @ObservationIgnored var messageSearchCursor: String?
     var isSearching = false
     @ObservationIgnored var latestSearchRequestID: UUID?
     @ObservationIgnored var latestChatsRequestID: UUID?
@@ -122,6 +130,18 @@ final class ChatStore {
             onThreadClosed?(ComposerTarget(chatID: activeThread.chatID, threadRootID: activeThread.rootID))
         }
     }
+    /// A loaded message the open timeline should scroll to, such as a search
+    /// result; the timeline clears it once it has.
+    var messageRevealRequest: MessageRevealRequest?
+    /// Whether the loaded messages stop short of the newest, as after
+    /// jumping to an older message. Newer pages then load as the reader
+    /// scrolls down, and new messages wait in the database until they do.
+    var hasMoreNewerMessages = false
+    var isLoadingNewerMessages = false
+    @ObservationIgnored var newerMessagesCursor: String?
+    /// Changes whenever the loaded messages are replaced by another stretch of
+    /// the conversation, so the timeline lays out afresh.
+    var timelineWindowID = UUID()
     /// Whether the open chat's first page has arrived.
     var hasLoadedTimeline = false
     /// Whether the local database has older pages; these load on scroll.
@@ -401,7 +421,7 @@ final class ChatStore {
             }
             // Background chats read their timeline from the database on open.
             if chatID == selectedChatID {
-                let visible = incoming.filter { !$0.isHiddenThreadReply }
+                let visible = messagesInLoadedWindow(incoming.filter { !$0.isHiddenThreadReply })
                 upsertMessages(visible)
                 if incoming.contains(where: { $0.threadRootID != nil }) { refreshUnreadThreads() }
                 Task { await loadQuotedMessages(for: visible) }

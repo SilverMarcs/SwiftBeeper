@@ -30,8 +30,20 @@ protocol TimelineSource: AnyObject {
     /// Whether to offer older history from the server.
     var canLoadServerHistory: Bool { get }
     var timelineError: String? { get }
+    /// A loaded message to scroll to, such as a search result.
+    var messageRevealRequest: MessageRevealRequest? { get }
+    /// Whether the loaded messages stop short of the newest.
+    var hasMoreNewerTimeline: Bool { get }
+    /// Changes when the loaded messages are replaced by another stretch of
+    /// the conversation, so the timeline lays out afresh.
+    var timelineWindowID: UUID { get }
 
     func loadTimeline() async
     func loadOlderTimeline() async
     func loadServerHistory() async
+    func loadNewerTimeline() async
+    /// Replaces a stretch that stops short of the newest with the newest page.
+    func showLatestTimeline()
+    /// Called once the timeline has scrolled to `messageRevealRequest`.
+    func finishMessageReveal()
 }

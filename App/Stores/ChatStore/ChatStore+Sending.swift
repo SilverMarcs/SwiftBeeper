@@ -34,6 +34,9 @@ extension ChatStore {
             threadRootID: target.threadRootID,
             alsoSendToChat: target.isThread && alsoSendToChat
         )
+        // Sending from an older stretch of the conversation returns to the
+        // newest, where the message appears.
+        if !target.isThread, target.chatID == selectedChatID { showLatestMessages() }
         outgoingMessagesByChatID[target.chatID, default: []].append(outgoing)
         if target.isThread {
             activeThread?.error = nil

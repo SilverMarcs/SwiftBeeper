@@ -94,7 +94,7 @@ with (build / "core.lock").open("w") as lock:
         environment.update({"CGO_ENABLED": "1", "GOOS": go_os, "GOARCH": go_architectures[architecture],
             "CC": clang + " " + flags, "CXX": clangxx + " " + flags,
             "CGO_CFLAGS": flags, "CGO_CXXFLAGS": flags, "CGO_LDFLAGS": flags})
-        subprocess.run(["go", "build", "-tags", "goolm", "-trimpath", "-buildmode=c-archive", "-o", str(architecture_archive), "./cmd/ffi"], cwd=matrix, env=environment, check=True)
+        subprocess.run(["go", "build", "-tags", "goolm,sqlite_fts5", "-trimpath", "-buildmode=c-archive", "-o", str(architecture_archive), "./cmd/ffi"], cwd=matrix, env=environment, check=True)
         archives.append(architecture_archive)
     if len(archives) == 1:
         shutil.copyfile(archives[0], archive)

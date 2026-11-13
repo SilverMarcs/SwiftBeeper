@@ -18,6 +18,13 @@ extension APIClient {
         ))
     }
 
+    /// Messages in any chat holding every word of `query`, from the local
+    /// search index. Words match as prefixes.
+    static func searchMessages(query: String, accountIDs: [String], cursor: String?) async throws -> SearchMessagesOutput {
+        struct Arguments: Encodable { let query: String; let accountIDs: [String]; let cursor: String? }
+        return try await execute("search-messages", arguments: Arguments(query: query, accountIDs: accountIDs, cursor: cursor))
+    }
+
     static func getChat(chatID: String, maxParticipantCount: Int = 5) async throws -> Chat {
         struct Arguments: Encodable { let chatID: String; let maxParticipantCount: Int }
         return try await execute("get-chat", arguments: Arguments(chatID: chatID, maxParticipantCount: maxParticipantCount))

@@ -57,10 +57,14 @@ extension ChatStore {
     // MARK: - Navigation
 
     /// Retains a directly opened chat even when its row isn't in the loaded page.
-    func openChat(_ chat: Chat) {
-        searchQuery = ""
-        if selectedFilter == .inbox(.unread) || !chatBelongsToCurrentFilter(chat) {
-            selectedFilter = .inbox(chat.isArchived == true ? .archive : .primary)
+    /// A chat opened from search results keeps the search, so going back
+    /// returns to them; the list then shows results, not the filter's chats.
+    func openChat(_ chat: Chat, keepingSearch: Bool = false) {
+        if !keepingSearch {
+            searchQuery = ""
+            if selectedFilter == .inbox(.unread) || !chatBelongsToCurrentFilter(chat) {
+                selectedFilter = .inbox(chat.isArchived == true ? .archive : .primary)
+            }
         }
         selectedChat = chat
         selectedChatID = chat.id
@@ -202,20 +206,25 @@ extension ChatStore {
             try await Task.sleep(for: .milliseconds(200))
             try Task.checkCancellation()
             isSearching = true
+            // Messages search every inbox; the filter's accounts still apply.
+            async let messages = APIClient.searchMessages(query: query, accountIDs: filter.accountIDs, cursor: nil)
             let response = try await APIClient.searchChats(
                 query: query,
                 inbox: inbox.rawValue,
                 accountIDs: filter.accountIDs
             )
+            let messageResponse = try? await messages
             guard !Task.isCancelled,
                   latestSearchRequestID == requestID,
                   selectedFilter.id == filter.id,
                   self.session == session,
                   searchQuery.trimmed == query else { return }
             searchResults = response.items
+            setMessageSearchResults(messageResponse)
         } catch {
             guard !Task.isCancelled, latestSearchRequestID == requestID else { return }
             searchResults = []
+            setMessageSearchResults(nil)
         }
     }
 
@@ -223,6 +232,8 @@ extension ChatStore {
         latestSearchRequestID = nil
         searchResults = nil
         isSearching = false
+        setMessageSearchResults(nil)
+        messageSearchResults = nil
     }
 
     // MARK: - Chat actions

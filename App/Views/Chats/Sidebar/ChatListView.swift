@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// The selectable chat rows, loading more as the end scrolls into view.
+/// Searching shows matching chats, then matching messages.
 struct ChatListView: View {
     @Environment(ChatStore.self) private var chatStore
     /// How many rows before the end the next page starts loading.
@@ -11,29 +12,36 @@ struct ChatListView: View {
         let displayedChats = chatStore.displayedChats
         // The next page loads while this row scrolls in, well before the end.
         let prefetchChatID = displayedChats.dropLast(Self.prefetchDistance).last?.id
+        let isSearching = chatStore.isSearchActive
         List(selection: Bindable(chatStore).selectedChatID) {
-            ForEach(displayedChats) { chat in
-                ChatRowView(chat: chat)
-                    .listRowSeparator(.hidden, edges: .top)
-                    .listRowSeparator(.visible, edges: .bottom)
-                    .if(isMacOrPad) {
-                        $0.listRowSeparatorTint(.primary.opacity(0.1), edges: .bottom)
+            if isSearching {
+                if !displayedChats.isEmpty {
+                    Section("Chats") {
+                        ForEach(displayedChats) { chat in
+                            ChatListRow(chat: chat)
+                        }
                     }
-                    .tag(chat.id)
-                    .onAppear {
-                        guard chat.id == prefetchChatID, chatStore.hasMoreChats, !chatStore.isSearchActive else { return }
-                        Task { await chatStore.loadMoreChats() }
-                    }
-            }
+                }
 
-            if chatStore.hasMoreChats, !chatStore.isSearchActive {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity)
-                    .listRowSeparator(.hidden)
-                    .task {
-                        await chatStore.loadMoreChats()
-                    }
+                MessageSearchSection()
+            } else {
+                ForEach(displayedChats) { chat in
+                    ChatListRow(chat: chat)
+                        .onAppear {
+                            guard chat.id == prefetchChatID, chatStore.hasMoreChats, !chatStore.isSearchActive else { return }
+                            Task { await chatStore.loadMoreChats() }
+                        }
+                }
+
+                if chatStore.hasMoreChats {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
+                        .listRowSeparator(.hidden)
+                        .task {
+                            await chatStore.loadMoreChats()
+                        }
+                }
             }
         }
         .if(isIPhone) { $0.listStyle(.plain) }
@@ -42,7 +50,7 @@ struct ChatListView: View {
         // Paging appends without animation; see `loadMoreChats()`.
         .animation(.default, value: displayedChats.map(\.id))
         .overlay {
-            ChatListOverlay(isEmpty: displayedChats.isEmpty)
+            ChatListOverlay(isEmpty: displayedChats.isEmpty && (!isSearching || chatStore.messageSearchResults?.isEmpty != false))
         }
         .alert("Could Not Update Pin", isPresented: Binding(
             get: { chatStore.pinError != nil },

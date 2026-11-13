@@ -198,6 +198,11 @@ type ListMessagesOutput struct {
 	// HasServerHistory is false once the homeserver has returned the start of
 	// the room; until then older history may exist beyond the local timeline.
 	HasServerHistory bool `json:"hasServerHistory"`
+	// NewestCursor and HasMoreNewer describe the newer side of a page read
+	// around a message or after a cursor, which may stop short of the newest
+	// message. Plain pages are always the newest and leave them unset.
+	NewestCursor string `json:"newestCursor,omitempty"`
+	HasMoreNewer bool   `json:"hasMoreNewer,omitempty"`
 }
 
 // GetMessagesOutput holds the requested messages the local database has;
@@ -252,6 +257,17 @@ type MessageAttachmentInput struct {
 	FileName string         `json:"fileName"`
 	MimeType string         `json:"mimeType"`
 	Size     AttachmentSize `json:"size"`
+}
+
+// SearchMessagesOutput is one page of message search results across chats,
+// newest first, with the chats they're in.
+type SearchMessagesOutput struct {
+	Items []Message `json:"items"`
+	// Chats holds each result's chat once, without preview or read state.
+	Chats   []Chat `json:"chats"`
+	HasMore bool   `json:"hasMore"`
+	// Cursor continues after this page; empty when it found nothing.
+	Cursor string `json:"cursor,omitempty"`
 }
 
 // ChatInfoOutput is what a chat's info screen shows below its header.

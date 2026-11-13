@@ -52,6 +52,15 @@ struct SearchChatsOutput: Decodable {
     let items: [Chat]
 }
 
+/// One page of messages matching a search across chats, newest first.
+struct SearchMessagesOutput: Decodable {
+    let items: [Message]
+    /// Each result's chat once, without preview or read state.
+    let chats: [Chat]
+    let hasMore: Bool
+    let cursor: String?
+}
+
 struct ListMessagesOutput: Decodable {
     let items: [Message]
     let hasMore: Bool

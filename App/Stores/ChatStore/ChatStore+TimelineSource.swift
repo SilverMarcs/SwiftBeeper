@@ -20,4 +20,18 @@ extension ChatStore: TimelineSource {
     func loadOlderTimeline() async {
         await loadOlderMessages()
     }
+
+    var hasMoreNewerTimeline: Bool { hasMoreNewerMessages }
+
+    func loadNewerTimeline() async {
+        await loadNewerMessages()
+    }
+
+    func showLatestTimeline() {
+        showLatestMessages()
+    }
+
+    func finishMessageReveal() {
+        messageRevealRequest = nil
+    }
 }
