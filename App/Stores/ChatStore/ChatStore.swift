@@ -269,8 +269,10 @@ final class ChatStore {
         do {
             let output = try await APIClient.getSession()
             guard self.session == session else { return }
-            currentUserProfile = output.user
-            connectedAccounts = output.accounts
+            // Each reconnection reads it again; unchanged values leave the
+            // chat list alone.
+            if currentUserProfile != output.user { currentUserProfile = output.user }
+            if connectedAccounts != output.accounts { connectedAccounts = output.accounts }
         } catch {
             // Non-critical; chat and realtime loading remain usable.
         }
@@ -421,6 +423,11 @@ final class ChatStore {
             clearAllTyping()
             notificationService.notificationPreferencesChanged()
             if requiresResync { scheduleResync() }
+            // The session read at sign-in can fail, as when iOS launches
+            // the app in the background with the store closed, and logins
+            // and their network logos change; reading it again on every
+            // connection keeps the chat list's badges and filters current.
+            Task { await loadSession() }
         case .disconnected:
             clearAllTyping()
             // Nothing arrives until the stream reconnects and reports again.

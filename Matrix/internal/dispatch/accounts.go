@@ -91,9 +91,11 @@ func (s *Dispatcher) buildAccountLookup(ctx context.Context) (*accountLookup, er
 		roomAccounts: make(map[id.RoomID]string),
 	}
 	for _, account := range accounts {
-		// The Matrix account itself has no bridge ghosts to match.
-		if account.AccountID != matrixAccountID {
-			lookup.byBridge[account.AccountID] = append(lookup.byBridge[account.AccountID], account)
+		// The Matrix account itself has no bridge ghosts to match. Logins
+		// group under their bridge, which ghost localparts and m.bridge
+		// protocol IDs name; account IDs add the login's remote ID.
+		if account.BridgeID != matrixAccountID {
+			lookup.byBridge[account.BridgeID] = append(lookup.byBridge[account.BridgeID], account)
 		}
 	}
 	for bridgeID := range lookup.byBridge {
