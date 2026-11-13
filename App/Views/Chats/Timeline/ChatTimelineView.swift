@@ -2,8 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// A timeline and its composer: the open chat's, or one of its threads'.
-/// Message layout and scrolling are shared; the composer is the navigation
-/// search field on iPhone and the inline composer on macOS and iPad.
+/// Message layout and scrolling are shared; the composer is `ComposerBar` on
+/// iPhone and iPad and the inline `MessageInputView` on macOS.
 struct ChatTimelineView<Source: TimelineSource>: View {
     let source: Source
 
@@ -107,8 +107,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                             .accessibilityHidden(true)
                     }
                     #if os(iOS)
-                    .if(isIPhone) {
-                        $0.followsComposerOnKeyboard(composer, restingPosition: restingPosition)
+                    .followsComposerOnKeyboard(composer, restingPosition: restingPosition)
+                    .dismissesComposerOnTap { [composer] in
+                        // Resigning at once, rather than through the composer's
+                        // focus, lets UIKit announce the keyboard hiding before
+                        // the composer starts to shrink.
+                        guard composer.isFocused else { return }
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
                     #endif
                 }
@@ -142,6 +147,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     scrollToLatest(with: proxy)
                 } scrollToComposerMessage: { messageID in
                     scrollAboveKeyboard(messageID, with: proxy)
+                }
+                // The composer growing, as the keyboard comes up or the draft
+                // gains a line, takes a timeline kept at its end along; the
+                // keyboard follower draws the move in step with the composer.
+                .onScrollGeometryChange(for: CGFloat.self, of: \.contentInsets.bottom) { oldInset, newInset in
+                    guard newInset > oldInset, restingPosition.isAtEnd, activeComposerMessageID == nil else { return }
+                    scrollToLatest(with: proxy, animated: false)
                 }
                 #endif
                 // Load the next older page a screen ahead of the top, so it
@@ -276,16 +288,14 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     }
                 }
                 #if os(iOS)
-                .if(isIPhone) {
-                    $0.searchFieldComposer(composer, chat: chat)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ComposerBar(composer: composer, chat: chat, error: source.timelineError)
+                }
+                #else
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    MessageInputView(composer: composer, chat: chat, error: source.timelineError)
                 }
                 #endif
-                .if(isMacOrPad) {
-                    // macOS and iPad share the inline composer.
-                    $0.safeAreaBar(edge: .bottom, spacing: 0) {
-                        MessageInputView(composer: composer, chat: chat, error: source.timelineError)
-                    }
-                }
                 // The conversation's composer, for message actions such as Edit.
                 .environment(\.composer, composer)
                 .environment(\.expandedMessages, expandedMessages)
@@ -328,11 +338,11 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         isNearBottom || isScrollingToLatest
     }
 
-    private func scrollToLatest(with proxy: ScrollViewProxy) {
+    private func scrollToLatest(with proxy: ScrollViewProxy, animated: Bool = true) {
         latestScrollGeneration += 1
         let generation = latestScrollGeneration
         isScrollingToLatest = true
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+        withAnimation(reduceMotion || !animated ? nil : .easeOut(duration: 0.25)) {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         } completion: {
             guard generation == latestScrollGeneration else { return }

@@ -5,9 +5,9 @@ import UniformTypeIdentifiers
 /// Drives every composer: one `Composer` per chat and thread, holding its
 /// draft, attachments, and reply or edit, plus what they share: dictation,
 /// mention suggestions, and the send animation. It sits on top of
-/// `ChatStore`, which owns sending, edits, and the outbox, so the inline
-/// composer (`MessageInputView`) and the iPhone `.searchable` composer drive
-/// the same state.
+/// `ChatStore`, which owns sending, edits, and the outbox, so the macOS
+/// composer (`MessageInputView`) and the iOS one (`ComposerBar`) drive the
+/// same state.
 @MainActor
 @Observable
 final class InputManager {
@@ -176,7 +176,6 @@ final class InputManager {
         let snapshot = composer.draft.trimmed
         let attachments = composer.pendingAttachments
         guard !snapshot.text.isEmpty || !attachments.isEmpty else { return }
-        let animationSource = sourceFrame ?? composer.sourceFrame?()
         let outgoing = chatStore.sendMessage(
             text: snapshot.text,
             mentions: snapshot.mentions,
@@ -190,7 +189,7 @@ final class InputManager {
         composer.alsoSendToChat = false
         composer.clearReply()
         if let outgoing {
-            sendAnimator.begin(outgoing, from: animationSource)
+            sendAnimator.begin(outgoing, from: sourceFrame)
         }
     }
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The composer's queued attachments, shown only while there are some. On
-/// iPhone it sits above the navigation `.searchable` field, which sends.
+/// The composer's queued attachments, shown only while there are some,
+/// above the field.
 struct MessagePendingAttachmentsBar: View {
     let composer: Composer
 

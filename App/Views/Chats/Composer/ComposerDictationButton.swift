@@ -3,6 +3,9 @@ import SwiftUI
 struct ComposerDictationButton: View {
     let composer: Composer
     var isInline = false
+    /// The waveform's scale, which the iOS composer bar enlarges to match the
+    /// toolbar buttons it replaced.
+    var symbolScale: Image.Scale = .small
     @ScaledMetric(relativeTo: .body) private var symbolSize = 20
     @Environment(DictationSettings.self) private var settings
     @Environment(InputManager.self) private var input
@@ -45,7 +48,9 @@ struct ComposerDictationButton: View {
                             } else {
                                 Label(isRecording ? "Finish Dictation" : "Dictate", systemImage: "waveform")
                                     .labelStyle(.iconOnly)
-                                    .imageScale(.small)
+                                    .imageScale(symbolScale)
+                                    // The waveform ripples while it listens.
+                                    .symbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating, isActive: isRecording)
                             }
                         }
                     }

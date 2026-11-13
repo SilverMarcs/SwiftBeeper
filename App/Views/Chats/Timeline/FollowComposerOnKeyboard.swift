@@ -17,9 +17,10 @@ struct FollowComposerOnKeyboard: ViewModifier {
                 EnclosingScrollViewIntrospector { scrollView in
                     // Reply and edit scroll to their message, not the newest,
                     // and a timeline the reader scrolled back through stays put.
-                    follower.attach(to: scrollView) { [composer, restingPosition] in
+                    follower.followsLatest = { [composer, restingPosition] in
                         composer.activeMessage == nil && restingPosition.isAtEnd
                     }
+                    follower.attach(to: scrollView)
                 } onDetach: { scrollView in
                     follower.detach(from: scrollView)
                 }
@@ -30,7 +31,7 @@ struct FollowComposerOnKeyboard: ViewModifier {
 
 extension View {
     /// Keeps the timeline moving with the composer as the keyboard shows and
-    /// hides.
+    /// hides, and as the composer grows and shrinks with the draft.
     func followsComposerOnKeyboard(_ composer: Composer, restingPosition: TimelineRestingPosition) -> some View {
         modifier(FollowComposerOnKeyboard(composer: composer, restingPosition: restingPosition))
     }

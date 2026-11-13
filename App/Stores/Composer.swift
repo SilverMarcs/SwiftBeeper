@@ -37,15 +37,9 @@ final class Composer {
     /// Set while the field should take focus, such as for Reply, until the
     /// field has. A field appearing later, like a thread's, still sees it.
     private(set) var focusRequestID: UUID?
-    /// Changes when dictation lands in the draft.
+    /// Changes when dictation lands in the draft, which focuses the macOS
+    /// field. iOS leaves the keyboard down, as Send shows beside the draft.
     private(set) var dictationFocusRequestID: UUID?
-
-    /// Where a sent bubble flies from, for the iPhone search field, which
-    /// submits from UIKit. Read at submission, before clearing the draft can
-    /// shrink the composer.
-    @ObservationIgnored var sourceFrame: (() -> CGRect?)?
-    /// The iPhone search field's coordinate reference.
-    @ObservationIgnored var searchReferenceFrame = CGRect.zero
 
     init(target: ComposerTarget) {
         self.target = target
@@ -56,7 +50,6 @@ final class Composer {
     var isEditing: Bool { editing != nil }
 
     var prompt: String {
-        // The iPhone composers tell their fields apart by prompt.
         if isEditing { return target.isThread ? "Edit thread reply" : "Edit message" }
         if replyingTo != nil { return "Reply message" }
         return target.isThread ? "Reply in thread" : "Message"

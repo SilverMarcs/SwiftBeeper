@@ -13,8 +13,7 @@ private struct ThreadPresentation: ViewModifier {
                 if let thread = chatStore.activeThread {
                     Group {
                         #if os(iOS)
-                        // Its own stack gives the inspector a title bar, and the
-                        // iPhone composer its search field and bottom bar.
+                        // Its own stack gives the inspector a title bar.
                         NavigationStack {
                             threadView(thread)
                         }

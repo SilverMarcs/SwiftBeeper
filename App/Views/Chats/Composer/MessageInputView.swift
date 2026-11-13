@@ -1,8 +1,8 @@
+#if os(macOS)
 import SwiftUI
 
-/// The inline composer used on macOS and iPad (the iPhone uses the navigation
-/// bar's `.searchable` field instead — see `SearchFieldComposer`). State lives
-/// in the conversation's `Composer`; this view is just its presentation.
+/// The inline composer on macOS (iPhone and iPad use `ComposerBar`). State
+/// lives in the conversation's `Composer`; this view is just its presentation.
 struct MessageInputView: View {
     @Environment(InputManager.self) private var input
     @Environment(ChatStore.self) private var chatStore
@@ -47,11 +47,7 @@ struct MessageInputView: View {
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    #if os(macOS)
                     .offset(y: -1)
-                    #else
-                    .scaleEffect(0.97)
-                    #endif
 
                     if composer.activeMessage != nil {
                         Button {
@@ -87,7 +83,6 @@ struct MessageInputView: View {
                                 fieldFrame = frame
                             }
                             .onSubmit(submit)
-                            #if os(macOS)
                             // Return sends; Shift-Return starts a new line. The
                             // field treats both as submit unless intercepted.
                             .onKeyPress(.return, phases: [.down, .repeat]) { press in
@@ -95,7 +90,6 @@ struct MessageInputView: View {
                                 NSApp.sendAction(#selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil)
                                 return .handled
                             }
-                            #endif
                             .composerMentionPopover(composer, isFocused: isMessageFieldFocused, restoreCursor: restoreMentionCursor)
 
                         ComposerDictationButton(composer: composer, isInline: true)
@@ -112,13 +106,11 @@ struct MessageInputView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.top, 8)
-                .composerBottomPadding()
+                .padding(.bottom, 12)
             }
             .fixedSize(horizontal: false, vertical: true)
         }
-        #if os(macOS)
         .pasteHandler(composer)
-        #endif
         .onChange(of: selection) { _, newValue in
             updateComposerSelection(newValue)
         }
@@ -130,37 +122,20 @@ struct MessageInputView: View {
         .onDisappear {
             composer.isFocused = false
         }
-        #if !os(macOS)
-        .onChange(of: composer.isSavingEdit) { oldValue, newValue in
-            if oldValue && !newValue {
-                focusMessageField()
-            }
-        }
-        #endif
         .onAppear {
-            if isMac {
-                focusMessageField()
-            }
+            focusMessageField()
         }
         .onChange(of: composer.target) { oldTarget, _ in
             // The field stays while another chat's composer takes it over.
             input.composer(for: oldTarget).isFocused = false
             composer.isFocused = isMessageFieldFocused
             selection = nil
-            if isMac {
-                focusMessageField()
-            }
+            focusMessageField()
         }
-        // Reply, Edit, and notification drafts ask for focus. Reply and Edit
-        // come from a context menu: on iOS, focusing before it has dismissed
-        // is undone by its keyboard restore.
+        // Reply, Edit, and notification drafts ask for focus.
         .task(id: composer.focusRequestID) {
             guard composer.focusRequestID != nil else { return }
-            #if os(iOS)
-            try? await Task.sleep(for: InputManager.contextMenuDismissalDelay)
-            #else
             await Task.yield()
-            #endif
             guard !Task.isCancelled else { return }
             isMessageFieldFocused = true
             composer.didHandleFocusRequest()
@@ -172,7 +147,6 @@ struct MessageInputView: View {
                 focusMessageField()
             }
         }
-        #if os(macOS)
         .task(id: composer.dictationFocusRequestID) {
             guard composer.dictationFocusRequestID != nil, !isMessageFieldFocused else { return }
             // Leave an already focused field and its keyboard undisturbed.
@@ -196,15 +170,11 @@ struct MessageInputView: View {
                 }
             }
         }
-        #endif
     }
 
-    /// Sends or saves the draft. iOS keeps the keyboard up for the next message.
+    /// Sends or saves the draft.
     private func submit() {
         input.submit(composer, sourceFrame: fieldFrame)
-        #if !os(macOS)
-        focusMessageField()
-        #endif
     }
 
     private func restoreMentionCursor(_ offset: Int) {
@@ -234,3 +204,4 @@ struct MessageInputView: View {
         }
     }
 }
+#endif

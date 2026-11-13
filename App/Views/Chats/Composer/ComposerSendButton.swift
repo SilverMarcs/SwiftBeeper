@@ -1,6 +1,7 @@
+#if os(macOS)
 import SwiftUI
 
-/// The inline composers' Send button, which saves instead while editing.
+/// The inline composer's Send button, which saves instead while editing.
 struct ComposerSendButton: View {
     let isEditing: Bool
     let isSaving: Bool
@@ -11,9 +12,7 @@ struct ComposerSendButton: View {
         Button(action: submit) {
             if isSaving {
                 ProgressView()
-                    #if os(macOS)
                     .controlSize(.small)
-                    #endif
             } else {
                 Label(isEditing ? "Save" : "Send", systemImage: isEditing ? "checkmark" : "arrow.up")
                     .labelStyle(.iconOnly)
@@ -22,12 +21,11 @@ struct ComposerSendButton: View {
             }
         }
         .opacity(isDisabled ? 0.35 : 0.85)
-        #if os(macOS)
         .controlSize(.large)
-        #endif
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.circle)
         .allowsHitTesting(!isDisabled)
         .offset(y: -2)
     }
 }
+#endif
