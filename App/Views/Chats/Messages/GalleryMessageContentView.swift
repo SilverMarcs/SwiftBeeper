@@ -39,6 +39,7 @@ struct GalleryMessageContentView: View {
             #if !os(macOS)
             .contentShape(.contextMenuPreview, .rect(cornerRadius: 12))
             #endif
+            .modifier(ReactionTargetHighlight(messageID: primary.id))
             .contextMenu {
                 MessageContextMenu(
                     message: primary,

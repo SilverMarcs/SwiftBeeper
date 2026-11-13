@@ -9,6 +9,7 @@ struct MessageContextMenu: View {
     @Environment(\.saveAttachment) private var saveAttachment
     @Environment(\.saveAttachmentToPhotos) private var saveAttachmentToPhotos
     @Environment(\.showReactionDetails) private var showReactionDetails
+    @Environment(\.showReactionPicker) private var showReactionPicker
 
     let message: Message
     let chat: Chat
@@ -23,23 +24,23 @@ struct MessageContextMenu: View {
             Text(message.timestampText)
         }
 
-        Picker(selection: Binding(get: { ownReactionKey }, set: setOwnReaction)) {
-            #if os(macOS)
-            Text("None").tag(String?.none)
-            #endif
-            ForEach(Self.commonReactions, id: \.self) { emoji in
-                Text(emoji).tag(String?.some(emoji))
+        ControlGroup {
+            ForEach(quickReactions, id: \.self) { emoji in
+                Toggle(isOn: Binding(
+                    get: { ownReactionKey == emoji },
+                    set: { setOwnReaction($0 ? emoji : nil) }
+                )) {
+                    ReactionEmojiLabel(emoji: emoji)
+                }
             }
-        } label: {
-            #if os(macOS)
-            Label("Reactions", systemImage: "face.smiling.inverse")
-                .labelStyle(.titleAndIcon)
-            #endif
+            Button("More Reactions", systemImage: "plus") {
+                showReactionPicker(message, in: chat)
+            }
+            .accessibilityLabel("More Reactions")
+            .help("More Reactions")
         }
-        #if !os(macOS)
-        .pickerStyle(.palette)
+        .controlGroupStyle(.palette)
         .menuActionDismissBehavior(.enabled)
-        #endif
 
         Section {
             if let composer, chatStore.canEdit(message, in: chat) {
@@ -62,7 +63,7 @@ struct MessageContextMenu: View {
             }
 
             if message.hasText || message.isDeletedMessage {
-                Button("Copy", systemImage: "doc.on.doc", action: copyMessageText)
+                Button("Copy Message", systemImage: "doc.on.doc", action: copyMessageText)
             }
         } header: {
             #if !os(macOS)
@@ -112,6 +113,15 @@ struct MessageContextMenu: View {
     private var ownReactionKey: String? {
         guard let selfID = chat.participants?.items.first(where: { $0.isSelf == true })?.id else { return nil }
         return message.reactions?.first { $0.participantID == selfID }?.reactionKey
+    }
+
+    private var quickReactions: [String] {
+        guard let ownReactionKey,
+              !Self.commonReactions.contains(ownReactionKey),
+              message.visibleReactions.contains(where: { $0.reactionKey == ownReactionKey }) else {
+            return Self.commonReactions
+        }
+        return Self.commonReactions + [ownReactionKey]
     }
 
     private func setOwnReaction(_ newValue: String?) {

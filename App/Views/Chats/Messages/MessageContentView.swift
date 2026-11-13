@@ -63,6 +63,7 @@ struct MessageContentView: View {
         #if !os(macOS)
         .contentShape(.contextMenuPreview, .rect(cornerRadius: 16))
         #endif
+        .modifier(ReactionTargetHighlight(messageID: message.id))
         .contextMenu {
             MessageContextMenu(message: message, chat: chat)
         }

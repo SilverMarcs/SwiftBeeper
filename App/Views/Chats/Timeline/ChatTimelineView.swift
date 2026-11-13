@@ -127,6 +127,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
                 .scrollDisabled(activeComposerMessageID != nil)
                 .timelineSwipeActionsContainer()
+                .showsReactionPicker()
                 // Recreate only the viewport when a timeline opens or its first database page arrives
                 // A message picked from search, once its page has loaded. The
                 // rows just laid out, so let them settle before scrolling; a
@@ -332,6 +333,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .overlay {
                     if let quotedMessage {
                         QuotedMessageOverlay(context: quotedMessage, chat: rowChat, dismiss: dismissQuotedMessage)
+                            .showsReactionPicker()
                             .transition(.opacity)
                     }
                 }
