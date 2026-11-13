@@ -269,7 +269,7 @@ final class TimelineKeyboardFollower {
         // the copy here. Found after it began, as after a stall, it's
         // started as far back as the composer has already come.
         if copy.beginTime == 0, let elapsed = elapsedTime(of: spring) {
-            copy.beginTime = CACurrentMediaTime() - elapsed
+            copy.beginTime = scrollView.layer.convertTime(CACurrentMediaTime(), from: nil) - elapsed
         }
         copy.keyPath = Self.systemAnimationKey
         scrollView.layer.add(copy, forKey: Self.mirrorKey)
@@ -407,9 +407,14 @@ final class TimelineKeyboardFollower {
     /// The additive position animation SwiftUI moves the composer's container
     /// with as the keyboard shows or hides, while it runs.
     private func keyboardSpring(above composer: UIView) -> KeyboardSpring? {
-        let now = CACurrentMediaTime()
         var layer = composer.layer.superlayer
         while let current = layer {
+            // An animation's times are in its layer's own time space, which
+            // SwiftUI's hosting layers keep behind the media clock: judged by
+            // the media clock, the spring would end early, while the composer
+            // and its mirror are still moving, and the rest of its move would
+            // be counted twice.
+            let now = current.convertTime(CACurrentMediaTime(), from: nil)
             for key in current.animationKeys() ?? [] {
                 guard let animation = current.animation(forKey: key) as? CABasicAnimation,
                       animation.keyPath == "position", animation.isAdditive,
