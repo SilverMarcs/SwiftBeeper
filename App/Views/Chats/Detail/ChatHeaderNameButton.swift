@@ -13,6 +13,9 @@ struct ChatHeaderNameButton: View {
                 .font(.subheadline.bold())
         }
         .buttonStyle(.glass)
+        // iOS draws glass buttons as capsules already; macOS defaults to a
+        // rounded rectangle.
+        .buttonBorderShape(.capsule)
         .accessibilityHint("Shows chat info")
     }
 }

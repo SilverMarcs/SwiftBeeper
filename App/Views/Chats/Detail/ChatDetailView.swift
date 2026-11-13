@@ -35,6 +35,13 @@ struct ChatDetailView: View {
                 }
             }
             .scrollEdgeEffectStyle(.soft, for: .top)
+            #if os(macOS)
+            // With the window toolbar's background showing, AppKit draws its
+            // own frosted edge effect under the toolbar, with a hairline
+            // below the capsule, whatever style is asked for. Hiding it
+            // leaves the soft fade.
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+            #endif
             .toolbar {
                 if let selectedChat {
                     ToolbarItem(placement: .principal) {
