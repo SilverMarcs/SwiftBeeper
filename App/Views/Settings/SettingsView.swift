@@ -6,7 +6,6 @@ struct SettingsView: View {
     @Environment(SessionStore.self) private var sessionStore
     @AppStorage("autoplay") private var autoplay = true
     @AppStorage("muteOnPlay") private var muteOnPlay = false
-    @AppStorage(MessageTextSelection.storageKey) private var selectsMessageText = true
     @AppStorage(ChatNetworkIcons.storageKey) private var showsNetworkIcons = true
 
     var body: some View {
@@ -26,16 +25,6 @@ struct SettingsView: View {
                     Text("Chat List")
                 } footer: {
                     Text("Marks each chat's avatar with the logo of its network, such as WhatsApp or Slack.")
-                }
-
-                Section {
-                    Toggle(isOn: $selectsMessageText) {
-                        Label("Select Text in Messages", systemImage: "selection.pin.in.out")
-                    }
-                } header: {
-                    Text("Messages")
-                } footer: {
-                    Text("Turn off to make long chats scroll more smoothly. Copy still copies a whole message.")
                 }
 
                 Section("Playback") {

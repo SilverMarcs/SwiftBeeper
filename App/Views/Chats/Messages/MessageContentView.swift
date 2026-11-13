@@ -6,7 +6,6 @@ struct MessageContentView: View {
     let message: Message
     let chat: Chat
     @Environment(\.typingBubbleNamespace) private var typingBubbleNamespace
-    @Environment(\.selectsMessageText) private var selectsMessageText
 
     private enum Bubble: Equatable {
         case attachment(String?)
@@ -30,7 +29,7 @@ struct MessageContentView: View {
                     }
                 }
                 .foregroundStyle(isOutgoing ? .white : .primary)
-                .messageTextSelection(selectsMessageText)
+                .messageTextSelection(id: message.id)
                 .fixedSize(horizontal: false, vertical: true)
                 .messageBubbleChrome(isOutgoing: isOutgoing)
                 .overlay(alignment: reactionsAlignment) {

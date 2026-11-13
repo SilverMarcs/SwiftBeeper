@@ -1,11 +1,11 @@
 import SwiftUI
 
 /// A message body styled for its bubble, with links in the bubble's tint.
-/// It's selectable unless the user turned selection off.
 struct MessageBlocksText: View {
     let blocks: [MessageBlock]
     let isOutgoing: Bool
-    @Environment(\.selectsMessageText) private var selectsMessageText
+    /// The message, for text selection; nil keeps the text unselectable.
+    let selectionID: String?
 
     var body: some View {
         MessageBlocksView(blocks: blocks)
@@ -13,7 +13,7 @@ struct MessageBlocksText: View {
             .foregroundStyle(isOutgoing ? .white : .primary)
             // Links follow the tint; white keeps contrast on the accent fill.
             .tint(isOutgoing ? .white : .accentColor)
-            .messageTextSelection(selectsMessageText)
+            .messageTextSelection(id: selectionID)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

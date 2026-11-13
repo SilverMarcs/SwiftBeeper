@@ -5,8 +5,9 @@ import SwiftUI
 struct MessageTextView: View {
     let text: String
     let isOutgoing: Bool
-    /// Identifies the message to the timeline's `ExpandedMessages`. Nil
-    /// always shows the whole text.
+    /// Identifies the message to the timeline's `ExpandedMessages` and
+    /// `SelectableMessages`. Nil always shows the whole text and never
+    /// selects it.
     var expansionID: String?
     @Environment(\.displayScale) private var displayScale
     @Environment(\.expandedMessages) private var expandedMessages
@@ -21,7 +22,8 @@ struct MessageTextView: View {
                 VStack(alignment: .trailing, spacing: 3) {
                     MessageBlocksText(
                         blocks: isExpanded ? text.messageBlocks(highlightingMentionOf: highlightedUserID) : preview,
-                        isOutgoing: isOutgoing
+                        isOutgoing: isOutgoing,
+                        selectionID: expansionID
                     )
                     Button(isExpanded ? "Show Less" : "Show More") {
                         expandedMessages.toggle(expansionID)
@@ -31,7 +33,7 @@ struct MessageTextView: View {
                     .foregroundStyle(isOutgoing ? .white : .primary)
                 }
             } else {
-                MessageBlocksText(blocks: text.messageBlocks(highlightingMentionOf: highlightedUserID), isOutgoing: isOutgoing)
+                MessageBlocksText(blocks: text.messageBlocks(highlightingMentionOf: highlightedUserID), isOutgoing: isOutgoing, selectionID: expansionID)
             }
         }
     }

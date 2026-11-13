@@ -10,7 +10,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(MessageTextSelection.storageKey) private var selectsMessageText = true
     @State private var firstUnreadID: String?
     @State private var isNearBottom = true
     /// Bumped by each scroll to the newest row; its completion only clears
@@ -25,6 +24,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @State private var entriesCache = TimelineEntriesCache()
     /// Long messages the reader chose to read in full.
     @State private var expandedMessages = ExpandedMessages()
+    @State private var selectableMessages = SelectableMessages()
     /// Keeps the reader's row in place when older pages land above it.
     @State private var scrollAnchor = TimelineScrollAnchor()
     /// The quoted message a tapped reply preview shows over the timeline.
@@ -362,7 +362,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 // The conversation's composer, for message actions such as Edit.
                 .environment(\.composer, composer)
                 .environment(\.expandedMessages, expandedMessages)
-                .environment(\.selectsMessageText, selectsMessageText)
+                .environment(\.selectableMessages, selectableMessages)
                 .environment(\.selfMentionUserID, chatStore.currentUserProfile?.id)
                 .onDrop(of: [.item], isTargeted: nil) { providers in
                     inputManager.handleDrop(providers, into: composer)
