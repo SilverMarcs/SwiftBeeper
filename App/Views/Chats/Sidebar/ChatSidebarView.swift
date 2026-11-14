@@ -15,8 +15,7 @@ struct ChatSidebarView: View {
             .searchable(
                 text: $chatStore.searchQuery,
                 isPresented: $isSearchPresented,
-                placement: isIPhone ? .automatic : .sidebar,
-                prompt: "Search chats and messages"
+                placement: isIPhone ? .automatic : .sidebar
             )
             .searchFocused($isSearchFocused)
             // Search runs as you type; the Search key only puts the keyboard
