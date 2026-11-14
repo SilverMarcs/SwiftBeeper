@@ -16,6 +16,12 @@ struct ReactionPill: Identifiable, Equatable {
     /// Pills shown before the rest fold into an overflow pill.
     static let visibleLimit = 4
 
+    /// Reactions carry profiles even for people outside the chat's avatar sample.
+    func participant(with id: String, in chat: Chat) -> ChatParticipant? {
+        message.reactions?.first(where: { $0.participantID == id })?.participant
+            ?? chat.participant(with: id)
+    }
+
     /// Every message's reactions, each message's most reacted first. A gallery
     /// passes all its photos and caption; each keeps its own reactions.
     static func pills(for messages: [Message], selfIDs: Set<String>) -> [ReactionPill] {

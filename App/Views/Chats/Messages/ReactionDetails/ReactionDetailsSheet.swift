@@ -12,7 +12,7 @@ struct ReactionDetailsSheet: View {
             List(details.message.visibleReactions) { reaction in
                 ReactionDetailsRow(
                     reaction: reaction,
-                    participant: details.chat.participant(with: reaction.participantID).map {
+                    participant: (reaction.participant ?? details.chat.participant(with: reaction.participantID)).map {
                         chatStore.displayedParticipant($0, in: details.chat)
                     }
                 )

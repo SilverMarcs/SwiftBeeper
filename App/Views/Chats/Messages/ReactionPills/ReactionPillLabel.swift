@@ -15,7 +15,7 @@ struct ReactionPillLabel: View {
             Text(pill.group.reactionKey)
 
             if !chat.isSingleChat {
-                ReactionPillAvatars(participantIDs: pill.group.participantIDs, chat: chat, isOwn: pill.isOwn)
+                ReactionPillAvatars(pill: pill, chat: chat)
             } else if pill.group.count > 1 {
                 Text(pill.group.count, format: .number)
                     // Rolls with the pills' animation; see `ReactionPillsView`.
@@ -31,12 +31,12 @@ struct ReactionPillLabel: View {
 
     private var accessibilityLabel: String {
         let names = pill.group.participantIDs.map { id in
-            isSelf(id) ? "You" : chat.participant(with: id)?.displayName ?? "Someone"
+            isSelf(id) ? "You" : pill.participant(with: id, in: chat)?.displayName ?? "Someone"
         }
         return "\(pill.group.reactionKey), \(names.formatted(.list(type: .and)))"
     }
 
     private func isSelf(_ id: String) -> Bool {
-        chat.participant(with: id)?.isSelf == true || id == chatStore.currentUserProfile?.id
+        pill.participant(with: id, in: chat)?.isSelf == true || id == chatStore.currentUserProfile?.id
     }
 }

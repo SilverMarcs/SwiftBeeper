@@ -3,7 +3,7 @@ import SwiftUI
 /// One person's reaction: their avatar and name, with the reaction trailing.
 struct ReactionDetailsRow: View {
     let reaction: Reaction
-    /// Nil when the reactor isn't among the chat's loaded participants.
+    /// Nil when no member profile is available for the reactor.
     let participant: ChatParticipant?
 
     var body: some View {

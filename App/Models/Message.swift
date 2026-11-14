@@ -4,6 +4,8 @@ struct Reaction: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let reactionKey: String
     let participantID: String
+    /// The reactor's profile, independent of the chat's small avatar sample.
+    let participant: ChatParticipant?
 }
 
 struct Message: Identifiable, Codable, Equatable, Sendable {

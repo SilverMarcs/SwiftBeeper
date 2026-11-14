@@ -173,6 +173,34 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 	if err != nil {
 		return nil, fmt.Errorf("failed to read reactions: %w", err)
 	}
+	// Chat participants are only an avatar sample. Resolve every reactor's
+	// member event in one batch, including people who have since left.
+	keys := make([]database.RoomStateGUID, 0)
+	seenSenders := make(map[string]bool)
+	for _, reactionEvents := range result {
+		for _, evt := range reactionEvents {
+			sender := string(evt.Sender)
+			if !seenSenders[sender] {
+				seenSenders[sender] = true
+				keys = append(keys, database.RoomStateGUID{RoomID: roomID, Type: event.StateMember, StateKey: sender})
+			}
+		}
+	}
+	participants := make(map[string]*wire.User, len(keys))
+	if len(keys) > 0 {
+		members, err := s.rt.Client().DB.CurrentState.GetMany(ctx, keys)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read reaction participants: %w", err)
+		}
+		for _, member := range members {
+			var content event.MemberEventContent
+			if member.StateKey == nil || json.Unmarshal(member.GetContent(), &content) != nil {
+				continue
+			}
+			user := userFromMemberEvent(*member.StateKey, content, string(s.rt.Client().Account.UserID))
+			participants[user.ID] = &user
+		}
+	}
 	output := make(map[id.EventID][]wire.Reaction, len(result))
 	for evtID, reactionEvents := range result {
 		seen := make(map[string]struct{})
@@ -198,6 +226,7 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 				ID:            string(reactionEvt.Sender) + key,
 				ReactionKey:   key,
 				ParticipantID: string(reactionEvt.Sender),
+				Participant:   participants[string(reactionEvt.Sender)],
 			})
 		}
 		if len(reactions) > 0 {

@@ -83,6 +83,7 @@ type Reaction struct {
 	ID            string `json:"id"`
 	ParticipantID string `json:"participantID"`
 	ReactionKey   string `json:"reactionKey"`
+	Participant   *User  `json:"participant,omitempty"`
 }
 
 type AttachmentType string

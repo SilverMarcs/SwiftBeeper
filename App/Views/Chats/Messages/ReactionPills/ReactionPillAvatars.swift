@@ -4,10 +4,8 @@ import SwiftUI
 struct ReactionPillAvatars: View {
     @Environment(ChatStore.self) private var chatStore
 
-    let participantIDs: [String]
+    let pill: ReactionPill
     let chat: Chat
-    /// Whether the pill is the user's own, filled with the accent color.
-    let isOwn: Bool
 
     private static let shownLimit = 3
     private static let dimension: CGFloat = 18
@@ -15,24 +13,24 @@ struct ReactionPillAvatars: View {
     var body: some View {
         HStack(spacing: 4) {
             OverlappingAvatarsView(
-                participants: participantIDs.prefix(Self.shownLimit).map(participant(with:)),
+                participants: pill.group.participantIDs.prefix(Self.shownLimit).map(participant(with:)),
                 dimension: Self.dimension
             ) {
-                ReactionPillFill(isOwn: isOwn)
+                ReactionPillFill(isOwn: pill.isOwn)
             }
 
-            if participantIDs.count > Self.shownLimit {
-                Text("+\(participantIDs.count - Self.shownLimit)")
+            if pill.group.count > Self.shownLimit {
+                Text("+\(pill.group.count - Self.shownLimit)")
                     .font(.caption)
-                    .foregroundStyle(isOwn ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(pill.isOwn ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             }
         }
     }
 
     /// The reactor's profile, with the user's own photo for themselves, or
-    /// "?" in their colour when the chat hasn't loaded them.
+    /// "?" in their colour when no member profile is available.
     private func participant(with id: String) -> ChatParticipant {
-        if let participant = chat.participant(with: id) {
+        if let participant = pill.participant(with: id, in: chat) {
             return chatStore.displayedParticipant(participant, in: chat)
         }
         if let profile = chatStore.currentUserProfile, profile.id == id {
