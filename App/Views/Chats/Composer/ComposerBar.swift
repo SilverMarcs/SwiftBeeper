@@ -32,6 +32,8 @@ struct ComposerBar: View {
     /// Bumped each time the bar asks the editor for focus, so it asks again
     /// even when the composer already thinks it has focus.
     @State private var focusAttempt = 0
+    /// Asks the editor for focus until it holds; see `handleFocusRequest`.
+    @State private var focusRequestTask: Task<Void, Never>?
 
     private var editorHeight: CGFloat {
         guard isEditing, width > 0 else { return ComposerBarLayout.rowHeight }
@@ -139,28 +141,19 @@ struct ComposerBar: View {
             input.composer(for: oldTarget).isFocused = false
             composer.isFocused = isEditing
         }
-        // Reply, Edit, and notification drafts ask for focus. Reply and Edit
-        // often come from a context menu, which restores the keyboard state
-        // from before it opened as it finishes dismissing, resigning an
-        // editor focused before then. The dismissal takes longer on some
-        // devices and menus than others, so focus is asked for again until it
-        // has held past it. A thread's composer appears after its Reply, so
-        // this also runs for a request made before it existed.
-        .task(id: composer.focusRequestID) {
-            guard composer.focusRequestID != nil else { return }
-            do {
-                try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
-                for _ in 0..<Self.focusAttempts {
-                    if !isEditing {
-                        composer.isFocused = true
-                        focusAttempt += 1
-                    }
-                    try await Task.sleep(for: .milliseconds(150))
-                }
-            } catch {
-                return
-            }
-            composer.didHandleFocusRequest()
+        // Reply, Edit, and notification drafts ask for focus. A thread's
+        // composer appears after its Reply, so this also handles a request
+        // made before it existed.
+        //
+        // Not `task(id:)`: on iPhone, a chat opened after the first builds
+        // its composer while the detail column is still off screen, and
+        // SwiftUI reports the bar disappearing as soon as it appears, never
+        // appearing again once the column is back. Lifecycle-bound tasks then
+        // never start, though the bar is on screen and updating.
+        .onChange(of: composer.focusRequestID, initial: true) { _, requestID in
+            focusRequestTask?.cancel()
+            guard let requestID else { return }
+            focusRequestTask = Task { await handleFocusRequest(requestID) }
         }
         // Leaving the chat can tear the editor down while it still has focus;
         // the next chat's first focus must register as a change.
@@ -173,6 +166,30 @@ struct ComposerBar: View {
 
     /// How many times a focus request checks that the editor has focus.
     private static let focusAttempts = 4
+
+    /// Reply and Edit often come from a context menu, which restores the
+    /// keyboard state from before it opened as it finishes dismissing,
+    /// resigning an editor focused before then. The dismissal takes longer
+    /// on some devices and menus than others, so focus is asked for again
+    /// until it has held past it.
+    private func handleFocusRequest(_ requestID: UUID) async {
+        do {
+            try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
+            for _ in 0..<Self.focusAttempts {
+                // A newer request, or the composer moving on, takes over.
+                guard composer.focusRequestID == requestID else { return }
+                if !isEditing {
+                    composer.isFocused = true
+                    focusAttempt += 1
+                }
+                try await Task.sleep(for: .milliseconds(150))
+            }
+        } catch {
+            return
+        }
+        guard composer.focusRequestID == requestID else { return }
+        composer.didHandleFocusRequest()
+    }
 
     /// Sends or saves the draft, keeping the keyboard up for the next message.
     private func send() {
