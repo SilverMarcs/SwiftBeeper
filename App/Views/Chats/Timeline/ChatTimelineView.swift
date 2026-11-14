@@ -50,11 +50,12 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             let messages = source.timelineMessages
             let outgoingMessages = source.timelineOutgoingMessages
             let typingBubble = source.typingBubble
+            let showsReadReceipts = chatStore.account(forAccountID: chat.accountID)?.showsReadReceipts == true
             let timelineEntries = entriesCache.entries(
                 for: messages,
                 firstUnreadID: firstUnreadID,
-                readReceipts: source.readReceipts,
-                groupMemberCount: chat.isGroupChat ? chat.participants.map { $0.total ?? $0.items.count } : nil,
+                readReceipts: showsReadReceipts ? source.readReceipts : [],
+                groupMemberCount: showsReadReceipts && chat.isGroupChat ? chat.participants.map { $0.total ?? $0.items.count } : nil,
                 quotedMessages: source.quotedMessages,
                 followingTypingSenderID: outgoingMessages.isEmpty ? typingBubble?.participant.id : nil,
                 isThread: target.isThread,
