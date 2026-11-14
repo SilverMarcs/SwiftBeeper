@@ -44,13 +44,13 @@ func (s *Dispatcher) mapEventToMessage(evt *database.Event, names map[string]str
 	if name, ok := names[string(evt.Sender)]; ok {
 		message.SenderName = name
 	}
-	if err := applyStoredMessageContent(&message, evt, evtType); err != nil {
+	if err := applyStoredMessageContent(&message, evt, evtType, s.rt.Client().Account.UserID); err != nil {
 		return wire.Message{}, errSkipEvent
 	}
 	return message, nil
 }
 
-func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtType string) error {
+func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtType string, me id.UserID) error {
 	var content event.MessageEventContent
 	if err := json.Unmarshal(evt.GetContent(), &content); err != nil {
 		return err
@@ -60,6 +60,7 @@ func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtTy
 	// forwarding the fallback duplicates quoted text and any URLs it contains.
 	content.RemoveReplyFallback()
 	content.RemovePerMessageProfileFallback()
+	message.IsPersonalMention = !message.IsSender && !message.IsDeleted && explicitlyMentions(&content, me)
 	message.IsForwarded = removeForwardedNotice(&content)
 	message.IsNotice = content.MsgType == event.MsgNotice
 	message.Mentions = messageMentions(content.Mentions)

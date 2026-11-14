@@ -48,12 +48,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         if let chat = source.timelineChat, let target = source.composerTarget {
             let composer = inputManager.composer(for: target)
             let messages = source.timelineMessages
+            let unreadID = firstUnreadID ?? source.messageRevealRequest.flatMap { $0.alignsTop ? $0.messageID : nil }
             let outgoingMessages = source.timelineOutgoingMessages
             let typingBubble = source.typingBubble
             let showsReadReceipts = chatStore.account(forAccountID: chat.accountID)?.showsReadReceipts == true
             let timelineEntries = entriesCache.entries(
                 for: messages,
-                firstUnreadID: firstUnreadID,
+                firstUnreadID: unreadID,
                 readReceipts: showsReadReceipts ? source.readReceipts : [],
                 groupMemberCount: showsReadReceipts && chat.isGroupChat ? chat.participants.map { $0.total ?? $0.items.count } : nil,
                 quotedMessages: source.quotedMessages,
@@ -143,7 +144,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                 TimelineItemRow(
                                     item: item,
                                     chat: rowChat,
-                                    firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
+                                    firstUnreadID: outgoingMessages.isEmpty ? unreadID : nil,
                                     focusedRowID: focusedRowID,
                                     quotedChain: isQuoteReply ? quotedChainPresentation : nil,
                                     quotedFocusRole: item.scrollTargetID.flatMap { quotedRoles[$0] } ?? .none
@@ -217,16 +218,20 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 // A message picked from search, once its page has loaded. The
                 // rows just laid out, so let them settle before scrolling; a
                 // viewport rebuilt for another stretch asks again on appearing.
-                .onChange(of: source.messageRevealRequest, initial: true) { _, request in
-                    guard let request else { return }
-                    let rowID = TimelineEntry.rowID(for: request.messageID, in: timelineEntries)
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(150))
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            proxy.scrollTo(rowID, anchor: .center)
-                        }
-                        source.finishMessageReveal()
-                    }
+                .modifier(TimelineMessageReveal(
+                    source: source, entries: timelineEntries, proxy: proxy,
+                    frames: rowFrames, topInset: topContentInset
+                ) {
+                    latestScrollGeneration += 1
+                    isScrollingToLatest = false
+                    restingPosition.isAtEnd = false
+                })
+                .onScrollPhaseChange { _, phase in
+                    guard phase == .tracking || phase == .interacting,
+                          let request = source.messageRevealRequest,
+                          request.isMention || request.alignsTop else { return }
+                    source.finishMessageReveal(request, reached: false)
+                    chatStore.mentionNavigation.dismissError()
                 }
                 .id("\(target.chatID)-\(target.threadRootID ?? "")-\(source.hasLoadedTimeline)-\(source.timelineWindowID)")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
@@ -303,7 +308,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     isLoadingOlder: source.isLoadingOlderTimeline,
                     canLoadServerHistory: source.canLoadServerHistory
                 )) { oldTop, newTop in
-                    guard source.hasLoadedTimeline, oldTop.target == newTop.target, oldTop.firstRowID != nil,
+                    guard source.messageRevealRequest == nil, source.hasLoadedTimeline, oldTop.target == newTop.target, oldTop.firstRowID != nil,
                           let anchor = scrollAnchor.current() else { return }
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
@@ -440,11 +445,22 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if source.hasMoreNewerTimeline {
-                        JumpToLatestButton {
-                            source.showLatestTimeline()
+                    let canShow = source.hasLoadedTimeline && focusedRowID == nil && source.messageRevealRequest?.alignsTop != true
+                    TimelineNavigationButton(
+                        mentions: canShow && !target.isThread ? chatStore.mentionNavigation : nil,
+                        showsLatest: canShow && (source.hasMoreNewerTimeline || !isNearBottom),
+                        nextMention: { Task { await chatStore.revealNextMention() } },
+                        jumpToLatest: {
+                            if let request = source.messageRevealRequest, request.alignsTop {
+                                source.finishMessageReveal(request, reached: false)
+                            }
+                            if source.hasMoreNewerTimeline {
+                                source.showLatestTimeline()
+                            } else {
+                                scrollToLatest(with: proxy)
+                            }
                         }
-                    }
+                    )
                 }
                 #if os(iOS)
                 // Above the composer, in the safe area it and the keyboard

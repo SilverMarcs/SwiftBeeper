@@ -20,6 +20,7 @@ final class ThreadStore {
     private(set) var replies: [Message] = []
     private(set) var hasLoadedTimeline = false
     private(set) var isLoadingTimeline = false
+    private(set) var messageRevealRequest: MessageRevealRequest?
     var error: String?
 
     @ObservationIgnored private weak var chatStore: ChatStore?
@@ -58,6 +59,17 @@ final class ThreadStore {
     func cancel() {
         loadTask?.cancel()
         loadTask = nil
+        if messageRevealRequest?.isMention == true {
+            chatStore?.mentionNavigation.cancelReveal()
+        }
+        messageRevealRequest = nil
+    }
+
+    func revealMessage(_ message: Message, isMention: Bool) {
+        // Keep a specifically requested older reply even when the thread's
+        // ordinary listing is capped at its most recent replies.
+        upsert([message])
+        messageRevealRequest = MessageRevealRequest(messageID: message.id, isMention: isMention)
     }
 
     private func loadLocal() async {
@@ -121,14 +133,22 @@ extension ThreadStore: TimelineSource {
     var quotedMessages: [Message.ID: Message] { [:] }
     var readReceipts: [ReadReceipt] { [] }
     var showsUnreadDivider: Bool { false }
-    var messageRevealRequest: MessageRevealRequest? { nil }
     /// A thread always loads whole, up to its newest reply.
     var hasMoreNewerTimeline: Bool { false }
     var timelineWindowID: UUID { Self.wholeThreadWindowID }
     private static let wholeThreadWindowID = UUID()
     func loadNewerTimeline() async {}
     func showLatestTimeline() {}
-    func finishMessageReveal() {}
+    func finishMessageReveal(_ request: MessageRevealRequest, reached: Bool) {
+        guard messageRevealRequest?.id == request.id else { return }
+        messageRevealRequest = nil
+        guard request.isMention, chatStore?.isThreadPresented == true, chatStore?.activeThread === self else { return }
+        if reached {
+            chatStore?.mentionNavigation.didReveal(request.messageID)
+        } else {
+            chatStore?.mentionNavigation.failedToReveal(request.messageID, error: "Couldn’t reach this mention. Tap to try again.")
+        }
+    }
     /// Thread replies quote nothing beyond what the thread holds.
     func loadQuotedMessages(for messages: [Message]) async {}
     var isLoadingOlderTimeline: Bool { false }

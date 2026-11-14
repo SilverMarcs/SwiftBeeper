@@ -31,7 +31,15 @@ extension ChatStore: TimelineSource {
         showLatestMessages()
     }
 
-    func finishMessageReveal() {
+    func finishMessageReveal(_ request: MessageRevealRequest, reached: Bool) {
+        guard messageRevealRequest?.id == request.id else { return }
         messageRevealRequest = nil
+        if request.isMention {
+            if reached {
+                mentionNavigation.didReveal(request.messageID)
+            } else {
+                mentionNavigation.failedToReveal(request.messageID, error: "Couldn’t reach this mention. Tap to try again.")
+            }
+        }
     }
 }

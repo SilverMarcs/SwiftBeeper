@@ -133,6 +133,7 @@ final class ChatStore {
     /// A loaded message the open timeline should scroll to, such as a search
     /// result; the timeline clears it once it has.
     var messageRevealRequest: MessageRevealRequest?
+    let mentionNavigation = MentionNavigation()
     /// Whether the loaded messages stop short of the newest, as after
     /// jumping to an older message. Newer pages then load as the reader
     /// scrolls down, and new messages wait in the database until they do.
@@ -144,6 +145,7 @@ final class ChatStore {
     var timelineWindowID = UUID()
     /// Whether the open chat's first page has arrived.
     var hasLoadedTimeline = false
+    @ObservationIgnored var shouldPositionAtUnread = true
     /// Whether the local database has older pages; these load on scroll.
     var hasMoreOlderMessages = false
     /// Whether the server may hold history older than the local database.
@@ -453,6 +455,7 @@ final class ChatStore {
             }
             // Background chats read their timeline from the database on open.
             if chatID == selectedChatID {
+                mentionNavigation.receive(incoming)
                 let visible = messagesInLoadedWindow(incoming.filter { !$0.isHiddenThreadReply })
                 upsertMessages(visible)
                 if incoming.contains(where: { $0.threadRootID != nil }) { refreshUnreadThreads() }

@@ -101,6 +101,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.markChatUnread(ctx, input)
 	case "list-messages":
 		return s.listMessages(ctx, input)
+	case "list-unread-mentions":
+		return s.listUnreadMentions(ctx, input)
 	case "load-server-history":
 		return s.loadServerHistory(ctx, input)
 	case "get-messages":

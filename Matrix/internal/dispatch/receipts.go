@@ -77,7 +77,8 @@ func (s *Dispatcher) loadLastReadSortKeys(ctx context.Context, roomIDs ...id.Roo
 		FROM receipt r
 		JOIN event e ON e.event_id = r.event_id AND e.room_id = r.room_id
 		JOIN timeline t ON t.event_rowid = e.rowid AND t.room_id = r.room_id
-		WHERE r.user_id = ? AND r.receipt_type = 'm.read'
+		WHERE r.user_id = ? AND r.receipt_type IN ('m.read','m.read.private')
+		  AND r.thread_id IN ('','main')
 	`
 	args := []any{cli.Account.UserID}
 	if len(roomIDs) > 0 {

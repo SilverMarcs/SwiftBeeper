@@ -20,6 +20,8 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let isSender: Bool
     let attachments: [Attachment]?
     let isUnread: Bool?
+    /// Authored personal @mention, excluding a reply's notification fallback.
+    var isPersonalMention: Bool? = nil
     let reactions: [Reaction]?
     let linkedMessageID: String?
     /// True when the homeserver has redacted this message. Its original content

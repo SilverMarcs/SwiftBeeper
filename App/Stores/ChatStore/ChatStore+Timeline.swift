@@ -16,7 +16,8 @@ extension ChatStore {
         hasLoadedTimeline && !hasMoreOlderMessages && hasMoreServerHistory
     }
 
-    /// Reloads the open chat's newest page on open, reconnect, or resync.
+    /// Loads the newest page normally. On opening, reveal the unread
+    /// boundary only when that page contains it.
     /// Steady-state changes arrive as events.
     func loadMessages() async {
         guard let chatID = selectedChatID else { return }
@@ -26,6 +27,7 @@ extension ChatStore {
         defer { if generation == timelineGeneration { isLoadingMessages = false } }
 
         do {
+            let positionsAtUnread = shouldPositionAtUnread && !hasLoadedTimeline
             let response = try await APIClient.listMessages(chatID: chatID)
             guard generation == timelineGeneration else { return }
 
@@ -38,16 +40,32 @@ extension ChatStore {
             guard generation == timelineGeneration else { return }
             reconcileOutgoingMessages(with: response.items, chatID: chatID)
             upsertMessages(messagesInLoadedWindow(response.items))
+            if positionsAtUnread {
+                shouldPositionAtUnread = false
+                if timelineOutgoingMessages.isEmpty,
+                   let unread = Self.openingUnreadMessage(in: messages, hasOlderPage: response.hasMore) {
+                    messageRevealRequest = MessageRevealRequest(messageID: unread.id, alignsTop: true)
+                }
+            }
             hasLoadedTimeline = true
             hasMoreServerHistory = response.hasServerHistory
             if olderMessagesCursor == nil {
                 olderMessagesCursor = response.oldestCursor
                 hasMoreOlderMessages = response.hasMore
             }
+            if !positionsAtUnread { mentionNavigation.refresh() }
         } catch {
             guard generation == timelineGeneration else { return }
             handleMessageError(error)
         }
+    }
+
+    /// An incoming read row before an unread row proves that the boundary is
+    /// in this page. Otherwise retain the normal latest-message position.
+    private static func openingUnreadMessage(in messages: [Message], hasOlderPage: Bool) -> Message? {
+        guard let index = messages.firstIndex(where: { $0.isUnread == true }) else { return nil }
+        let containsBoundary = messages[..<index].contains { !$0.isSender && $0.isUnread != true }
+        return !hasOlderPage || containsBoundary ? messages[index] : nil
     }
 
     func loadOlderMessages() async {
@@ -155,6 +173,7 @@ extension ChatStore {
 
     /// Clears the timeline and composer state for a newly opened chat.
     func resetTimeline() {
+        mentionNavigation.open(selectedChat)
         clearTyping()
         typingMessageRowIDs = [:]
         failedMediaIDs = []
@@ -165,6 +184,7 @@ extension ChatStore {
         quotedMessages = [:]
         requestedQuotedMessageIDs = []
         hasLoadedTimeline = false
+        shouldPositionAtUnread = true
         olderMessagesCursor = nil
         hasMoreOlderMessages = false
         hasMoreServerHistory = false

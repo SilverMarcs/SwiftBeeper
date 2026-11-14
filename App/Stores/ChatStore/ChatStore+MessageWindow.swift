@@ -8,16 +8,21 @@ extension ChatStore {
     /// Shows a message of the open chat: a thread reply in its thread, and
     /// anything else in the timeline, loading the page around it when it
     /// isn't loaded.
-    func revealMessage(_ message: Message) async {
-        guard message.chatID == selectedChatID else { return }
+    @discardableResult
+    func revealMessage(_ message: Message, isMention: Bool = false) async -> Bool {
+        guard message.chatID == selectedChatID else { return false }
+        if !isMention { mentionNavigation.cancelReveal() }
         if message.isHiddenThreadReply, let rootID = message.threadRootID {
             showThread(rootID: rootID, chatID: message.chatID)
-            return
+            guard let thread = activeThread, thread.chatID == message.chatID, thread.rootID == rootID else { return false }
+            thread.revealMessage(message, isMention: isMention)
+            return true
         }
         if !messages.contains(where: { $0.id == message.id }) {
-            guard await loadMessageWindow(around: message.id) else { return }
+            guard await loadMessageWindow(around: message.id), message.chatID == selectedChatID else { return false }
         }
-        messageRevealRequest = MessageRevealRequest(messageID: message.id)
+        messageRevealRequest = MessageRevealRequest(messageID: message.id, isMention: isMention)
+        return true
     }
 
     /// Loads the next newer page of a stretch that stops short of the newest.
@@ -58,7 +63,10 @@ extension ChatStore {
 
     /// Leaves a stretch that stops short of the newest for the newest page.
     func showLatestMessages() {
+        if messageRevealRequest?.alignsTop == true { messageRevealRequest = nil }
         guard hasMoreNewerMessages else { return }
+        mentionNavigation.cancelReveal()
+        shouldPositionAtUnread = false
         timelineGeneration = UUID()
         timelineWindowID = UUID()
         loadMessagesTask?.cancel()
@@ -103,6 +111,7 @@ extension ChatStore {
             guard generation == timelineGeneration else { return false }
 
             timelineWindowID = UUID()
+            shouldPositionAtUnread = false
             messages = []
             upsertMessages(response.items)
             olderMessagesCursor = response.oldestCursor

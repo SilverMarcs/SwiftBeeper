@@ -122,7 +122,9 @@ type Message struct {
 	LinkedMessageID string       `json:"linkedMessageID"`
 	Reactions       []Reaction   `json:"reactions"`
 	SenderName      string       `json:"senderName"`
-	Text            string       `json:"text"`
+	// A visible personal mention, excluding reply fallback notifications.
+	IsPersonalMention bool   `json:"isPersonalMention,omitempty"`
+	Text              string `json:"text"`
 	// FormattedText is display Markdown converted from the HTML body, with
 	// links, lists, headings, code and Matrix user links preserved.
 	// Text remains the plain body for previews, copying and editing.
@@ -183,6 +185,14 @@ type ThreadSummary struct {
 type MessageMentions struct {
 	UserIDs []string `json:"userIDs"`
 	Room    bool     `json:"room"`
+}
+
+// ListMentionsOutput is one bounded page after the captured read position.
+// After stays fixed until the reader visits a mention, even if receipts change.
+type ListMentionsOutput struct {
+	Items   []Message `json:"items"`
+	After   string    `json:"after"`
+	HasMore bool      `json:"hasMore"`
 }
 
 type Chat struct {

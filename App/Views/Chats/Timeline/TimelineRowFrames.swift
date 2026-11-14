@@ -59,6 +59,12 @@ final class TimelineRowFrames {
         isVisible(rowID) ? senderAvatarBottomEdges[rowID] : nil
     }
 
+    /// Whether a revealed row is visible below the timeline's header.
+    func isVisible(_ rowID: Message.ID, below topInset: CGFloat) -> Bool {
+        guard isVisible(rowID), let frame = visibleFrames[rowID] else { return false }
+        return frame.maxY > topInset
+    }
+
     private func isVisible(_ rowID: Message.ID) -> Bool {
         guard let frame = visibleFrames[rowID] else { return false }
         return frame.maxY > 0 && frame.minY < containerHeight

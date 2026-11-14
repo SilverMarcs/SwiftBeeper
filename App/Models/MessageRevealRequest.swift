@@ -4,5 +4,8 @@ import Foundation
 /// so revealing the same message twice scrolls both times.
 struct MessageRevealRequest: Equatable {
     let messageID: Message.ID
+    var isMention = false
+    /// Opening at unread uses the top edge; explicit jumps use the centre.
+    var alignsTop = false
     let id = UUID()
 }

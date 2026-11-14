@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 
 	"maunium.net/go/mautrix/event"
@@ -12,6 +13,25 @@ import (
 
 	"relay/core/internal/wire"
 )
+
+// Notification recipients can include the author of a quoted reply without
+// an authored @mention. Only a visible user link and its metadata count.
+func explicitlyMentions(content *event.MessageEventContent, me id.UserID) bool {
+	if content.Mentions == nil || !slices.Contains(content.Mentions.UserIDs, me) ||
+		content.Format != event.FormatHTML || content.FormattedBody == "" {
+		return false
+	}
+	mentioned := false
+	parser := *format.MarkdownHTMLParser
+	parser.PillConverter = func(text, mxid, eventID string, ctx format.Context) string {
+		if mxid == string(me) && eventID == "" {
+			mentioned = true
+		}
+		return text
+	}
+	parser.Parse(content.FormattedBody, format.NewContext(context.Background()))
+	return mentioned
+}
 
 func messageMentions(mentions *event.Mentions) *wire.MessageMentions {
 	if mentions == nil {

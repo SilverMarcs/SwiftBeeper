@@ -45,7 +45,7 @@ protocol TimelineSource: AnyObject {
     /// Replaces a stretch that stops short of the newest with the newest page.
     func showLatestTimeline()
     /// Called once the timeline has scrolled to `messageRevealRequest`.
-    func finishMessageReveal()
+    func finishMessageReveal(_ request: MessageRevealRequest, reached: Bool)
     /// Reads the messages `messages` quote into `quotedMessages`, when
     /// neither holds them yet.
     func loadQuotedMessages(for messages: [Message]) async
