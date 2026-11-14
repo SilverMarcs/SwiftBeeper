@@ -53,7 +53,7 @@ struct TimelineEntryRow: View {
                     }
                 }
                 // The dividers above stay put while the message slides.
-                .messageSwipeActions(entry.message, in: chat, isEnabled: isIdle)
+                .messageSwipeActions(entry.message, isEnabled: isIdle)
                 // A receded row lets taps through, swipe actions and all, to
                 // the timeline's backdrop.
                 .allowsHitTesting(isIdle || isFocusedRow)
@@ -64,6 +64,9 @@ struct TimelineEntryRow: View {
                         QuotedMessageChainView(presentation: quotedChain, chat: chat)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(height: 0, alignment: .bottom)
+                            // Its origin is the chain's bottom edge, for the
+                            // copies coming down from above the timeline.
+                            .coordinateSpace(.quotedMessageChainBottom)
                             .alignmentGuide(.messageBubbleTop) { $0[.bottom] }
                             // Each tap starts its own chain from the rows.
                             .id(quotedChain.id)

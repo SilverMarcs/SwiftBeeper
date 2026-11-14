@@ -12,7 +12,7 @@ struct MessageRowView: View {
 
     @State private var profileSheetParticipant: ChatParticipant?
     /// Between the sender's name, the bubbles, and what follows them.
-    private static let stackSpacing: CGFloat = 4
+    static let stackSpacing: CGFloat = 4
     @State private var pendingDirectChat: Chat?
 
     var body: some View {

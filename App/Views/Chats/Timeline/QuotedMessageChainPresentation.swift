@@ -13,5 +13,13 @@ struct QuotedMessageChainPresentation: Equatable {
     /// the reply's bubble, and where that name came from.
     let senderName: Message?
     let senderNameOrigin: CGFloat?
+    /// Who sent the reply, for the space between its bubble and the last
+    /// quoted message, wider where the sender changes.
+    let replySenderID: String?
+    /// How far the timeline's content reaches up under its header. Copies
+    /// with no row on screen start at least that far above the timeline's
+    /// top edge, so they cross the header quickly instead of easing in and
+    /// out of sight beneath it.
+    let headerHeight: CGFloat
     let isPresented: Bool
 }

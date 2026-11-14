@@ -104,10 +104,13 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             // its way back to the timeline no longer holds it.
             let presentedQuoteFocus = quoteFocus?.isPresented == true ? quoteFocus : nil
             let quotedChainPresentation = quoteFocus.map { focus in
-                QuotedMessageChainPresentation(
+                let reply = timelineEntries.first { $0.id == focus.rowID }?.message
+                return QuotedMessageChainPresentation(
                     id: focus.id, entries: quotedChain, origins: focus.origins,
-                    senderName: focus.senderName == nil ? nil : timelineEntries.first { $0.id == focus.rowID }?.message,
+                    senderName: focus.senderName == nil ? nil : reply,
                     senderNameOrigin: focus.senderName?.origin,
+                    replySenderID: reply?.senderID,
+                    headerHeight: topContentInset,
                     isPresented: focus.isPresented
                 )
             }
