@@ -41,6 +41,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// Brings a new reply or edit target above the composer once its context
     /// menu has dismissed.
     @State private var composerRevealTask: Task<Void, Never>?
+    /// The reply or edit target the keyboard's rising safe area last placed
+    /// above the composer, so the reveal above needn't place it again.
+    @State private var keyboardPlacedMessageID: Message.ID?
     #endif
     private let bottomAnchorID = "timeline-bottom"
 
@@ -264,6 +267,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .onScrollGeometryChange(for: CGFloat.self, of: \.contentInsets.bottom) { oldInset, newInset in
                     guard newInset > oldInset else { return }
                     if let activeComposerMessageID {
+                        keyboardPlacedMessageID = activeComposerMessageID
                         scrollAboveComposer(TimelineEntry.rowID(for: activeComposerMessageID, in: timelineEntries), with: proxy)
                     } else if restingPosition.isAtEnd {
                         scrollToLatest(with: proxy, animated: false)
@@ -407,17 +411,24 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     let rowID = TimelineEntry.rowID(for: newValue, in: timelineEntries)
                     #if os(iOS)
                     // The keyboard rising places the message as its safe area
-                    // arrives. With the keyboard already up, or staying down,
-                    // nothing else will, so place it once the context menu
-                    // has dismissed: moving it sooner sends the menu's
-                    // preview back to where the message was.
+                    // arrives. With the keyboard already up, nothing else
+                    // will, so place it once the context menu has dismissed:
+                    // moving it sooner sends the menu's preview back to where
+                    // the message was. With the keyboard down, placing it
+                    // first would move it to the bottom just before the
+                    // keyboard moves it again, so wait for the keyboard and
+                    // place it only if none came, as with a hardware keyboard.
+                    let waitsForKeyboard = !composer.isFocused
+                    keyboardPlacedMessageID = nil
                     composerRevealTask = Task {
                         do {
-                            try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
+                            try await Task.sleep(for: InputManager.contextMenuDismissalDelay
+                                + (waitsForKeyboard ? Self.keyboardArrivalAllowance : .zero))
                         } catch {
                             return
                         }
-                        guard composer.activeMessage?.id == newValue else { return }
+                        guard composer.activeMessage?.id == newValue,
+                              !(waitsForKeyboard && keyboardPlacedMessageID == newValue) else { return }
                         scrollAboveComposer(rowID, with: proxy)
                     }
                     #else
@@ -597,6 +608,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     }
 
     #if os(iOS)
+    /// How long after its focus request a reply's or edit's keyboard may
+    /// take to start rising: the composer asks for focus for this long.
+    private static var keyboardArrivalAllowance: Duration { .milliseconds(600) }
+
     /// Aligns the reply/edit target's bottom edge with the composer, above
     /// the keyboard when it's up. A message taller than the viewport keeps
     /// its end visible.
