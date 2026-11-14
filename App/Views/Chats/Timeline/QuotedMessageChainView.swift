@@ -7,34 +7,35 @@ import SwiftUI
 /// top.
 struct QuotedMessageChainView: View {
     @Environment(\.revealQuotedMessageChain) private var revealQuotedMessageChain
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let presentation: QuotedMessageChainPresentation
     let chat: Chat
-    /// False for the first frame, so the copies start over their rows.
-    @State private var hasAppeared = false
-
     var body: some View {
-        let isSettled = hasAppeared && presentation.isPresented
         VStack(spacing: 0) {
             ForEach(presentation.entries) { entry in
                 MessageRowView(entry: entry, chat: chat)
+                    .quotedMessageMorph(from: presentation.origins[entry.id], isPresented: presentation.isPresented)
                     .timelineRowPadding(startsSenderRun: false)
-                    .modifier(QuotedMessageMorphEffect(
-                        originMaxY: presentation.origins[entry.id],
-                        isSettled: isSettled
-                    ))
+            }
+            if let message = presentation.senderName {
+                HStack(spacing: 6) {
+                    Color.clear.frame(width: 28, height: 1)
+                    SenderNameLabel(message: message)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                        .quotedMessageMorph(from: presentation.senderNameOrigin, isPresented: presentation.isPresented)
+                    Spacer(minLength: 50)
+                }
+                .padding(.vertical, 2)
             }
         }
+        // Copies never donate identity or geometry back to the timeline.
+        .environment(\.quotedFocusRole, .none)
+        .environment(\.timelineRowFrames, nil)
         // Every message the chain could lead to is already in it.
         .environment(\.showQuotedMessage, ShowQuotedMessageAction { _, _ in })
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: { minY in
             revealQuotedMessageChain(top: minY, count: presentation.entries.count)
-        }
-        .onAppear {
-            withAnimation(ChatVisualStyle.quotedMessageAnimation(reduceMotion: reduceMotion)) {
-                hasAppeared = true
-            }
         }
     }
 }

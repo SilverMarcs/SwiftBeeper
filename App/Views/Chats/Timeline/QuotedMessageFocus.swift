@@ -14,6 +14,11 @@ struct QuotedMessageFocus: Equatable {
     /// that row ended, in the timeline content's space, keyed by row ID. Its
     /// bubble moves from there into the chain and back.
     var origins: [Message.ID: CGFloat] = [:]
+    /// In a group, the sender's name the reply takes, to stand between the
+    /// chain and its bubble.
+    var senderName: QuotedSenderHandoff?
+    /// In a group, the avatar the reply takes when it isn't its run's last.
+    var senderAvatar: QuotedSenderHandoff?
     /// False while the chain returns to the timeline, before it's removed.
     /// The timeline no longer focuses on the reply meanwhile.
     var isPresented = true

@@ -7,6 +7,8 @@ struct MessageRowView: View {
     let chat: Chat
     @Environment(ChatStore.self) private var chatStore
     @Environment(\.composer) private var composer
+    @Environment(\.quotedFocusRole) private var quotedFocusRole
+    @Environment(\.timelineRowFrames) private var rowFrames
 
     @State private var profileSheetParticipant: ChatParticipant?
     /// Between the sender's name, the bubbles, and what follows them.
@@ -27,21 +29,26 @@ struct MessageRowView: View {
                 Spacer(minLength: 50)
             } else if showsSenderIdentity {
                 if entry.isLastInGroup {
-                    let sender = chat.participant(with: message.senderID)
-                    Button {
-                        profileSheetParticipant = sender
-                    } label: {
-                        ProfileAvatarView(
-                            name: message.senderDisplayName,
-                            colorID: message.senderID,
-                            imageURLString: sender?.imgURL,
-                            dimension: 28
-                        )
+                    MessageSenderAvatar(message: message, chat: chat) {
+                        profileSheetParticipant = chat.participant(with: message.senderID)
                     }
-                    .buttonStyle(.plain)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .timelineContent).maxY } action: {
+                        rowFrames?.update(entry.id, senderAvatarBottomEdge: $0)
+                    }
+                    .quotedFocusHandoff(quotedFocusRole.senderAvatar)
                 } else {
                     Color.clear
                         .frame(width: 28, height: 1)
+                        .overlay(alignment: .bottom) {
+                            if let copy = quotedFocusRole.avatarCopy {
+                                MessageSenderAvatar(message: message, chat: chat) {
+                                    profileSheetParticipant = chat.participant(with: message.senderID)
+                                }
+                                .quotedMessageMorph(from: copy.origin, isPresented: copy.isPresented)
+                                .id(copy.id)
+                                .transition(.identity)
+                            }
+                        }
                 }
             }
 
@@ -49,9 +56,11 @@ struct MessageRowView: View {
                 if showsSenderName || isThreadBroadcast || isForwarded {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         if showsSenderName {
-                            Text(message.senderDisplayName)
-                                .bold()
-                                .foregroundStyle(IdentityColor(id: message.senderID).nameStyle)
+                            SenderNameLabel(message: message)
+                                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .timelineContent).maxY } action: {
+                                    rowFrames?.update(entry.id, senderNameBottomEdge: $0)
+                                }
+                                .quotedFocusHandoff(quotedFocusRole.senderName)
                         }
                         if isThreadBroadcast {
                             ThreadBroadcastLabel(followsName: showsSenderName)
@@ -71,9 +80,11 @@ struct MessageRowView: View {
                     }
                     .accessibilityHint("Opens the thread")
                     .modifier(TypingBubbleContentReveal())
+                    .quotedFocusHandoff(quotedFocusRole.replyPreview)
                 } else if message.linkedMessageID?.isEmpty == false {
                     ReplyPreviewView(linkedMessage: entry.linkedMessage, reply: message, showsSenderName: !chat.isSingleChat)
                         .modifier(TypingBubbleContentReveal())
+                        .quotedFocusHandoff(quotedFocusRole.replyPreview)
                 }
 
                 Group {
@@ -88,6 +99,7 @@ struct MessageRowView: View {
                 })
                 // The bubbles' outer corners, where they meet the rows beside.
                 .environment(\.messageBubbleJoins, entry.bubbleJoins)
+                .alignmentGuide(.messageBubbleTop) { $0[.top] }
 
                 // Outside the bubbles' context menu, so holding a pill opens
                 // the sheet of who reacted instead. The pills reach up over
@@ -116,6 +128,10 @@ struct MessageRowView: View {
             if !isOutgoing {
                 Spacer(minLength: 50)
             }
+        }
+        .onDisappear {
+            rowFrames?.update(entry.id, senderNameBottomEdge: nil)
+            rowFrames?.update(entry.id, senderAvatarBottomEdge: nil)
         }
         .sheet(item: $profileSheetParticipant, onDismiss: openPendingDirectChat) { participant in
             ParticipantInfoSheet(participant: participant, sourceChat: chat) { chat in

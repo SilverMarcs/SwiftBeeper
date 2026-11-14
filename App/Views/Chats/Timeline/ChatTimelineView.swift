@@ -101,14 +101,22 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             // The row the timeline focuses on, dimming the rest. A chain on
             // its way back to the timeline no longer holds it.
             let presentedQuoteFocus = quoteFocus?.isPresented == true ? quoteFocus : nil
-            let quotedChainPresentation = quoteFocus.map {
-                QuotedMessageChainPresentation(id: $0.id, entries: quotedChain, origins: $0.origins, isPresented: $0.isPresented)
+            let quotedChainPresentation = quoteFocus.map { focus in
+                QuotedMessageChainPresentation(
+                    id: focus.id, entries: quotedChain, origins: focus.origins,
+                    senderName: focus.senderName == nil ? nil : timelineEntries.first { $0.id == focus.rowID }?.message,
+                    senderNameOrigin: focus.senderName?.origin,
+                    isPresented: focus.isPresented
+                )
             }
             // Rows whose message the chain shows stand empty meanwhile, the
             // ones off screen at the tap included, as it may scroll them in.
             let quotedChainRowIDs = quoteFocus.map {
                 QuotedMessageChain.rowIDs(of: quotedChain, in: timelineEntries, replyRowID: $0.rowID)
             } ?? []
+            let quotedRoles = quoteFocus.map {
+                QuotedFocusRowRole.roles(for: $0, chainRowIDs: quotedChainRowIDs)
+            } ?? [:]
             let focusedRowID = presentedQuoteFocus?.rowID
                 ?? activeComposerMessageID.map { TimelineEntry.rowID(for: $0, in: timelineEntries) }
             // Rows get the chat without its preview and unread state, so each
@@ -137,15 +145,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     firstUnreadID: outgoingMessages.isEmpty ? firstUnreadID : nil,
                                     focusedRowID: focusedRowID,
                                     quotedChain: isQuoteReply ? quotedChainPresentation : nil,
-                                    // Its bubble is shown up in the chain. One
-                                    // that moves stays hidden until it's back;
-                                    // the rest fade back in as the chain fades.
-                                    quotedChainState: item.scrollTargetID.flatMap { rowID -> QuotedChainRowState? in
-                                        guard let quoteFocus, quotedChainRowIDs.contains(rowID) else { return nil }
-                                        let moves = quoteFocus.origins[rowID] != nil
-                                        return quoteFocus.isPresented || moves ? .shownAbove(moves: moves) : nil
-                                    } ?? .inTimeline
+                                    quotedFocusRole: item.scrollTargetID.flatMap { quotedRoles[$0] } ?? .none
                                 )
+                                .environment(\.timelineRowFrames, rowFrames)
                                 // Its quotes float over the rows above it.
                                 .zIndex(isQuoteReply ? 1 : 0)
                                 // The caption comes and goes at once; the
@@ -157,12 +159,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     guard let rowID = item.scrollTargetID else { return }
                                     scrollAnchor.update(rowID, frame: frame)
                                     rowFrames.update(rowID, visibleFrame: frame)
-                                }
-                                .onGeometryChange(for: CGFloat.self) { geometry in
-                                    geometry.frame(in: .timelineContent).maxY
-                                } action: { maxY in
-                                    guard let rowID = item.scrollTargetID else { return }
-                                    rowFrames.update(rowID, contentBottomEdge: maxY)
                                 }
                                 .onDisappear {
                                     guard let rowID = item.scrollTargetID else { return }
@@ -467,9 +463,15 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     let origins = reduceMotion ? [:] : rowFrames.visibleBottomEdges(
                         of: QuotedMessageChain.rowIDs(of: chain, in: timelineEntries, replyRowID: rowID)
                     )
+                    let sender = QuotedSenderHandoff.handoffs(
+                        for: rowID, in: timelineEntries, chat: chat, frames: reduceMotion ? nil : rowFrames
+                    )
                     revealedQuotedChainKey = nil
                     withAnimation(ChatVisualStyle.quotedMessageAnimation(reduceMotion: reduceMotion)) {
-                        quotedFocus = QuotedMessageFocus(rowID: rowID, quoted: quoted, origins: origins)
+                        quotedFocus = QuotedMessageFocus(
+                            rowID: rowID, quoted: quoted, origins: origins,
+                            senderName: sender.name, senderAvatar: sender.avatar
+                        )
                     }
                 })
                 // A chain reaching above the header moves its reply down,

@@ -11,9 +11,7 @@ struct TimelineItemRow: View {
     /// For the reply whose quote was tapped, the messages it shows above
     /// itself.
     let quotedChain: QuotedMessageChainPresentation?
-    /// Whether this row's message is shown in that chain, leaving its own
-    /// place empty.
-    let quotedChainState: QuotedChainRowState
+    let quotedFocusRole: QuotedFocusRowRole
     @Environment(\.reactionPicker) private var reactionPicker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var bubbleNamespace
@@ -31,7 +29,7 @@ struct TimelineItemRow: View {
                     showsUnreadDivider: entry.message.id == firstUnreadID,
                     focusedRowID: focusedRowID,
                     quotedChain: quotedChain,
-                    quotedChainState: quotedChainState
+                    quotedFocusRole: quotedFocusRole
                 )
                 // Reply navigation still addresses the canonical message ID.
                 .id(entry.message.id)

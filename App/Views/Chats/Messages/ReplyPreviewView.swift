@@ -8,7 +8,6 @@ import SwiftUI
 /// runs `action` when one is given.
 struct ReplyPreviewView: View {
     @Environment(\.showQuotedMessage) private var showQuotedMessage
-    @Environment(\.recedesReplyPreview) private var recedes
 
     let linkedMessage: Message?
     /// The message that quotes it; nil for an optimistic row.
@@ -46,9 +45,6 @@ struct ReplyPreviewView: View {
             .contentShape(.rect(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        // While the messages it stands for are shown above its reply; a tap
-        // on it then returns to the timeline, as around them.
-        .timelineFocus(!recedes)
         // The name stays in the spoken label even where it isn't shown.
         .accessibilityLabel(accessibilityLabel)
     }

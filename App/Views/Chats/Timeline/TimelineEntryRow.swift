@@ -11,10 +11,10 @@ struct TimelineEntryRow: View {
     /// The messages this reply quotes, floated above it while its quote is
     /// shown. Nil otherwise.
     let quotedChain: QuotedMessageChainPresentation?
-    /// Whether this message is shown above a reply whose quote was tapped:
-    /// its bubble moved there, and the row keeps only its space.
-    let quotedChainState: QuotedChainRowState
+    /// Parts this row gives up to the focused reply, keeping their layout space.
+    let quotedFocusRole: QuotedFocusRowRole
     @Environment(\.dismissTimelineFocus) private var dismissTimelineFocus
+    @Environment(\.timelineRowFrames) private var rowFrames
 
     var body: some View {
         let isIdle = focusedRowID == nil
@@ -34,16 +34,12 @@ struct TimelineEntryRow: View {
             }
 
             MessageRowView(entry: entry, chat: chat)
-                // Its own quote recedes: what it stands for is shown above.
-                .environment(\.recedesReplyPreview, quotedChain?.isPresented == true)
-                .timelineFocus(isIdle || isFocusedRow)
-                // Under its copy above, which starts over it and ends back
-                // over it, so the bubble seems to move: it hides and returns
-                // at once. One whose copy only fades fades with it.
-                .opacity(quotedChainState.isShownAbove ? 0 : 1)
-                .transaction(value: quotedChainState) { transaction in
-                    if quotedChainState.moves { transaction.animation = nil }
+                .environment(\.quotedFocusRole, quotedFocusRole)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .timelineContent).maxY } action: {
+                    rowFrames?.update(entry.id, contentBottomEdge: $0)
                 }
+                .timelineFocus(isIdle || isFocusedRow)
+                .quotedFocusHandoff(quotedFocusRole.message)
                 .timelineRowPadding(startsSenderRun: entry.startsSenderRun)
                 // The swipe actions below take taps across the row's whole
                 // width, so the focused row returns to the timeline from the
@@ -62,14 +58,13 @@ struct TimelineEntryRow: View {
                 // the timeline's backdrop.
                 .allowsHitTesting(isIdle || isFocusedRow)
                 // Over the receded rows above, so the reply keeps its place.
-                // The zero-height frame stands the chain on the row's top
-                // edge, reaching up; an alignment guide in an overlay isn't
-                // honoured everywhere and left it covering the reply.
-                .overlay(alignment: .top) {
+                // Meet the actual bubble, below the hidden reply preview.
+                .overlay(alignment: Alignment(horizontal: .center, vertical: .messageBubbleTop)) {
                     if let quotedChain {
                         QuotedMessageChainView(presentation: quotedChain, chat: chat)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(height: 0, alignment: .bottom)
+                            .alignmentGuide(.messageBubbleTop) { $0[.bottom] }
                             // Each tap starts its own chain from the rows.
                             .id(quotedChain.id)
                             // Its messages move and fade by themselves.
