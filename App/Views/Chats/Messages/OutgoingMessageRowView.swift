@@ -46,8 +46,8 @@ struct OutgoingMessageRowView: View {
                 if !message.text.isEmpty {
                     MessageTextView(text: message.text, isOutgoing: true, expansionID: message.id.uuidString)
                         .messageBubbleChrome(isOutgoing: true)
-                        .environment(\.messageBubbleJoins, entry.bubbleJoins.bubble(at: bubbleCount - 1, of: bubbleCount))
                         .sendEffect(forOutgoing: message.id)
+                        .environment(\.messageBubbleJoins, entry.bubbleJoins.bubble(at: bubbleCount - 1, of: bubbleCount))
                 }
 
                 if case .failed(let error) = message.state {

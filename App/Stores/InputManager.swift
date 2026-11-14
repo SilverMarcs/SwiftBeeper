@@ -150,7 +150,10 @@ final class InputManager {
 
     // MARK: - Submit
 
-    func submit(_ composer: Composer, sourceFrame: CGRect? = nil) {
+    /// Sends or saves the composer's draft.
+    /// - Parameter origin: The composer's field and editor, which a sent
+    ///   message's bubble grows out of.
+    func submit(_ composer: Composer, from origin: ComposerSendOrigin? = nil) {
         guard !isSubmittingDictation else { return }
         if isDictating(in: composer) {
             let session = dictation.sessionID
@@ -160,25 +163,27 @@ final class InputManager {
                 defer { isSubmittingDictation = false }
                 guard await dictation.finish(session: session),
                       composer.activeMessage?.id == composerMessageID else { return }
-                submitDraft(of: composer, sourceFrame: sourceFrame)
+                submitDraft(of: composer, from: origin)
             }
             return
         }
-        submitDraft(of: composer, sourceFrame: sourceFrame)
+        submitDraft(of: composer, from: origin)
     }
 
-    private func submitDraft(of composer: Composer, sourceFrame: CGRect?) {
+    private func submitDraft(of composer: Composer, from origin: ComposerSendOrigin?) {
         if let message = composer.editing {
             saveEdit(of: message, in: composer)
         } else {
-            send(composer, from: sourceFrame)
+            send(composer, from: origin)
         }
     }
 
-    private func send(_ composer: Composer, from sourceFrame: CGRect?) {
+    private func send(_ composer: Composer, from origin: ComposerSendOrigin?) {
         let snapshot = composer.draft.trimmed
         let attachments = composer.pendingAttachments
         guard !snapshot.text.isEmpty || !attachments.isEmpty else { return }
+        // Read while the editor still shows the draft.
+        let source = snapshot.text.isEmpty ? nil : origin?.source()
         let outgoing = chatStore.sendMessage(
             text: snapshot.text,
             mentions: snapshot.mentions,
@@ -192,7 +197,7 @@ final class InputManager {
         composer.alsoSendToChat = false
         composer.clearReply()
         if let outgoing {
-            sendAnimator.begin(outgoing, from: sourceFrame)
+            sendAnimator.begin(outgoing, from: source)
         }
     }
 

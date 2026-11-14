@@ -16,6 +16,8 @@ struct ComposerTextView: UIViewRepresentable {
     /// Changes each time the composer asks for focus, which the editor then
     /// takes even if `isFocused` was already true.
     let focusAttempt: Int
+    /// Told about the editor, so a send can read where the draft is drawn.
+    let sendOrigin: ComposerSendOrigin
     /// Where the caret goes when the draft is replaced from outside, as when
     /// a mention is inserted.
     let selection: NSRange?
@@ -37,6 +39,7 @@ struct ComposerTextView: UIViewRepresentable {
         editor.delegate = context.coordinator
         editor.text = text
         editor.textDidChange()
+        sendOrigin.editor = editor
         return editor
     }
 
@@ -55,7 +58,10 @@ struct ComposerTextView: UIViewRepresentable {
             if let selection, selection.upperBound <= (text as NSString).length {
                 editor.selectedRange = selection
             }
-            editor.textDidChange()
+            // A draft emptied by sending snaps back to one line under the
+            // bubble leaving it, while the timeline scrolls to the sent
+            // message; holding the timeline to the field would jump it there.
+            editor.textDidChange(announcesResize: !text.isEmpty)
         }
         // Restyled whenever the text or its mentions change, once any
         // composition has ended.

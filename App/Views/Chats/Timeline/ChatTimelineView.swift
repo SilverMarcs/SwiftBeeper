@@ -248,7 +248,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .contentMargins(.horizontal, 12, for: .scrollContent)
                 #endif
                 .contentMargins(.bottom, 24, for: .scrollContent)
-                .scrollClipDisabled(!inputManager.sendAnimator.flights.isEmpty)
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
                 .scrollsOnComposerFocus(composer) {
@@ -385,7 +384,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     // Confirmation replaces the outgoing row, but not the end
                     // marker. Let the existing scroll animation finish.
                     guard !confirmedOptimisticMessage else { return }
-                    scrollToLatest(with: proxy)
+                    // The conversation springs up with the bubble flying in.
+                    scrollToLatest(with: proxy, animation: sentMessage ? MessageSendMotion.scrollAnimation : nil)
                 }
                 // A caption appearing below the newest row grows the timeline
                 // under the reader, who follows it down if they were following
@@ -527,6 +527,11 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     MessageInputView(composer: composer, chat: chat, error: source.timelineError)
                 }
                 #endif
+                // Above the composer, so a sent message's bubble grows out of
+                // the field itself rather than from under its glass.
+                .overlayPreferenceValue(MessageSendDestinationKey.self) { destinations in
+                    MessageSendFlightLayer(destinations: destinations)
+                }
                 // The conversation's composer, for message actions such as Edit.
                 .environment(\.composer, composer)
                 .environment(\.expandedMessages, expandedMessages)
@@ -595,11 +600,12 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         }
     }
 
-    private func scrollToLatest(with proxy: ScrollViewProxy, animated: Bool = true) {
+    /// - Parameter animation: How to scroll, rather than easing out.
+    private func scrollToLatest(with proxy: ScrollViewProxy, animated: Bool = true, animation: Animation? = nil) {
         latestScrollGeneration += 1
         let generation = latestScrollGeneration
         isScrollingToLatest = true
-        withAnimation(reduceMotion || !animated ? nil : .easeOut(duration: 0.25)) {
+        withAnimation(reduceMotion || !animated ? nil : animation ?? .easeOut(duration: 0.25)) {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         } completion: {
             guard generation == latestScrollGeneration else { return }

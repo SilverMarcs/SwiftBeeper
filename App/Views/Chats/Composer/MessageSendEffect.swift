@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// Animate the actual bubble relative to its current layout, never a copied
-/// destination rectangle. Only render transforms change on animation frames.
+/// Hands a just-sent bubble to `MessageSendFlightLayer`, which draws it
+/// above the composer, flying from the field to here. The bubble keeps its
+/// place in the timeline, hidden, and reports where it is and how its text
+/// is laid out on every pass, so the flight always lands on it exactly.
 struct MessageSendEffect: ViewModifier {
     @Environment(InputManager.self) private var input
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.messageBubbleJoins) private var joins
 
     /// Finds this bubble's flight, if it was just sent.
     let flight: (MessageSendAnimator) -> MessageSendFlight?
@@ -12,23 +15,16 @@ struct MessageSendEffect: ViewModifier {
     func body(content: Content) -> some View {
         let animator = input.sendAnimator
         if !reduceMotion, let flight = flight(animator) {
-            let source = flight.sourceFrame
-            let startedAt = flight.startedAt
-            TimelineView(.animation) { _ in
-                let progress = MessageSendFlight.progress(since: startedAt, at: .now)
-                content
-                    .visualEffect { bubble, geometry in
-                        let destination = geometry.frame(in: .global)
-                        let remaining = 1 - progress
-                        return bubble
-                            .scaleEffect(0.9 + 0.1 * progress)
-                            .offset(
-                                x: (source.midX - destination.midX) * remaining,
-                                y: (source.midY - destination.midY) * remaining
-                            )
+            let id = flight.id
+            let joins = joins
+            content
+                .opacity(0)
+                .overlayPreferenceValue(Text.LayoutKey.self) { layouts in
+                    Color.clear.anchorPreference(key: MessageSendDestinationKey.self, value: .bounds) { bounds in
+                        [MessageSendDestination(id: id, bounds: bounds, textLayouts: layouts, joins: joins)]
                     }
-            }
-            .onAppear { animator.start(flight.id) }
+                }
+                .onAppear { animator.start(id) }
         } else {
             content
         }
@@ -36,7 +32,8 @@ struct MessageSendEffect: ViewModifier {
 }
 
 extension View {
-    /// Flies a just-sent bubble in from the composer.
+    /// Flies a just-sent bubble in from the composer. Apply it to the bubble
+    /// itself, inside the `messageBubbleJoins` that shape it.
     func sendEffect(forOutgoing id: OutgoingMessage.ID) -> some View {
         modifier(MessageSendEffect { $0.flight(forOutgoing: id) })
     }

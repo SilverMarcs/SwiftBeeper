@@ -39,11 +39,11 @@ struct MessageContentView: View {
                 if let visibleText = message.visibleText {
                     MessageTextWithLinkPreview(message: message, text: message.formattedText ?? visibleText, isOutgoing: isOutgoing)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
+                        .sendEffect(forConfirmed: isOutgoing ? message.id : nil)
                         // Media takes over the typing bubble when present; its
                         // caption has a separate background and must not match too.
                         .environment(\.typingBubbleNamespace, message.attachments?.isEmpty != false ? typingBubbleNamespace : nil)
                         .environment(\.messageBubbleJoins, bubbleJoins.bubble(at: bubbleCount - 1, of: bubbleCount))
-                        .sendEffect(forConfirmed: isOutgoing ? message.id : nil)
                 }
             }
         }

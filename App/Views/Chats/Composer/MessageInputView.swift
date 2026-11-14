@@ -14,10 +14,12 @@ struct MessageInputView: View {
 
     /// Whether the editor is first responder, mirrored into the composer.
     @State private var isMessageFieldFocused = false
-    /// Where a sent bubble flies from. Kept here rather than on the composer:
-    /// the field stays put while another chat's composer takes it over, so its
-    /// frame wouldn't change to reach the new one.
-    @State private var fieldFrame: CGRect?
+    /// The field and editor a sent bubble grows out of. Kept here rather than on
+    /// the composer: the field stays put while another chat's composer takes
+    /// it over, so its frame wouldn't change to reach the new one.
+    @State private var sendOrigin = ComposerSendOrigin(fieldCornerRadius: Self.fieldCornerRadius)
+
+    private static let fieldCornerRadius: CGFloat = 20
 
     var body: some View {
         GlassEffectContainer {
@@ -53,19 +55,20 @@ struct MessageInputView: View {
                         MacComposerTextView(
                             text: Bindable(composer).text,
                             isFocused: $isMessageFieldFocused,
+                            sendOrigin: sendOrigin,
                             selection: composer.selection,
                             mentions: composer.draft.mentions.map(\.range),
                             placeholder: composer.prompt,
                             onSelectionChange: { composer.selection = $0 },
                             onReturn: submit
                         )
-                            .padding(.horizontal, 4)
-                            .padding(8)
                             .onGeometryChange(for: CGRect.self) { geometry in
                                 geometry.frame(in: .global)
                             } action: { frame in
-                                fieldFrame = frame
+                                sendOrigin.editorFrame = frame
                             }
+                            .padding(.horizontal, 4)
+                            .padding(8)
                             .composerMentionPopover(composer, isFocused: isMessageFieldFocused) { _ in
                                 // The mention's insertion already placed the caret.
                                 focusMessageField()
@@ -74,7 +77,12 @@ struct MessageInputView: View {
                         ComposerDictationButton(composer: composer, isInline: true)
                             .buttonStyle(.plain)
                     }
-                    .glassEffect(in: .rect(cornerRadius: 20))
+                    .glassEffect(in: .rect(cornerRadius: Self.fieldCornerRadius))
+                    .onGeometryChange(for: CGRect.self) { geometry in
+                        geometry.frame(in: .global)
+                    } action: { frame in
+                        sendOrigin.fieldFrame = frame
+                    }
 
                     ComposerSendButton(
                         isEditing: composer.isEditing,
@@ -149,7 +157,7 @@ struct MessageInputView: View {
 
     /// Sends or saves the draft.
     private func submit() {
-        input.submit(composer, sourceFrame: fieldFrame)
+        input.submit(composer, from: sendOrigin)
     }
 
     private func focusMessageField() {

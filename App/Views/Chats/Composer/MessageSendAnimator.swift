@@ -9,15 +9,14 @@ final class MessageSendAnimator {
 
     @ObservationIgnored private var expiryTasks: [UUID: Task<Void, Never>] = [:]
 
-    func begin(_ message: OutgoingMessage, from frame: CGRect?) {
-        guard !message.text.isEmpty,
-              let frame, frame.width > 0, frame.height > 0 else { return }
+    func begin(_ message: OutgoingMessage, from source: MessageSendSource?) {
+        guard !message.text.isEmpty, let source else { return }
 
         // Even hardware-keyboard repeats retain only a bounded animation tail.
         if flights.count >= 8, let oldest = flights.first {
             finish(oldest.id)
         }
-        let flight = MessageSendFlight(message: message, sourceFrame: frame)
+        let flight = MessageSendFlight(message: message, source: source)
         flights.append(flight)
         expiryTasks[flight.id] = Task { [weak self] in
             // Drop unused presentation state if the row never appears.
@@ -45,7 +44,7 @@ final class MessageSendAnimator {
         flight.startedAt = .now
         expiryTasks.removeValue(forKey: id)?.cancel()
         expiryTasks[id] = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(MessageSendFlight.duration))
+            try? await Task.sleep(for: .seconds(MessageSendMotion.duration))
             guard !Task.isCancelled else { return }
             self?.finish(id)
         }
@@ -53,7 +52,8 @@ final class MessageSendAnimator {
 
     func finish(_ id: UUID) {
         expiryTasks.removeValue(forKey: id)?.cancel()
-        // The render transform is already identity when its clock expires.
+        // The flying copy already sits exactly on the bubble when its clock
+        // expires, so the bubble takes over without a frame between.
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
@@ -65,31 +65,5 @@ final class MessageSendAnimator {
         for task in expiryTasks.values { task.cancel() }
         expiryTasks.removeAll()
         flights.removeAll()
-    }
-}
-
-/// One bubble's flight. A shared clock survives the optimistic row being
-/// replaced by its echo.
-@MainActor
-@Observable
-final class MessageSendFlight: Identifiable {
-    let id: UUID
-    let sourceFrame: CGRect
-    var startedAt: ContinuousClock.Instant?
-    var confirmedMessageIDs: Set<String> = []
-
-    init(message: OutgoingMessage, sourceFrame: CGRect) {
-        id = message.id
-        self.sourceFrame = sourceFrame
-    }
-
-    nonisolated static let duration: TimeInterval = 0.55
-    nonisolated private static let spring = Spring(response: duration * 0.25 / 0.38, dampingRatio: 0.8)
-
-    nonisolated static func progress(since start: ContinuousClock.Instant?, at now: ContinuousClock.Instant) -> CGFloat {
-        guard let start else { return 0 }
-        let seconds = start.duration(to: now) / .seconds(1)
-        guard seconds < duration else { return 1 }
-        return spring.value(target: CGFloat(1), time: max(0, seconds))
     }
 }

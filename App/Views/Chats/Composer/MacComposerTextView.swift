@@ -9,6 +9,8 @@ struct MacComposerTextView: NSViewRepresentable {
     @Binding var text: String
     /// Asks for focus, and follows it.
     @Binding var isFocused: Bool
+    /// Told about the editor, so a send can read where the draft is drawn.
+    let sendOrigin: ComposerSendOrigin
     /// Where the caret goes when the draft is replaced from outside, as when
     /// a mention is inserted.
     let selection: NSRange?
@@ -41,6 +43,7 @@ struct MacComposerTextView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.documentView = editor
         context.coordinator.editor = editor
+        sendOrigin.editor = editor
         return scrollView
     }
 

@@ -26,8 +26,8 @@ struct ComposerBar: View {
     /// once UIKit has announced the keyboard moving with it.
     @State private var isEditing = false
     @State private var width: CGFloat = 0
-    /// Where a sent bubble flies from.
-    @State private var editorFrame: CGRect?
+    /// The field and editor a sent bubble grows out of.
+    @State private var sendOrigin = ComposerSendOrigin(fieldCornerRadius: ComposerBarLayout.cornerRadius)
 
     /// Bumped each time the bar asks the editor for focus, so it asks again
     /// even when the composer already thinks it has focus.
@@ -70,6 +70,7 @@ struct ComposerBar: View {
                     ComposerBarLayout(isFocused: isEditing, editorHeight: editorHeight) {
                         Color.clear
                             .glassEffect(.regular, in: .rect(cornerRadius: ComposerBarLayout.cornerRadius))
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sendOrigin.fieldFrame = $0 }
                             .composerBarPart(.panel)
 
                         ComposerBarAttachButton(composer: composer)
@@ -88,13 +89,14 @@ struct ComposerBar: View {
                         isFocused: Bindable(composer).isFocused,
                         isEditing: $isEditing,
                         focusAttempt: focusAttempt,
+                        sendOrigin: sendOrigin,
                         selection: composer.selection,
                         mentions: composer.draft.mentions.map(\.range),
                         placeholder: composer.prompt,
                         onSelectionChange: { composer.selection = $0 },
                         onReturn: send
                     )
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { editorFrame = $0 }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sendOrigin.editorFrame = $0 }
                     .composerBarPart(.editor)
 
                     if dictationSettings.isEnabled {
@@ -192,8 +194,16 @@ struct ComposerBar: View {
     }
 
     /// Sends or saves the draft, keeping the keyboard up for the next message.
+    ///
+    /// The field goes back to a single line at once rather than shrinking:
+    /// the sent bubble covers it as it leaves, and a timeline still moving
+    /// with the field would pull the bubble's landing place around mid-flight.
     private func send() {
-        input.submit(composer, sourceFrame: editorFrame)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            input.submit(composer, from: sendOrigin)
+        }
     }
 }
 #endif

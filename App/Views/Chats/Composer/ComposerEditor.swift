@@ -79,13 +79,17 @@ final class ComposerEditor: UITextView {
     /// The height the growing editor is growing or shrinking to.
     private var targetHeight: CGFloat = 0
 
-    func textDidChange() {
+    /// - Parameter announcesResize: Whether a change in height is announced
+    ///   with `willResizeNotification`, for the timeline to follow.
+    func textDidChange(announcesResize: Bool = true) {
         placeholderLabel.isHidden = !text.isEmpty
         if isGrowing, bounds.width > 0 {
             let height = Self.fittingHeight(of: text, width: bounds.width, maximumLines: ComposerTextView.maximumLines)
             if height != targetHeight {
                 targetHeight = height
-                NotificationCenter.default.post(name: Self.willResizeNotification, object: self)
+                if announcesResize {
+                    NotificationCenter.default.post(name: Self.willResizeNotification, object: self)
+                }
             }
         }
         updateScrolling()
