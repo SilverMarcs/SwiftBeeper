@@ -14,8 +14,10 @@ struct ChatLinksListView: View {
                     .onAppear { loadMore(after: link) }
             }
 
-            ChatMessagePagerFooter(pager: pager)
-                .listRowSeparator(.hidden)
+            if pager.showsFooter {
+                ChatMessagePagerFooter(pager: pager)
+                    .listRowSeparator(.hidden)
+            }
         }
         .contentMargins(.top, 10, for: .scrollContent)
         .onChange(of: pager.items.count, initial: true) { _, count in

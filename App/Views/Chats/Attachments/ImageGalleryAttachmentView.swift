@@ -9,7 +9,7 @@ struct ImageGalleryAttachmentView: View {
     var body: some View {
         let urls = messages.compactMap { MatrixMedia.displayURL(for: $0.attachments?.first?.resolvedURL) }
         let layout = ImageGalleryLayout(imageCount: urls.count)
-        SMVGallery(images: urls, targetSize: MediaBubbleSize.decodePixelSize) {
+        SMVGallery(images: urls, targetSize: MediaBubbleSize.decodePixelSize, showsPageIndicator: false) {
             Grid(horizontalSpacing: ImageGalleryLayout.spacing, verticalSpacing: ImageGalleryLayout.spacing) {
                 ForEach(layout.rows, id: \.self) { row in
                     GridRow {

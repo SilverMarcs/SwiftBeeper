@@ -32,6 +32,11 @@ final class ChatMessagePager {
 
     var isEmpty: Bool { hasLoaded && items.isEmpty }
 
+    /// Lists must omit the footer row entirely when it has nothing to show.
+    var showsFooter: Bool {
+        isLoading || isLoadingServerHistory || errorMessage != nil
+    }
+
     /// Loads the next local page. A page can hold no matches yet have more
     /// after it, so reading continues until one adds an item.
     func loadNextPage() async {

@@ -13,8 +13,10 @@ struct ChatFilesListView: View {
                 }
             }
 
-            ChatMessagePagerFooter(pager: pager)
-                .listRowSeparator(.hidden)
+            if pager.showsFooter {
+                ChatMessagePagerFooter(pager: pager)
+                    .listRowSeparator(.hidden)
+            }
         }
         .contentMargins(.top, 10, for: .scrollContent)
         .overlay {

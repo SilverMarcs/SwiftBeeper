@@ -13,8 +13,10 @@ struct ChatMediaGridView: View {
                 Task { await pager.loadNextPage() }
             }
 
-            ChatMessagePagerFooter(pager: pager)
-                .padding()
+            if pager.showsFooter {
+                ChatMessagePagerFooter(pager: pager)
+                    .padding()
+            }
         }
         .overlay {
             if pager.isEmpty && !pager.isLoadingServerHistory {

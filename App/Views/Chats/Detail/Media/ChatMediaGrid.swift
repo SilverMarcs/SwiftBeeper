@@ -14,7 +14,7 @@ struct ChatMediaGrid: View {
 
     var body: some View {
         let gallery = ChatMediaGallery(messages: messages)
-        SMVGallery(images: gallery.imageURLs, targetSize: MediaBubbleSize.decodePixelSize) {
+        SMVGallery(images: gallery.imageURLs, targetSize: MediaBubbleSize.decodePixelSize, showsPageIndicator: false) {
             LazyVGrid(columns: columns, spacing: ImageGalleryLayout.spacing) {
                 ForEach(messages) { message in
                     if let attachment = message.attachments?.first {
@@ -33,6 +33,7 @@ struct ChatMediaGrid: View {
             }
         }
         .quickLookPreview($videoURL)
+        .modifier(PhotoAttachmentSaver())
     }
 
     private func play(_ attachment: Attachment, of message: Message) async {
