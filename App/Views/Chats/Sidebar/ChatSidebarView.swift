@@ -36,7 +36,7 @@ struct ChatSidebarView: View {
             // kept results, as after opening one, still read as a search.
             .navigationTitle(isSearchFocused || isSearchPresented || chatStore.isSearchActive ? "Search" : "Chats")
             .toolbarTitleDisplayMode(isIPad ? .inline : .inlineLarge)
-            .toolbar(removing: isIPhone ? .sidebarToggle : nil)
+            .toolbar(removing: .sidebarToggle)
             .toolbar {
                 #if os(macOS)
                 // Settings lives in the app's Settings scene.

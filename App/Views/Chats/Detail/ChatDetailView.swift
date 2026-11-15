@@ -4,6 +4,7 @@ import SwiftUI
 struct ChatDetailView: View {
     /// Keep lifecycle callbacks tied to this detail's navigation identity.
     let chatID: String?
+    let toggleSidebar: () -> Void
 
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var input
@@ -44,7 +45,10 @@ struct ChatDetailView: View {
             #endif
             .toolbar {
                 if isMacOrPad {
-                    DefaultToolbarItem(kind: .sidebarToggle, placement: .navigation)
+                    ToolbarItem(placement: .navigation) {
+                        Button("Toggle Sidebar", systemImage: "sidebar.left", action: toggleSidebar)
+                            .help("Show or hide the chat list")
+                    }
                 }
 
                 if let selectedChat {
