@@ -8,6 +8,8 @@ struct TimelineItemRow: View {
     /// edits its message, or while its quote is shown; every other row
     /// recedes. Nil leaves the timeline as it is.
     let focusedRowID: Message.ID?
+    /// A send's caption keeps its layout space while its bubble flies in.
+    let hidesDeliveryCaption: Bool
     /// For the reply whose quote was tapped, the messages it shows above
     /// itself.
     let quotedChain: QuotedMessageChainPresentation?
@@ -39,6 +41,7 @@ struct TimelineItemRow: View {
                     .id(entry.id)
             case .deliveryCaption(let indicator):
                 DeliveryCaptionView(indicator: indicator, chat: chat)
+                    .opacity(hidesDeliveryCaption ? 0 : 1)
                     .timelineFocus(isIdle)
             case .seenCaption(let indicator):
                 DeliveryCaptionView(indicator: indicator, chat: chat, isOutgoing: false)

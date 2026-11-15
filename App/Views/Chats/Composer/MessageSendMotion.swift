@@ -8,13 +8,16 @@ import SwiftUI
 /// a little and settling back, as in Messages. The timeline scrolls on the
 /// same spring, so the conversation bounces up with it.
 nonisolated enum MessageSendMotion {
+    /// Shorten every phase together, keeping the path, bounce and scroll in sync.
+    private static let timingScale = 0.85
+
     /// When every curve has settled and the real bubble takes over.
-    static let duration: TimeInterval = 0.75
+    static let duration: TimeInterval = 0.75 * timingScale
 
     /// About 7% overshoot as it arrives.
-    private static let riseSpring = Spring(duration: 0.45, bounce: 0.35)
+    private static let riseSpring = Spring(duration: 0.45 * timingScale, bounce: 0.35)
     /// No bounce, so the bubble never passes its side's edge.
-    private static let slideSpring = Spring(duration: 0.34, bounce: 0)
+    private static let slideSpring = Spring(duration: 0.34 * timingScale, bounce: 0)
 
     /// The timeline's scroll down to the sent message.
     static let scrollAnimation = Animation.spring(riseSpring)
@@ -41,7 +44,7 @@ nonisolated enum MessageSendMotion {
     /// to read as part of the motion: words sliding or fading between lines
     /// show as a jumble while they cross.
     static func hasReflowed(at time: TimeInterval) -> Bool {
-        time >= 0.08
+        time >= 0.08 * timingScale
     }
 
     private static func progress(of spring: Spring, at time: TimeInterval) -> CGFloat {

@@ -74,11 +74,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 isThread: target.isThread
             )
             let confirmedCaption = entriesCache.deliveryCaption
-            // A just-sent bubble lands before its caption appears below it,
-            // as in Messages.
-            let deliveryCaption = inputManager.sendAnimator.flights.isEmpty
-                ? DeliveryIndicator.newest(outgoing: outgoingMessages, confirmed: confirmedCaption?.indicator)
-                : nil
+            // Reserve the caption's space before the flight starts, then
+            // reveal it on landing without moving the bubble a second time.
+            let hidesDeliveryCaption = !inputManager.sendAnimator.flights.isEmpty
+            let deliveryCaption = DeliveryIndicator.newest(outgoing: outgoingMessages, confirmed: confirmedCaption?.indicator)
             // A message the user is sending is newer than the one seen.
             let seenCaption = outgoingMessages.isEmpty ? entriesCache.newestSeenCaption : nil
             let timelineItems = TimelineItem.items(
@@ -152,6 +151,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     chat: rowChat,
                                     firstUnreadID: outgoingMessages.isEmpty ? unreadID : nil,
                                     focusedRowID: focusedRowID,
+                                    hidesDeliveryCaption: hidesDeliveryCaption,
                                     quotedChain: isQuoteReply ? quotedChainPresentation : nil,
                                     quotedFocusRole: item.scrollTargetID.flatMap { quotedRoles[$0] } ?? .none
                                 )
@@ -420,7 +420,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     captionCount: (deliveryCaption == nil ? 0 : 1) + (seenCaption == nil ? 0 : 1)
                 )) { oldTracker, newTracker in
                     guard source.hasLoadedTimeline, oldTracker.target == newTracker.target, oldTracker.hasRows,
-                          newTracker.captionCount > oldTracker.captionCount, isFollowingLatest else { return }
+                          newTracker.captionCount > oldTracker.captionCount, isFollowingLatest,
+                          inputManager.sendAnimator.flights.isEmpty else { return }
+                    // A send already scrolls to the space reserved for its
+                    // caption on the flight's spring.
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in
