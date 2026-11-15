@@ -43,6 +43,10 @@ struct ChatDetailView: View {
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             #endif
             .toolbar {
+                if isMacOrPad {
+                    DefaultToolbarItem(kind: .sidebarToggle, placement: .navigation)
+                }
+
                 if let selectedChat {
                     ToolbarItem(placement: .principal) {
                         ChatHeaderAvatarButton(chat: selectedChat) {
