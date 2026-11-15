@@ -37,6 +37,9 @@ final class Composer {
     /// Set while the field should take focus, such as for Reply, until the
     /// field has. A field appearing later, like a thread's, still sees it.
     private(set) var focusRequestID: UUID?
+    /// Context menus may suppress the keyboard without releasing the editor.
+    /// Swipes only need focus if the editor doesn't already have it.
+    private(set) var focusRequestAfterContextMenu = true
     /// Changes when dictation lands in the draft, which focuses the macOS
     /// field. iOS leaves the keyboard down, as Send shows beside the draft.
     private(set) var dictationFocusRequestID: UUID?
@@ -61,10 +64,10 @@ final class Composer {
 
     // MARK: - Reply and edit
 
-    func reply(to message: Message) {
+    func reply(to message: Message, afterContextMenu: Bool = true) {
         editing = nil
         replyingTo = message
-        requestFocus()
+        requestFocus(afterContextMenu: afterContextMenu)
     }
 
     /// Edits `message` in place of the draft.
@@ -95,7 +98,8 @@ final class Composer {
 
     // MARK: - Focus
 
-    func requestFocus() {
+    func requestFocus(afterContextMenu: Bool = true) {
+        focusRequestAfterContextMenu = afterContextMenu
         focusRequestID = UUID()
     }
 

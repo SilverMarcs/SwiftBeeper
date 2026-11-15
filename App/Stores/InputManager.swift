@@ -29,8 +29,8 @@ final class InputManager {
     @ObservationIgnored private var composers: [ComposerTarget: Composer] = [:]
 
     #if os(iOS)
-    /// How long the composers wait before focusing for Reply or Edit. Both come
-    /// from a message's context menu, whose actions run while it is still
+    /// How long the composers wait before focusing for context-menu Reply or
+    /// Edit. Their actions run while the message's menu is still
     /// dismissing. When dismissal finishes, UIKit restores the keyboard state
     /// from before the menu opened, which resigns a field focused any earlier.
     static let contextMenuDismissalDelay: Duration = .milliseconds(200)
@@ -130,14 +130,15 @@ final class InputManager {
 
     /// Replies in `message`'s thread on networks that reply in threads, or
     /// quotes it.
-    func reply(to message: Message, in composer: Composer) {
+    func reply(to message: Message, in composer: Composer, afterContextMenu: Bool = true) {
         if !composer.target.isThread, let chat = chatStore.chat(byID: message.chatID), chatStore.repliesInThreads(in: chat) {
             chatStore.showThread(for: message)
             let rootID = message.threadRootID ?? message.id
-            self.composer(for: ComposerTarget(chatID: message.chatID, threadRootID: rootID)).requestFocus()
+            self.composer(for: ComposerTarget(chatID: message.chatID, threadRootID: rootID))
+                .requestFocus(afterContextMenu: afterContextMenu)
         } else {
             withAnimation {
-                composer.reply(to: message)
+                composer.reply(to: message, afterContextMenu: afterContextMenu)
             }
         }
     }

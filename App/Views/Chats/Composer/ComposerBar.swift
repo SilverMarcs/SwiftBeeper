@@ -176,6 +176,17 @@ struct ComposerBar: View {
     /// native editor even if it already reports editing: that alone doesn't
     /// mean its keyboard was restored.
     private func handleFocusRequest(_ requestID: UUID) async {
+        guard !Task.isCancelled, composer.focusRequestID == requestID else { return }
+        // A swipe doesn't suppress the keyboard like a context menu. Leave an
+        // active editor alone, including its input views and current selection.
+        guard composer.focusRequestAfterContextMenu else {
+            if !isEditing {
+                composer.isFocused = true
+                focusAttempt += 1
+            }
+            composer.didHandleFocusRequest()
+            return
+        }
         do {
             try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
             for _ in 0..<Self.focusAttempts {

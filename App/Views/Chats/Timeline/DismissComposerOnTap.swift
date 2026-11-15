@@ -12,6 +12,7 @@ struct DismissComposerOnTap: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .environment(\.timelineTapRecognizer, recognizer)
             .background {
                 EnclosingScrollViewIntrospector { scrollView in
                     recognizer.onTap = dismiss
@@ -29,5 +30,10 @@ extension View {
     func dismissesComposerOnTap(_ dismiss: @escaping () -> Void) -> some View {
         modifier(DismissComposerOnTap(dismiss: dismiss))
     }
+}
+
+extension EnvironmentValues {
+    /// Lets native row swipe actions exclude their touches from tap dismissal.
+    @Entry var timelineTapRecognizer: TimelineTapRecognizer?
 }
 #endif

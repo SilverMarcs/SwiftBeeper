@@ -14,6 +14,9 @@ struct MessageSwipeActions: ViewModifier {
 
     @Environment(InputManager.self) private var input
     @Environment(\.composer) private var composer
+    #if os(iOS)
+    @Environment(\.timelineTapRecognizer) private var timelineTapRecognizer
+    #endif
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -23,12 +26,21 @@ struct MessageSwipeActions: ViewModifier {
                     // Inside a thread every message is already a thread reply.
                     if isEnabled, let composer, !composer.target.isThread {
                         Button("Reply", systemImage: "arrowshape.turn.up.left") {
-                            input.reply(to: message, in: composer)
+                            input.reply(to: message, in: composer, afterContextMenu: false)
                         }
                         .tint(.accentColor)
                         .labelStyle(.iconOnly)
                     }
+                } onPresentationChanged: { presented in
+                    #if os(iOS)
+                    timelineTapRecognizer?.setSwipeActionsPresented(presented, for: message.id)
+                    #endif
                 }
+                #if os(iOS)
+                .onDisappear {
+                    timelineTapRecognizer?.setSwipeActionsPresented(false, for: message.id)
+                }
+                #endif
         } else {
             content
         }
