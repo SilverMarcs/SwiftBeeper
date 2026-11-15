@@ -553,9 +553,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .savesAttachments()
                 .showsReactionDetails()
                 #if os(iOS)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ComposerBar(composer: composer, chat: chat, error: source.timelineError)
-                }
+                .timelineComposerBar(composer, chat: chat, error: source.timelineError)
                 #else
                 .safeAreaBar(edge: .bottom, spacing: 0) {
                     MessageInputView(composer: composer, chat: chat, error: source.timelineError)

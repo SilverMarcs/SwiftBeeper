@@ -230,7 +230,10 @@ final class TimelineKeyboardFollower {
             // The composer's anchor tops its bar, at the safe area's edge
             // once SwiftUI has laid it out at its new size.
             let safeAreaEdge = scrollView.convert(scrollView.bounds, to: window).maxY - scrollView.safeAreaInsets.bottom
+            // Another field's keyboard can cover the resting composer. The
+            // timeline must stop at that keyboard, even with its bar below it.
             layoutLag = composer.convert(composer.bounds, to: window).minY - safeAreaEdge
+            if !composer.avoidsKeyboard { layoutLag = min(0, layoutLag) }
         }
         let additive = endOffset(of: scrollView) - scrollView.contentOffset.y - layoutLag - unmirrored
         let layer = scrollView.layer

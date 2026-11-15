@@ -4,13 +4,18 @@ import SwiftUI
 /// Marks the composer's bounds in UIKit, where `TimelineKeyboardFollower`
 /// finds it to move the timeline with it as the keyboard shows and hides.
 struct ComposerKeyboardAnchor: UIViewRepresentable {
+    let avoidsKeyboard: Bool
+
     func makeUIView(context: Context) -> ComposerKeyboardAnchorView {
         let view = ComposerKeyboardAnchorView()
+        view.avoidsKeyboard = avoidsKeyboard
         view.isUserInteractionEnabled = false
         view.isAccessibilityElement = false
         return view
     }
 
-    func updateUIView(_ uiView: ComposerKeyboardAnchorView, context: Context) {}
+    func updateUIView(_ uiView: ComposerKeyboardAnchorView, context: Context) {
+        uiView.avoidsKeyboard = avoidsKeyboard
+    }
 }
 #endif

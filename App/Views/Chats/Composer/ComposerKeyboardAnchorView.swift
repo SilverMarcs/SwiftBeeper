@@ -4,6 +4,9 @@ import UIKit
 /// The UIKit view behind `ComposerKeyboardAnchor`, which can also call back
 /// from inside a Core Animation commit.
 final class ComposerKeyboardAnchorView: UIView {
+    /// False while another field's keyboard covers the resting composer.
+    var avoidsKeyboard = true
+
     /// Called in the Core Animation commit's display phase once asked for
     /// with `setNeedsCommitCallback()`: after SwiftUI has laid out and
     /// animated the composer for the frame being committed.

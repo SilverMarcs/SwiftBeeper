@@ -20,6 +20,8 @@ struct ComposerBar: View {
     let chat: Chat
     /// The conversation's failure, shown above the field.
     let error: String?
+    /// Whether this bar follows the keyboard or rests underneath it.
+    let avoidsKeyboard: Bool
 
     /// Whether the editor has focus. It follows the editor rather than the
     /// request for focus, so the composer only starts to grow or shrink
@@ -130,7 +132,7 @@ struct ComposerBar: View {
         // its items.
         .padding(.top, 10)
         // Its top edge is where the timeline's safe area ends.
-        .background(ComposerKeyboardAnchor())
+        .background(ComposerKeyboardAnchor(avoidsKeyboard: avoidsKeyboard))
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.4, extraBounce: 0.05), value: isEditing)
         // Each line the draft gains or loses grows or shrinks the field
         // smoothly, and the timeline follows it.
@@ -162,8 +164,6 @@ struct ComposerBar: View {
         .onDisappear {
             composer.isFocused = false
         }
-        // Outermost, so folding away takes the whole bar out of the safe area.
-        .yieldsKeyboardToOtherFields(composer)
     }
 
     /// How many times a focus request checks that the editor has focus.
