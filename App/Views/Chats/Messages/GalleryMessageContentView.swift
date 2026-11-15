@@ -38,13 +38,11 @@ struct GalleryMessageContentView: View {
             .contentShape(.contextMenuPreview, ChatVisualStyle.bubbleShape(isOutgoing: isOutgoing, joins: bubbleJoins))
             #endif
             .modifier(ReactionEmojiInputHost(messageID: primary.id))
-            .contextMenu {
-                MessageContextMenu(
-                    message: primary,
-                    chat: chat,
-                    galleryMessages: messages.filter { $0.id != primary.id }
-                )
-            }
+            .modifier(MessageReactionContextMenu(
+                message: primary,
+                chat: chat,
+                galleryMessages: messages.filter { $0.id != primary.id }
+            ))
         }
     }
 }

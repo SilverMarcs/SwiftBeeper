@@ -51,8 +51,6 @@ struct MessageContentView: View {
         .contentShape(.contextMenuPreview, ChatVisualStyle.bubbleShape(isOutgoing: isOutgoing, joins: bubbleJoins))
         #endif
         .modifier(ReactionEmojiInputHost(messageID: message.id))
-        .contextMenu {
-            MessageContextMenu(message: message, chat: chat)
-        }
+        .modifier(MessageReactionContextMenu(message: message, chat: chat))
     }
 }

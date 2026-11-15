@@ -8,14 +8,12 @@ struct MessageContextMenu: View {
     @Environment(\.composer) private var composer
     @Environment(\.saveAttachment) private var saveAttachment
     @Environment(\.saveAttachmentToPhotos) private var saveAttachmentToPhotos
-    @Environment(\.showReactionPicker) private var showReactionPicker
-    @Environment(\.reactionToggleFeedback) private var reactionToggleFeedback
 
     let message: Message
     let chat: Chat
     var galleryMessages: [Message] = []
 
-    private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
+    var showsQuickReactions = true
 
     var body: some View {
         Section {
@@ -24,23 +22,13 @@ struct MessageContextMenu: View {
             Text(message.timestampText)
         }
 
-        ControlGroup {
-            ForEach(quickReactions, id: \.self) { emoji in
-                Toggle(isOn: Binding(
-                    get: { ownReactionKey == emoji },
-                    set: { setOwnReaction($0 ? emoji : nil) }
-                )) {
-                    ReactionEmojiLabel(emoji: emoji)
-                }
+        if showsQuickReactions {
+            ControlGroup {
+                MessageQuickReactions(message: message, chat: chat)
             }
-            Button("More Reactions", systemImage: "plus") {
-                showReactionPicker(message, in: chat)
-            }
-            .accessibilityLabel("More Reactions")
-            .help("More Reactions")
+            .controlGroupStyle(.palette)
+            .menuActionDismissBehavior(.enabled)
         }
-        .controlGroupStyle(.palette)
-        .menuActionDismissBehavior(.enabled)
 
         Section {
             if let composer, chatStore.canEdit(message, in: chat) {
@@ -100,35 +88,6 @@ struct MessageContextMenu: View {
                         await chatStore.deleteMessage(message.id, in: message.chatID)
                     }
                 }
-            }
-        }
-    }
-
-    private var ownReactionKey: String? {
-        guard let selfID = chat.participants?.items.first(where: { $0.isSelf == true })?.id else { return nil }
-        return message.reactions?.first { $0.participantID == selfID }?.reactionKey
-    }
-
-    private var quickReactions: [String] {
-        guard let ownReactionKey,
-              !Self.commonReactions.contains(ownReactionKey),
-              message.visibleReactions.contains(where: { $0.reactionKey == ownReactionKey }) else {
-            return Self.commonReactions
-        }
-        return Self.commonReactions + [ownReactionKey]
-    }
-
-    private func setOwnReaction(_ newValue: String?) {
-        let old = ownReactionKey
-        guard old != newValue else { return }
-        // Played by the timeline, since choosing dismisses this menu.
-        reactionToggleFeedback?.play()
-        Task {
-            if let old, old != newValue {
-                await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: old)
-            }
-            if let newValue, newValue != old {
-                await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: newValue)
             }
         }
     }
