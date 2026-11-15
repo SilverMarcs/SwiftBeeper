@@ -11,16 +11,23 @@ struct TimelineComposerBar: ViewModifier {
     let error: String?
 
     @State private var isYielding = false
-    @State private var composerFrame = CGRect.zero
+    @State private var composerHeight: CGFloat = 0
+    @State private var composerTop: CGFloat = 0
     @State private var safeAreaBottom: CGFloat = 0
 
     func body(content: Content) -> some View {
         // The composer's own focus always shows it, however the keyboard's
         // announcements and the focus mirror happened to interleave.
         let staysAtBottom = isYielding && !composer.isFocused
-        // Reserve only the part of the bar inside the timeline's safe area.
-        // A docked keyboard covers it; a floating keyboard leaves it visible.
-        let reservedHeight = max(0, min(composerFrame.height, safeAreaBottom - composerFrame.minY))
+        // The bar and timeline rise together for this composer's keyboard,
+        // so clearance depends only on its height. Their screen positions
+        // arrive in separate layout passes and can briefly disagree, causing
+        // the inset to collapse at the start of keyboard movement.
+        // Only another field's keyboard needs an overlap calculation: a
+        // docked keyboard covers the resting bar; a floating one leaves it.
+        let reservedHeight = staysAtBottom
+            ? max(0, min(composerHeight, safeAreaBottom - composerTop))
+            : composerHeight
         content
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Color.clear.frame(height: reservedHeight)
@@ -34,14 +41,19 @@ struct TimelineComposerBar: ViewModifier {
                     .allowsHitTesting(false)
                     .overlay(alignment: .bottom) {
                         ComposerBar(composer: composer, chat: chat, error: error, avoidsKeyboard: !staysAtBottom)
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
-                                composerFrame = $0
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                                composerHeight = $0
+                            }
+                            .onGeometryChange(for: CGFloat.self) {
+                                staysAtBottom ? $0.frame(in: .global).minY : 0
+                            } action: {
+                                composerTop = $0
                             }
                     }
                     .ignoresSafeArea(staysAtBottom ? .keyboard : [], edges: .bottom)
             }
             .onGeometryChange(for: CGFloat.self) {
-                $0.frame(in: .global).maxY - $0.safeAreaInsets.bottom
+                staysAtBottom ? $0.frame(in: .global).maxY - $0.safeAreaInsets.bottom : 0
             } action: {
                 safeAreaBottom = $0
             }
