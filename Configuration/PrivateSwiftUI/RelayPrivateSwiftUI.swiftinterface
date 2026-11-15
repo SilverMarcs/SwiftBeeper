@@ -1,0 +1,13 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.4.2
+// swift-module-flags: -swift-version 5 -enable-library-evolution -module-name RelayPrivateSwiftUI
+import SwiftUI
+
+// A declaration-only module keeps Swift from trying to emit a new opaque result
+// type for Apple's private method. Relay's linker alias points its result type
+// descriptor to the original SwiftUI descriptor as well as calling its function.
+extension SwiftUI.View {
+  @available(iOS 27.0, macOS 27.0, *)
+  @_silgen_name("$s7SwiftUI4ViewPAAE22_textSelectionGroup_v1QryF")
+  public nonisolated func relayTextSelectionGroup() -> some SwiftUI.View
+}

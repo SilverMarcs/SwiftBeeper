@@ -23,7 +23,7 @@ private struct MessageTextSelection: ViewModifier {
         #if os(macOS)
         if let id, let selectableMessages {
             if selectableMessages.contains(id) {
-                content.textSelection(.enabled)
+                content.textSelection(.enabled).messageSelectionGroup()
             } else {
                 content.simultaneousGesture(
                     // Past a click's jitter, so a click on a link doesn't arm it.
@@ -33,13 +33,13 @@ private struct MessageTextSelection: ViewModifier {
                 )
             }
         } else if id != nil {
-            content.textSelection(.enabled)
+            content.textSelection(.enabled).messageSelectionGroup()
         } else {
             content
         }
         #else
         if id != nil {
-            content.textSelection(.enabled)
+            content.textSelection(.enabled).messageSelectionGroup()
         } else {
             content
         }
