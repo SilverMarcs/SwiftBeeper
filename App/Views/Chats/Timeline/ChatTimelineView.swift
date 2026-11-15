@@ -239,6 +239,26 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     source.finishMessageReveal(request, reached: false)
                     chatStore.mentionNavigation.dismissError()
                 }
+                // Content shrinking under a timeline at its end, as when the
+                // lazy stack measures rows shorter than it estimated after a
+                // chat opens there, leaves the offset where it was: the
+                // newest rows rest above the composer with empty space below
+                // them until the reader scrolls. A resting timeline past its
+                // end goes back to it; a scroll on its way may overshoot, so
+                // it's checked again once it lands.
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.isPastEnd
+                } action: { _, isPastEnd in
+                    guard isPastEnd, !restingPosition.isScrolling else { return }
+                    scrollToLatest(with: proxy, animated: false)
+                }
+                .onScrollPhaseChange { _, phase, context in
+                    restingPosition.isScrolling = phase != .idle
+                    guard phase == .idle, context.geometry.isPastEnd else { return }
+                    scrollToLatest(with: proxy, animated: false)
+                }
+                // A viewport rebuilt mid-scroll never reports landing.
+                .onAppear { restingPosition.isScrolling = false }
                 .id("\(target.chatID)-\(target.threadRootID ?? "")-\(source.hasLoadedTimeline)-\(source.timelineWindowID)")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.bottom, for: .alignment)

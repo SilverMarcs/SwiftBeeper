@@ -7,4 +7,6 @@
 /// the timeline's rows.
 final class TimelineRestingPosition {
     var isAtEnd = true
+    /// Whether the timeline is moving, by the reader's scroll or the app's.
+    var isScrolling = false
 }
