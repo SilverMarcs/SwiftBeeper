@@ -13,8 +13,10 @@ struct MessageSendFrame {
     let cornerRadii: RectangleCornerRadii
     /// How far the bubble's text is from where it lands.
     let textOffset: CGSize
-    /// Whether the text has left the composer's lines for the bubble's. See
-    /// `MessageSendReflow`.
+    /// How far the composer's text is from where the composer drew it,
+    /// moving with the bubble's.
+    let composerTextOffset: CGSize
+    /// Whether the text has left the composer's lines for the bubble's.
     let hasReflowed: Bool
 
     /// - Parameters:
@@ -66,6 +68,10 @@ struct MessageSendFrame {
             height: composerText.y - bubbleText.y - start.height
         )
         textOffset = CGSize(width: carried.width + own.width * (1 - rise), height: carried.height + own.height * (1 - rise))
+        composerTextOffset = CGSize(
+            width: bubbleText.x + textOffset.width - composerText.x,
+            height: bubbleText.y + textOffset.height - composerText.y
+        )
         hasReflowed = MessageSendMotion.hasReflowed(at: time)
     }
 

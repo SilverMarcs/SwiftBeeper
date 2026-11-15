@@ -35,10 +35,11 @@ nonisolated enum MessageSendMotion {
         progress(of: slideSpring, at: time)
     }
 
-    /// Whether the text has taken the bubble's lines, from the composer's.
-    /// It changes in one frame, once the bubble moves fast enough for the
-    /// change to read as part of the motion: words sliding or fading between
-    /// lines show as a jumble while they cross.
+    /// Whether the text has taken the bubble's lines, from the composer's,
+    /// which is narrower, so a longer message wraps differently in each. It
+    /// changes in one frame, once the bubble moves fast enough for the change
+    /// to read as part of the motion: words sliding or fading between lines
+    /// show as a jumble while they cross.
     static func hasReflowed(at time: TimeInterval) -> Bool {
         time >= 0.08
     }

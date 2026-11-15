@@ -30,7 +30,7 @@ final class ComposerSendOrigin {
             fieldCornerRadius: fieldCornerRadius,
             textAnchor: text.anchor,
             anchorsLastLine: text.anchorsLastLine,
-            glyphs: text.glyphs
+            text: text.picture
         )
     }
 }

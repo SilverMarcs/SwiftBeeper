@@ -3,71 +3,43 @@ import UIKit
 
 extension ComposerEditor {
     /// Where the bubble's text lines up with the draft, and the draft's
-    /// visible characters, where the bubble's glyphs start from.
+    /// visible lines drawn for the flight.
     /// - Parameter frame: The editor's frame in SwiftUI's global space.
-    func sendText(in frame: CGRect) -> (anchor: CGPoint, anchorsLastLine: Bool, glyphs: [MessageSendSourceGlyph]) {
+    func sendText(in frame: CGRect) -> (anchor: CGPoint, anchorsLastLine: Bool, picture: MessageSendPicture?) {
         layoutIfNeeded()
         let x = frame.minX + textContainerInset.left - bounds.minX
-        let glyphs = visibleGlyphs(offsetBy: frame.origin)
+        let picture = visibleText(in: frame)
         // A draft scrolled down lines up by its last line, which is in view.
         if isGrowing, bounds.minY > 0 {
             let end = caretRect(for: endOfDocument)
-            return (CGPoint(x: x, y: frame.minY + end.maxY - bounds.minY), true, glyphs)
+            return (CGPoint(x: x, y: frame.minY + end.maxY - bounds.minY), true, picture)
         }
-        return (CGPoint(x: x, y: frame.minY + textContainerInset.top - bounds.minY), false, glyphs)
+        return (CGPoint(x: x, y: frame.minY + textContainerInset.top - bounds.minY), false, picture)
     }
 
-    /// Each character in view, from the top of the scrolled window to its
-    /// bottom; at rest, the first line up to its ellipsis.
-    private func visibleGlyphs(offsetBy origin: CGPoint) -> [MessageSendSourceGlyph] {
-        let string = text as NSString
-        guard string.length > 0 else { return [] }
-
-        var end = string.length
-        var maximumX = CGFloat.infinity
+    /// The draft as the editor shows it, in the bubble's white: wrapped and
+    /// scrolled while growing, or its first line cut off with an ellipsis at
+    /// rest.
+    private func visibleText(in frame: CGRect) -> MessageSendPicture? {
+        guard hasText, bounds.width > 0, bounds.height > 0 else { return nil }
+        let text = NSMutableAttributedString(attributedString: attributedText)
+        let whole = NSRange(location: 0, length: text.length)
+        text.addAttribute(.foregroundColor, value: UIColor.white, range: whole)
+        let insets = textContainerInset
+        let width = bounds.width - insets.left - insets.right
+        var area = CGRect(x: insets.left, y: insets.top - bounds.minY, width: width, height: .greatestFiniteMagnitude)
+        var options: NSStringDrawingOptions = .usesLineFragmentOrigin
         if !isGrowing {
-            // At rest only the first line shows, truncated with an ellipsis
-            // that takes the place of the characters it would overlap.
-            let newline = string.rangeOfCharacter(from: .newlines)
-            if newline.location != NSNotFound { end = newline.location }
-            let font = font ?? .preferredFont(forTextStyle: .body)
-            let available = bounds.width - textContainerInset.left - textContainerInset.right
-            let width = string.substring(to: end).size(withAttributes: [.font: font]).width
-            if width > available {
-                let ellipsis = "…".size(withAttributes: [.font: font]).width
-                maximumX = bounds.minX + textContainerInset.left + available - ellipsis
-            }
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byTruncatingTail
+            text.addAttribute(.paragraphStyle, value: paragraph, range: whole)
+            area = CGRect(x: insets.left, y: insets.top, width: width, height: (font ?? .preferredFont(forTextStyle: .body)).lineHeight)
+            options.insert(.truncatesLastVisibleLine)
         }
-
-        // A draft scrolled past its top starts at the first line in view.
-        var location = 0
-        if isGrowing, bounds.minY > 0,
-           let position = closestPosition(to: CGPoint(x: bounds.minX, y: bounds.minY)) {
-            location = min(max(offset(from: beginningOfDocument, to: position), 0), string.length - 1)
-            location = string.rangeOfComposedCharacterSequence(at: location).location
+        let image = UIGraphicsImageRenderer(size: bounds.size).image { _ in
+            text.draw(with: area, options: options, context: nil)
         }
-
-        let leadingWhitespace = text.prefix { $0.isWhitespace }.utf16.count
-        var glyphs: [MessageSendSourceGlyph] = []
-        while location < end, glyphs.count < MessageSendSource.maximumGlyphs {
-            let range = string.rangeOfComposedCharacterSequence(at: location)
-            location = NSMaxRange(range)
-            let character = string.substring(with: range)
-            guard !character.allSatisfy(\.isWhitespace),
-                  let start = position(from: beginningOfDocument, offset: range.location),
-                  let finish = position(from: start, offset: range.length),
-                  let characterRange = textRange(from: start, to: finish) else { continue }
-            let rect = firstRect(for: characterRange)
-            guard !rect.isNull, !rect.isInfinite else { continue }
-            // Lines run downwards, so the first below the window ends it.
-            if rect.minY >= bounds.maxY { break }
-            guard rect.maxY > bounds.minY, rect.maxX <= maximumX + 0.5 else { continue }
-            glyphs.append(MessageSendSourceGlyph(
-                offset: range.location - leadingWhitespace,
-                frame: rect.offsetBy(dx: origin.x - bounds.minX, dy: origin.y - bounds.minY)
-            ))
-        }
-        return glyphs
+        return image.cgImage.map { MessageSendPicture(image: $0, frame: frame) }
     }
 }
 #endif

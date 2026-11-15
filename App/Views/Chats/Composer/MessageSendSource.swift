@@ -14,11 +14,8 @@ struct MessageSendSource {
     let textAnchor: CGPoint
     /// Whether `textAnchor` is the last line's bottom.
     let anchorsLastLine: Bool
-    /// The draft's visible characters where the editor drew them, where
-    /// the bubble's glyphs start from.
-    let glyphs: [MessageSendSourceGlyph]
-
-    /// The most characters a send records; past a full field there's
-    /// nothing more to see.
-    static let maximumGlyphs = 800
+    /// The draft's lines in the editor's visible window, as the editor laid
+    /// them out, in the bubble's text color. The flying text shows them until
+    /// it takes the bubble's own lines.
+    let text: MessageSendPicture?
 }

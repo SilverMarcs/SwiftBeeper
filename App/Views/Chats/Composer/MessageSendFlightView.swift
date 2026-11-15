@@ -2,9 +2,9 @@ import SwiftUI
 
 /// One sent bubble in flight: the composer's field turns into the bubble,
 /// narrowing to its side and rising into place with the text riding inside,
-/// reflowing from the composer's lines into the bubble's.
-/// Everything is measured against the real bubble's live position, so it
-/// lands exactly on it.
+/// taking the bubble's lines from the composer's on the way. Everything is
+/// measured against the real bubble's live position, so it lands exactly on
+/// it. The text is drawn once; each frame only moves it and reshapes the fill.
 struct MessageSendFlightView: View {
     let flight: MessageSendFlight
     /// The real bubble, in the layer.
@@ -14,14 +14,21 @@ struct MessageSendFlightView: View {
     let layouts: [Text.Layout]
     let joins: MessageBubbleJoins
     let layerOrigin: CGPoint
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         let startedAt = flight.startedAt
         let source = flight.source
         let bubbleShape = ChatVisualStyle.bubbleShape(isOutgoing: true, joins: joins)
         let bubbleText = textAnchor(linedUpWith: source)
-        let reflow = textOrigins.first.flatMap { origin in
-            flight.reflow(for: layouts, anchor: CGPoint(x: bubbleText.x - origin.x, y: bubbleText.y - origin.y))
+        let picture = flight.bubbleText(
+            layouts: layouts,
+            origins: textOrigins.map { CGPoint(x: $0.x - bubble.minX, y: $0.y - bubble.minY) },
+            size: bubble.size,
+            scale: displayScale
+        )
+        let composerText = source.text.map {
+            MessageSendPicture(image: $0.image, frame: $0.frame.offsetBy(dx: -layerOrigin.x, dy: -layerOrigin.y))
         }
         TimelineView(.animation) { _ in
             let frame = MessageSendFrame(
@@ -34,7 +41,7 @@ struct MessageSendFlightView: View {
             )
             ZStack(alignment: .topLeading) {
                 MessageSendFlightBubble(frame: frame.fill, cornerRadii: frame.cornerRadii)
-                MessageSendFlightText(frame: frame, layouts: layouts, textOrigins: textOrigins, reflow: reflow)
+                MessageSendFlightText(frame: frame, bubbleText: picture, bubble: bubble, composerText: composerText)
             }
         }
     }
