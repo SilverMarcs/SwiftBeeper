@@ -114,6 +114,21 @@ final class MentionNavigation {
         refresh()
     }
 
+    /// The oldest mention came on screen without the shortcut, as when the
+    /// chat opens with it in view: it's reached, so the shortcut moves on.
+    /// Cheap to call for every row on every scroll frame.
+    func didSee(_ id: Message.ID) {
+        guard revealingID == nil, let message = mentions.first, message.id == id else { return }
+        after = message.sortKey
+        mentions.removeFirst()
+        if mentions.isEmpty {
+            // Nothing left to load means nothing to wait for either, so the
+            // shortcut doesn't come back as a spinner.
+            expectsMentions = false
+            if hasMore { refresh() }
+        }
+    }
+
     func failedToReveal(_ id: Message.ID, error: String) {
         guard revealingID == id else { return }
         revealingID = nil

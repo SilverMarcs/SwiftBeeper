@@ -167,6 +167,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     guard let rowID = item.scrollTargetID else { return }
                                     scrollAnchor.update(rowID, frame: frame)
                                     rowFrames.update(rowID, visibleFrame: frame)
+                                    if rowFrames.isVisible(rowID, below: topContentInset) {
+                                        chatStore.mentionNavigation.didSee(rowID)
+                                    }
                                 }
                                 .onDisappear {
                                     guard let rowID = item.scrollTargetID else { return }
@@ -570,6 +573,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
             }
             .modifier(ComposerDictationLifecycle(composer: composer))
+            .modifier(TimelineSeenMentions(
+                mentions: chatStore.mentionNavigation, frames: rowFrames, topInset: topContentInset
+            ))
         } else {
             ContentUnavailableView(
                 "Pick a Chat",
