@@ -172,18 +172,17 @@ struct ComposerBar: View {
     /// Reply and Edit often come from a context menu, which restores the
     /// keyboard state from before it opened as it finishes dismissing,
     /// resigning an editor focused before then. The dismissal takes longer
-    /// on some devices and menus than others, so focus is asked for again
-    /// until it has held past it.
+    /// on some devices and menus than others, so each attempt reaches the
+    /// native editor even if it already reports editing: that alone doesn't
+    /// mean its keyboard was restored.
     private func handleFocusRequest(_ requestID: UUID) async {
         do {
             try await Task.sleep(for: InputManager.contextMenuDismissalDelay)
             for _ in 0..<Self.focusAttempts {
                 // A newer request, or the composer moving on, takes over.
                 guard composer.focusRequestID == requestID else { return }
-                if !isEditing {
-                    composer.isFocused = true
-                    focusAttempt += 1
-                }
+                composer.isFocused = true
+                focusAttempt += 1
                 try await Task.sleep(for: .milliseconds(150))
             }
         } catch {

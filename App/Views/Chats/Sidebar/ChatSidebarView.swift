@@ -21,6 +21,13 @@ struct ChatSidebarView: View {
             // Search runs as you type; the Search key only puts the keyboard
             // away to read the results.
             .onSubmit(of: .search) { isSearchFocused = false }
+            #if os(iOS)
+            // Clear search focus when opening a result so returning to the
+            // sidebar doesn't restore its keyboard. Message results can also
+            // reopen the already-selected chat without changing its ID.
+            .onChange(of: chatStore.selectedChatID) { isSearchFocused = false }
+            .onChange(of: chatStore.chatNavigationID) { isSearchFocused = false }
+            #endif
             .searchPresentationToolbarBehavior(.avoidHidingContent)
             .task(id: [chatStore.searchQuery, chatStore.selectedFilter.id, chatStore.session.uuidString]) {
                 await chatStore.searchChats()

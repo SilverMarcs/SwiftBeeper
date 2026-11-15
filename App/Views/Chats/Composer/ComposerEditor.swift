@@ -65,6 +65,7 @@ final class ComposerEditor: UITextView {
             editor.setNeedsLayout()
             editor.invalidateIntrinsicContentSize()
         }
+        NotificationCenter.default.addObserver(self, selector: #selector(windowBecameKey(_:)), name: UIWindow.didBecomeKeyNotification, object: nil)
         applyMode()
     }
 
@@ -188,14 +189,49 @@ final class ComposerEditor: UITextView {
     /// open the composer on returning to a chat; only a touch, VoiceOver or
     /// a request from the composer opens it.
     private var focusAllowedUntil: CFTimeInterval = 0
+    /// A focus request made while the editor is attaching or its window is
+    /// yielding the keyboard to a system menu.
+    private var hasPendingFocus = false
 
     func focus() {
+        hasPendingFocus = true
+        applyPendingFocus()
+    }
+
+    func cancelPendingFocus() {
+        hasPendingFocus = false
+    }
+
+    private func applyPendingFocus() {
+        guard hasPendingFocus, window?.isKeyWindow == true else { return }
         focusAllowedUntil = CACurrentMediaTime() + 1
-        _ = becomeFirstResponder()
+        if isFirstResponder {
+            // UIKit can retain the responder while a menu suppresses its
+            // input view. Refresh it when an explicit request arrives again.
+            reloadInputViews()
+            hasPendingFocus = false
+        } else if becomeFirstResponder() {
+            hasPendingFocus = false
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            hasPendingFocus = false
+        } else {
+            applyPendingFocus()
+        }
+    }
+
+    @objc private func windowBecameKey(_ notification: Notification) {
+        guard let activeWindow = notification.object as? UIWindow, activeWindow === window else { return }
+        applyPendingFocus()
     }
 
     /// Leaving ends the window a touch opened.
     override func resignFirstResponder() -> Bool {
+        hasPendingFocus = false
         focusAllowedUntil = 0
         return super.resignFirstResponder()
     }

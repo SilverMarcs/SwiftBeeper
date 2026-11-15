@@ -73,10 +73,11 @@ struct ComposerTextView: UIViewRepresentable {
         }
         // Focus changes from outside UIKit land after this update, so they
         // don't run inside SwiftUI's view update.
+        if !isFocused { editor.cancelPendingFocus() }
         if context.coordinator.focusAttempt != focusAttempt {
             context.coordinator.focusAttempt = focusAttempt
             Task { @MainActor [weak editor] in
-                guard let editor, editor.window != nil, !editor.isFirstResponder else { return }
+                guard let editor, isFocused else { return }
                 editor.focus()
             }
         } else if isFocused != editor.isFirstResponder {
