@@ -446,7 +446,22 @@ final class ChatStore {
             applyChatUpsert(chat)
         case .chatDeleted(let chatID):
             removeChatLocally(chatID)
-        case .messagesUpserted(let chatID, let incoming):
+        case .messagesUpserted(let chatID, let incoming, let newMessageIDs):
+            #if os(iOS)
+            // Only the visible conversation sounds here. Other chats use their
+            // foreground push, preserving notification eligibility and mentions.
+            if notificationService.isAppActive, syncStatus == .ok, visibleChatID == chatID {
+                for message in incoming where newMessageIDs.contains(message.id)
+                    && !message.isSender && !message.isDeletedMessage && message.isNotice != true
+                    && (!message.isHiddenThreadReply || (isThreadPresented && activeThread?.rootID == message.threadRootID)) {
+                    notificationService.messageSounds.received(
+                        messageID: message.id, timestamp: message.timestamp,
+                        isMuted: chat(byID: chatID)?.isMuted == true,
+                        isMention: message.isPersonalMention == true
+                    )
+                }
+            }
+            #endif
             // Reconcile first so a confirmed send never renders twice.
             reconcileOutgoingMessages(with: incoming, chatID: chatID)
             if isThreadPresented, let activeThread, chatID == activeThread.chatID {

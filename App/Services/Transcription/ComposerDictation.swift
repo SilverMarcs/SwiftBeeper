@@ -19,6 +19,8 @@ final class ComposerDictation {
     var error: String?
     var isActive: Bool { isRecording || isBusy }
     private(set) var sessionID = UUID()
+    /// Changes only when recording starts or a nonempty transcript is ready.
+    private(set) var feedbackID = UUID()
     private var finishRecording: (() -> Void)?
     #if os(iOS)
     private var ownsAudioSession = false
@@ -44,7 +46,10 @@ final class ComposerDictation {
                 do {
                     let text = try await provider.transcribe(audio: url)
                     try Task.checkCancellation()
-                    if !text.isEmpty { append(text) }
+                    if !text.trimmed.isEmpty {
+                        append(text)
+                        feedbackID = UUID()
+                    }
                 } catch {
                     if !Task.isCancelled { self.error = error.localizedDescription }
                 }
@@ -71,6 +76,8 @@ final class ComposerDictation {
                     #if os(iOS)
                     let session = AVAudioSession.sharedInstance()
                     try session.setCategory(.record, mode: .default)
+                    // An active recording session otherwise suppresses haptics.
+                    try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
                     try session.setActive(true)
                     ownsAudioSession = true
                     #endif
@@ -84,6 +91,7 @@ final class ComposerDictation {
                     self.recorder = recorder
                     guard recorder.record() else { throw CocoaError(.fileWriteUnknown) }
                     isRecording = true
+                    feedbackID = UUID()
                 } catch {
                     let wasCancelled = Task.isCancelled
                     cancel()

@@ -113,7 +113,7 @@ final class RealtimeService {
             // Deletions arrive here too, as messages with an isDeleted marker.
             let messages = (try? decoder.decode(EntriesPayload<Message>.self, from: data))?.entries ?? []
             if let chatID = envelope.chatID, !messages.isEmpty {
-                onEvent(.messagesUpserted(chatID: chatID, messages: messages))
+                onEvent(.messagesUpserted(chatID: chatID, messages: messages, newMessageIDs: envelope.newMessageIDs))
             } else {
                 onEvent(.resyncRequired)
             }

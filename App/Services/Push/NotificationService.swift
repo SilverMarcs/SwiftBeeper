@@ -10,6 +10,9 @@ import UserNotifications
 final class NotificationService {
     /// Whether Relay is frontmost.
     private(set) var isAppActive = false
+    #if os(iOS)
+    @ObservationIgnored let messageSounds = MessageSounds()
+    #endif
     private(set) var authorizationStatus: UNAuthorizationStatus?
     var reminderErrorMessage: String?
     private(set) var errorMessage: String?
@@ -40,7 +43,11 @@ final class NotificationService {
     /// Opening Relay clears its badge and its entries in Notification Center.
     func setAppActive(_ active: Bool) {
         isAppActive = active
+        #if os(iOS)
+        messageSounds.setAppActive(active)
+        #endif
         guard active else { return }
+        Task { await refreshAuthorizationStatus() }
         let center = UNUserNotificationCenter.current()
         center.removeAllDeliveredNotifications()
         Task { try? await center.setBadgeCount(0) }
@@ -65,6 +72,10 @@ final class NotificationService {
             await UNUserNotificationCenter.current().removePendingReplyReminders()
             try? NotificationCredentials.remove()
             seenMessages.removeAll()
+            #if os(iOS)
+            messageSounds.reset()
+            messageSounds.notificationSoundsAllowed = false
+            #endif
             identity = nil
             notificationsAllowed = false
             uploadedPreferences = nil
@@ -94,6 +105,7 @@ final class NotificationService {
                 settings = await center.notificationSettings()
                 authorizationStatus = settings.authorizationStatus
             }
+            updateSoundAuthorization(settings)
             guard isSignedIn, !Task.isCancelled else { return }
             guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
                 notificationsAllowed = false
@@ -153,7 +165,16 @@ final class NotificationService {
     }
 
     func refreshAuthorizationStatus() async {
-        authorizationStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        authorizationStatus = settings.authorizationStatus
+        updateSoundAuthorization(settings)
+    }
+
+    private func updateSoundAuthorization(_ settings: UNNotificationSettings) {
+        #if os(iOS)
+        messageSounds.notificationSoundsAllowed = settings.authorizationStatus == .authorized
+            && settings.soundSetting == .enabled
+        #endif
     }
 
     /// Coalesce changes from sync and archive and mute actions. Unchanged preferences

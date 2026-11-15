@@ -15,7 +15,7 @@ enum RealtimeEvent {
     case syncStatusChanged(MatrixSyncStatus)
     case chatUpserted(Chat)
     case chatDeleted(chatID: String)
-    case messagesUpserted(chatID: String, messages: [Message])
+    case messagesUpserted(chatID: String, messages: [Message], newMessageIDs: Set<String>)
     case receiptUpdated(chatID: String, receipts: [ReadReceipt])
     case typingUpdated(chatID: String, participants: [ChatParticipant])
     case failed(String)
@@ -28,9 +28,10 @@ struct EventEnvelope: Decodable {
     let seq: Int?
     /// The `sync.status` signal's status.
     let status: String?
+    let newMessageIDs: Set<String>
 
     enum CodingKeys: String, CodingKey {
-        case type, chatID, seq, status
+        case type, chatID, seq, status, newMessageIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -39,6 +40,7 @@ struct EventEnvelope: Decodable {
         chatID = try? container.decodeIfPresent(String.self, forKey: .chatID)
         seq = try? container.decodeIfPresent(Int.self, forKey: .seq)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
+        newMessageIDs = (try? container.decode(Set<String>.self, forKey: .newMessageIDs)) ?? []
     }
 }
 

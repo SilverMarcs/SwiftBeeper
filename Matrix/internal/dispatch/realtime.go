@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.mau.fi/gomuks/pkg/hicli/database"
 	"go.mau.fi/gomuks/pkg/hicli/jsoncmd"
 	"maunium.net/go/mautrix/id"
 )
@@ -36,6 +37,8 @@ type realtimeChange[Entry any] struct {
 	Seq     int     `json:"seq"`
 	ChatID  string  `json:"chatID"`
 	Entries []Entry `json:"entries,omitempty"`
+	// Original messages in this sync, excluding edits, reactions and summaries.
+	NewMessageIDs []string `json:"newMessageIDs,omitempty"`
 }
 
 // realtimeSignal shares the stream without carrying entries or a sequence.
@@ -140,8 +143,16 @@ func (h *eventHub) run() {
 			}
 			room, err := cli.DB.Room.Get(context.Background(), evt.RoomID)
 			if err == nil && room != nil {
+				// Delayed decryption makes an original message available without
+				// another timeline append. The app excludes old messages by time.
+				timeline := make([]database.TimelineRowTuple, 0, len(evt.Events))
+				for _, decrypted := range evt.Events {
+					if decrypted != nil {
+						timeline = append(timeline, database.TimelineRowTuple{Event: decrypted.RowID})
+					}
+				}
 				h.processSyncComplete(&jsoncmd.SyncComplete{Rooms: map[id.RoomID]*jsoncmd.SyncRoom{
-					evt.RoomID: {Meta: room, Events: evt.Events},
+					evt.RoomID: {Meta: room, Events: evt.Events, Timeline: timeline},
 				}})
 			}
 		case *jsoncmd.SyncStatus:
@@ -233,12 +244,12 @@ func (h *eventHub) signal(kind string) {
 	}
 }
 
-func sendChange[Entry any](h *eventHub, kind, chatID string, entries []Entry) {
+func sendChange[Entry any](h *eventHub, kind, chatID string, entries []Entry, newMessageIDs []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.send == nil {
 		return
 	}
 	h.seq++
-	h.send(realtimeChange[Entry]{Type: kind, Seq: h.seq, ChatID: chatID, Entries: entries})
+	h.send(realtimeChange[Entry]{Type: kind, Seq: h.seq, ChatID: chatID, Entries: entries, NewMessageIDs: newMessageIDs})
 }

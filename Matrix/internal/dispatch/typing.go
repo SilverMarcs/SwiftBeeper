@@ -56,7 +56,7 @@ func (h *eventHub) processTyping(update *jsoncmd.Typing) {
 		}
 	}
 	// An empty list clears the previous state, including self-only updates.
-	sendChange(h, realtimeTypeTypingUpdated, string(update.RoomID), users)
+	sendChange(h, realtimeTypeTypingUpdated, string(update.RoomID), users, nil)
 }
 
 const (

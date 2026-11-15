@@ -74,6 +74,9 @@ extension ChatStore {
 
             changed = true
             outgoing[index].confirmedMessageIDs.insert(message.id)
+            #if os(iOS)
+            notificationService.messageSounds.sent(message)
+            #endif
             onOutgoingMessageConfirmed?(outgoing[index].id, message)
             if outgoing[index].confirmedMessageIDs.count >= outgoing[index].expectedConfirmationCount {
                 outgoing.remove(at: index)

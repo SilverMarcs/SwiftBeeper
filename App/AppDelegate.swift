@@ -50,7 +50,11 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        await MainActor.run {
+        #if os(iOS)
+        let settings = await center.notificationSettings()
+        let soundsAllowed = settings.authorizationStatus == .authorized && settings.soundSetting == .enabled
+        #endif
+        return await MainActor.run {
             // Stay quiet for the chat already on screen.
             let content = notification.request.content
             // A push can land after its message was already seen in an open
@@ -71,6 +75,21 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
                !content.chatID.isEmpty, Self.chatStore?.visibleChatID == content.chatID {
                 return []
             }
+            #if os(iOS)
+            if content.categoryIdentifier == NotificationCategory.message,
+               content.replyDraft == nil,
+               let messageID = content.userInfo["messageID"] as? String {
+                Self.notificationService?.messageSounds.notificationSoundsAllowed = soundsAllowed
+                Self.notificationService?.messageSounds.received(
+                    messageID: messageID,
+                    isMuted: Self.chatStore?.chat(byID: content.chatID)?.isMuted == true,
+                    isMention: content.userInfo["isMention"] as? Bool == true,
+                    fromForegroundNotification: true
+                )
+                // The conversation sound replaces the foreground alert sound.
+                return [.banner]
+            }
+            #endif
             return [.banner, .sound]
         }
     }

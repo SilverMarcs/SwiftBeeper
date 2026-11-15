@@ -12,6 +12,11 @@ struct ComposerDictationLifecycle: ViewModifier {
     func body(content: Content) -> some View {
         let ownsDictation = input.dictationTarget == composer.target
         content
+            #if os(iOS)
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.8), trigger: input.dictation.feedbackID) { _, _ in
+                input.dictationTarget == composer.target
+            }
+            #endif
             .onChange(of: composer.target) { oldTarget, _ in
                 if input.dictationTarget == oldTarget { input.dictation.cancel() }
             }

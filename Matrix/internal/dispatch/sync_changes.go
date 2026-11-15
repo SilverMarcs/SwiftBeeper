@@ -21,7 +21,8 @@ type syncChange struct {
 	Type   string
 	ChatID string
 	// Message IDs, for message.upserted.
-	IDs []string
+	IDs           []string
+	NewMessageIDs []string
 }
 
 func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
@@ -70,11 +71,11 @@ func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 			if err != nil || len(entries) == 0 {
 				continue
 			}
-			sendChange(h, change.Type, change.ChatID, entries)
+			sendChange(h, change.Type, change.ChatID, entries, change.NewMessageIDs)
 		case realtimeTypeReceiptUpdated:
 			// One entry per reader; together they are every reader's position.
 			if receipts := dispatcher.loadReadReceipts(context.Background(), id.RoomID(change.ChatID)); len(receipts) > 0 {
-				sendChange(h, change.Type, change.ChatID, receipts)
+				sendChange(h, change.Type, change.ChatID, receipts, nil)
 			}
 		case realtimeTypeChatUpserted:
 			// A missing summary sends no entries, which tells the app to reload.
@@ -82,9 +83,9 @@ func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 			if summary := summaries[change.ChatID]; summary != nil {
 				entries = []wire.Chat{*summary}
 			}
-			sendChange(h, change.Type, change.ChatID, entries)
+			sendChange(h, change.Type, change.ChatID, entries, nil)
 		default:
-			sendChange[struct{}](h, change.Type, change.ChatID, nil)
+			sendChange[struct{}](h, change.Type, change.ChatID, nil, nil)
 		}
 	}
 }
@@ -140,6 +141,11 @@ func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID, metaChanged
 		chatTouched := metaChanged[roomID] || len(roomSync.State) > 0 || len(roomSync.AccountData) > 0 || len(roomSync.Timeline) > 0
 		// Redactions update their target in place, so they share the upsert.
 		messageIDs := make(map[string]struct{})
+		newMessageIDs := make(map[string]struct{})
+		timelineRows := make(map[database.EventRowID]bool, len(roomSync.Timeline))
+		for _, row := range roomSync.Timeline {
+			timelineRows[row.Event] = true
+		}
 		for _, evt := range roomSync.Events {
 			if evt == nil {
 				continue
@@ -160,6 +166,9 @@ func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID, metaChanged
 					targetID = string(evt.RelatesTo)
 				}
 				messageIDs[targetID] = struct{}{}
+				if timelineRows[evt.RowID] && evtType != event.EventReaction.Type && evt.RelationType != event.RelReplace {
+					newMessageIDs[string(evt.ID)] = struct{}{}
+				}
 				// A reply changes its thread root's summary.
 				if root := threadRootOf(evt); root != "" {
 					messageIDs[string(root)] = struct{}{}
@@ -192,7 +201,8 @@ func syncChanges(syncComplete *jsoncmd.SyncComplete, self id.UserID, metaChanged
 			output = append(output, syncChange{Type: realtimeTypeChatUpserted, ChatID: chatID})
 		}
 		if len(messageIDs) > 0 {
-			output = append(output, syncChange{Type: realtimeTypeMessageUpserted, ChatID: chatID, IDs: sortedNonBlankKeys(messageIDs)})
+			output = append(output, syncChange{Type: realtimeTypeMessageUpserted, ChatID: chatID,
+				IDs: sortedNonBlankKeys(messageIDs), NewMessageIDs: sortedNonBlankKeys(newMessageIDs)})
 		}
 	}
 	return output
