@@ -415,7 +415,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     // Confirmation replaces the outgoing row, but not the end
                     // marker. Let the existing scroll animation finish.
                     guard !confirmedOptimisticMessage else { return }
-                    // The conversation springs up with the bubble flying in.
+                    // Make room smoothly while the bubble springs into place.
                     scrollToLatest(with: proxy, animation: sentMessage ? MessageSendMotion.scrollAnimation : nil)
                 }
                 // A caption appearing below the newest row grows the timeline
@@ -431,7 +431,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                           newTracker.captionCount > oldTracker.captionCount, isFollowingLatest,
                           inputManager.sendAnimator.flights.isEmpty else { return }
                     // A send already scrolls to the space reserved for its
-                    // caption on the flight's spring.
+                    // caption during the flight.
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: activeComposerMessageID) { _, newValue in

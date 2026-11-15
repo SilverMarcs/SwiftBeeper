@@ -5,8 +5,8 @@ import SwiftUI
 ///
 /// The bubble glides across to its side a little faster than it rises, so it
 /// curves gently up out of the field, and springs into place, overshooting
-/// a little and settling back, as in Messages. The timeline scrolls on the
-/// same spring, so the conversation bounces up with it.
+/// a little and settling back, as in Messages. The timeline scrolls smoothly
+/// to make room without bouncing the existing messages.
 nonisolated enum MessageSendMotion {
     /// Shorten every phase together, keeping the path, bounce and scroll in sync.
     private static let timingScale = 0.85
@@ -19,8 +19,8 @@ nonisolated enum MessageSendMotion {
     /// No bounce, so the bubble never passes its side's edge.
     private static let slideSpring = Spring(duration: 0.34 * timingScale, bounce: 0)
 
-    /// The timeline's scroll down to the sent message.
-    static let scrollAnimation = Animation.spring(riseSpring)
+    /// The timeline makes room on the same timing, without overshooting.
+    static let scrollAnimation = Animation.spring(duration: 0.45 * timingScale, bounce: 0)
 
     /// Seconds since the flight started, or zero before it has.
     static func elapsed(since start: ContinuousClock.Instant?, at now: ContinuousClock.Instant) -> TimeInterval {
