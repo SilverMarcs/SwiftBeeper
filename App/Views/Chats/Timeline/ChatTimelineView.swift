@@ -279,6 +279,14 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     guard restingPosition.isAtEnd else { return }
                     scrollToLatest(with: proxy)
                 }
+                .onChange(of: source.messageRevealRequest) { oldRequest, newRequest in
+                    // An unanimated reveal, or one already at its target,
+                    // may never change scroll phase. Remember where it landed
+                    // even when there is no idle transition to update it.
+                    guard oldRequest != nil, newRequest == nil,
+                          !restingPosition.isScrolling else { return }
+                    restingPosition.isAtEnd = isNearBottom
+                }
                 // The composer growing, as the keyboard comes up or the draft
                 // gains a line, keeps the message being replied to or edited
                 // just above it, and otherwise takes a timeline kept at its
