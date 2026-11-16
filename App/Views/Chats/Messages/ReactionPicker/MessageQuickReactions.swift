@@ -4,14 +4,13 @@ import SwiftUI
 /// continues to own the picker, feedback, and reaction requests.
 struct MessageQuickReactions: View {
     @Environment(ChatStore.self) private var chatStore
-    @Environment(\.showReactionPicker) private var showReactionPicker
     @Environment(\.reactionToggleFeedback) private var reactionToggleFeedback
 
     let message: Message
     let chat: Chat
     var performAction: (@escaping () -> Void) -> Void = { $0() }
 
-    private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
+    private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏", "👀", "👎"]
 
     var body: some View {
         ForEach(quickReactions, id: \.self) { emoji in
@@ -22,11 +21,6 @@ struct MessageQuickReactions: View {
                 ReactionEmojiLabel(emoji: emoji)
             }
         }
-        Button("More Reactions", systemImage: "plus") {
-            performAction { showReactionPicker(message, in: chat) }
-        }
-        .accessibilityLabel("More Reactions")
-        .help("More Reactions")
     }
 
     private var ownReactionKey: String? {

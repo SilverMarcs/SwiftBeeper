@@ -8,12 +8,7 @@ struct ReactionAccessoryBar: View {
     let performAction: (@escaping () -> Void) -> Void
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 0) {
-                MessageQuickReactions(message: message, chat: chat, performAction: performAction)
-            }
-            .fixedSize(horizontal: true, vertical: true)
-
+        HStack(spacing: 0) {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
                     MessageQuickReactions(message: message, chat: chat, performAction: performAction)
@@ -21,6 +16,11 @@ struct ReactionAccessoryBar: View {
             }
             .scrollIndicators(.hidden)
             .fixedSize(horizontal: false, vertical: true)
+            // Six 44-point reaction targets, with the picker kept alongside.
+            .frame(maxWidth: 6 * 44)
+
+            MessageReactionPickerButton(message: message, chat: chat, performAction: performAction)
+                .fixedSize()
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

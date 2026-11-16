@@ -25,6 +25,7 @@ struct MessageContextMenu: View {
         if showsQuickReactions {
             ControlGroup {
                 MessageQuickReactions(message: message, chat: chat)
+                MessageReactionPickerButton(message: message, chat: chat)
             }
             .controlGroupStyle(.palette)
             .menuActionDismissBehavior(.enabled)
