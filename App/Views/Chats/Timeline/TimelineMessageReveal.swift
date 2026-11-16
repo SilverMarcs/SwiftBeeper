@@ -12,16 +12,7 @@ struct TimelineMessageReveal<Source: TimelineSource>: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        let isPreparing = source.messageRevealRequest?.alignsTop == true
         content
-            // Lay out and position the normal page before revealing it. The
-            // reader never sees its temporary bottom-anchored first frame.
-            .opacity(isPreparing ? 0 : 1)
-            .allowsHitTesting(!isPreparing)
-            .accessibilityHidden(isPreparing)
-            .overlay {
-                if isPreparing { ProgressView() }
-            }
             .task(id: source.messageRevealRequest) {
                 guard let request = source.messageRevealRequest, source.hasLoadedTimeline else { return }
                 guard entries.contains(where: { $0.messages.contains { $0.id == request.messageID } }) else {
@@ -30,7 +21,12 @@ struct TimelineMessageReveal<Source: TimelineSource>: ViewModifier {
                 }
                 let rowID = TimelineEntry.rowID(for: request.messageID, in: entries)
                 do {
-                    try await Task.sleep(for: .milliseconds(request.alignsTop ? 50 : 150))
+                    // Opening at unread positions the visible page immediately;
+                    // only explicit jumps wait for their new rows to settle.
+                    if !request.alignsTop {
+                        try await Task.sleep(for: .milliseconds(150))
+                    }
+                    try Task.checkCancellation()
                     guard source.messageRevealRequest?.id == request.id else { return }
                     willReveal()
                     let anchor: UnitPoint = request.alignsTop ? .top : .center
