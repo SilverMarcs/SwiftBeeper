@@ -155,13 +155,21 @@ times out, the original “New message” alert is the fallback.
 remove the Matrix pusher using the app's authenticated Matrix session.
 
 Sync often shows a message in Relay before its Matrix push reaches the Worker.
-When an open chat shows a recent incoming message, the app calls
+When an incoming message row enters the visible viewport of an open chat or
+thread, the app calls
 `POST /seen-messages` with the shared bearer secret and
 `{"messages":[{"chatID":"!room:server","messageID":"$event"}]}` (at most 200).
 The Worker records each one as already delivered to every registered device,
 so a later push for it sends nothing. This is not a read receipt: the chat's
 read state on Matrix is unchanged. A push already sent to APNs is not
 recalled; the app keeps that banner quiet if it arrives while Relay is open.
+The app retains up to 2,000 observed message IDs for 24 hours across launches,
+using the time they were shown rather than a bridge's original send time.
+Failed reports stay queued and retry on new observations and activation; iOS
+also gives the final uploads background time when leaving Relay. No message
+text is persisted by this tracking. The foreground delegate checks suppression
+before awaiting notification settings and also recognizes fallback pushes whose
+extension did not set a category.
 
 For trusted callers that already have notification text, `POST /notify` accepts
 the same bearer secret and

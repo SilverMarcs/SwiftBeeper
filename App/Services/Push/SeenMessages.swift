@@ -1,59 +1,109 @@
 import Foundation
+import OSLog
 
-/// Incoming messages already shown in an open chat. A push can reach the
-/// device seconds after sync has shown its message, when the user may have
-/// left the chat or the app. Seen messages stay quiet both in the foreground,
-/// through this in-memory record, and in the background, through the push
-/// server, which drops later pushes for them on every device.
-///
-/// Seeing a message never marks the chat as read; read state stays manual.
+/// Remembers messages shown in an open chat and reports them to the push
+/// server. This is independent of Matrix read state and sends no read receipts.
 @MainActor
 final class SeenMessages {
-    /// Only a recent message can still have a push on the way. Bridged
-    /// messages carry their original network's send time, which can trail
-    /// their arrival here (and their push) by tens of seconds, so this
-    /// allows more than the usual few seconds of push lag.
-    private static let window: TimeInterval = 2 * 60
-    /// The push server accepts at most this many messages per request.
+    // Match the server's delivery retention, measuring from observation rather
+    // than the original network timestamp of a delayed bridged message.
+    private static let window: TimeInterval = 24 * 60 * 60
+    private static let capacity = 2_000
     private static let batchSize = 200
-
-    /// Message IDs and when each was seen, pruned after `window`.
-    private var seen: [String: Date] = [:]
-    private var pending: [SeenMessage] = []
+    private static let storageKey = "push.seenMessages"
+    private let logger = Logger(subsystem: "com.SilverMarcs.Relay", category: "seen-messages")
+    private var records: [String: SeenMessageRecord]
     private var uploadTask: Task<Void, Never>?
+    private var generation = UUID()
 
-    func contains(_ messageID: String) -> Bool {
-        !messageID.isEmpty && seen[messageID] != nil
+    init() {
+        records = UserDefaults.standard.data(forKey: Self.storageKey)
+            .flatMap { try? JSONDecoder().decode([String: SeenMessageRecord].self, from: $0) } ?? [:]
+        prune()
     }
 
-    /// Records the recent incoming messages among `messages` and reports the
-    /// new ones to the push server.
+    func contains(_ messageID: String) -> Bool {
+        guard let record = records[messageID] else { return false }
+        return record.seenAt > Date.now.addingTimeInterval(-Self.window)
+    }
+
     func insert(_ messages: [Message], server: PushServer?) {
         let now = Date.now
-        let cutoff = now.addingTimeInterval(-Self.window)
-        seen = seen.filter { $0.value > cutoff }
-        for message in messages
-        where !message.isSender && message.timestamp > cutoff
-            && message.id.hasPrefix("$") && seen[message.id] == nil {
-            seen[message.id] = now
-            pending.append(SeenMessage(chatID: message.chatID, messageID: message.id))
+        var changed = false
+        for message in messages where !message.isSender && message.id.hasPrefix("$") {
+            guard !contains(message.id) else { continue }
+            records[message.id] = SeenMessageRecord(
+                message: SeenMessage(chatID: message.chatID, messageID: message.id), seenAt: now
+            )
+            changed = true
         }
-        guard let server, !pending.isEmpty, uploadTask == nil else { return }
+        if changed {
+            prune()
+            save()
+        }
+        flush(server: server)
+    }
+
+    /// Retry on activation as well as new messages. An unsuccessful batch stays
+    /// persisted until acknowledged, including if iOS suspends the upload.
+    func flush(server: PushServer?) {
+        guard let server, uploadTask == nil, records.values.contains(where: { !$0.isReported }) else { return }
+        let generation = generation
         uploadTask = Task {
-            defer { uploadTask = nil }
-            while !pending.isEmpty {
-                let batch = Array(pending.prefix(Self.batchSize))
-                pending.removeFirst(batch.count)
-                // Best effort: a failed report only means a push may still show.
-                try? await server.markSeen(batch)
+            defer { if self.generation == generation { uploadTask = nil } }
+            var failures = 0
+            while !Task.isCancelled {
+                prune()
+                let batch = Array(records.values.filter { !$0.isReported }
+                    .sorted { $0.seenAt > $1.seenAt }.prefix(Self.batchSize))
+                guard !batch.isEmpty else { return }
+                do {
+                    try await server.markSeen(batch.map(\.message))
+                    try Task.checkCancellation()
+                    guard self.generation == generation else { return }
+                    for record in batch { records[record.message.messageID]?.isReported = true }
+                    save()
+                    failures = 0
+                } catch {
+                    guard !Task.isCancelled, self.generation == generation else { return }
+                    failures += 1
+                    logger.error("Seen-message upload failed; retaining batch of \(batch.count) (attempt \(failures))")
+                    guard failures < 3 else { return }
+                    do { try await Task.sleep(for: .seconds(failures * 2)) }
+                    catch { return }
+                }
             }
         }
     }
 
-    func removeAll() {
+    func waitForUpload() async {
+        await uploadTask?.value
+    }
+
+    func cancelUpload() {
+        generation = UUID()
         uploadTask?.cancel()
         uploadTask = nil
-        seen = [:]
-        pending = []
+    }
+
+    func removeAll() {
+        cancelUpload()
+        records.removeAll()
+        UserDefaults.standard.removeObject(forKey: Self.storageKey)
+    }
+
+    private func prune() {
+        let cutoff = Date.now.addingTimeInterval(-Self.window)
+        records = records.filter { $0.value.seenAt > cutoff }
+        if records.count > Self.capacity {
+            records = Dictionary(uniqueKeysWithValues: records.sorted { $0.value.seenAt > $1.value.seenAt }
+                .prefix(Self.capacity).map { ($0.key, $0.value) })
+        }
+    }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(records) {
+            UserDefaults.standard.set(data, forKey: Self.storageKey)
+        }
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 import UserNotifications
 
 #if os(macOS)
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
     static weak var notificationService: NotificationService?
     static weak var chatStore: ChatStore?
     static weak var inputManager: InputManager?
+    private static let notificationLogger = Logger(subsystem: "com.SilverMarcs.Relay", category: "foreground-notifications")
 
     #if os(macOS)
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -50,31 +52,21 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        let content = notification.request.content
+        // Capture the chat at arrival, before the settings lookup can suspend
+        // us while the reader navigates away or the app becomes inactive.
+        if await MainActor.run(body: { Self.shouldSuppress(content) }) { return [] }
         #if os(iOS)
         let settings = await center.notificationSettings()
         let soundsAllowed = settings.authorizationStatus == .authorized && settings.soundSetting == .enabled
         #endif
         return await MainActor.run {
-            // Stay quiet for the chat already on screen.
-            let content = notification.request.content
-            // A push can land after its message was already seen in an open
-            // chat, once the user has moved on. It has nothing new to show.
-            if content.categoryIdentifier == NotificationCategory.message,
-               content.replyDraft == nil,
-               let messageID = content.userInfo["messageID"] as? String,
-               Self.notificationService?.hasSeenMessage(messageID) == true {
-                return []
-            }
+            // Also cover opening the notified chat during that lookup.
+            if Self.shouldSuppress(content) { return [] }
             #if os(macOS)
             guard Self.notificationService?.isAppActive == true else { return [.banner, .sound] }
             #endif
-            // iOS calls willPresent for foreground delivery. Do not depend on
-            // a separate scene-phase update arriving before the notification.
-            if content.categoryIdentifier != NotificationCategory.reminder,
-               content.replyDraft == nil,
-               !content.chatID.isEmpty, Self.chatStore?.visibleChatID == content.chatID {
-                return []
-            }
+            Self.notificationLogger.info("Foreground notification decision: present; has-visible-chat: \(Self.chatStore?.visibleChatID != nil), selected-chat-matches: \(Self.chatStore?.selectedChatID == content.chatID)")
             #if os(iOS)
             if content.categoryIdentifier == NotificationCategory.message,
                content.replyDraft == nil,
@@ -92,6 +84,27 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
             #endif
             return [.banner, .sound]
         }
+    }
+
+    /// The extension may time out before it sets the message category. The
+    /// original APNs room/event IDs still identify that fallback notification.
+    private static func shouldSuppress(_ content: UNNotificationContent) -> Bool {
+        guard content.categoryIdentifier != NotificationCategory.reminder, content.replyDraft == nil else { return false }
+        if let messageID = content.userInfo["messageID"] as? String,
+           notificationService?.hasSeenMessage(messageID) == true {
+            notificationLogger.info("Foreground notification decision: suppress-seen-message")
+            return true
+        }
+        #if os(macOS)
+        guard notificationService?.isAppActive == true else { return false }
+        #endif
+        // iOS calls willPresent only for foreground delivery; scenePhase may
+        // still be catching up, so it must not gate this visibility check.
+        if !content.chatID.isEmpty, chatStore?.visibleChatID == content.chatID {
+            notificationLogger.info("Foreground notification decision: suppress-visible-chat")
+            return true
+        }
+        return false
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,

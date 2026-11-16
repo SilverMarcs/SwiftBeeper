@@ -157,6 +157,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     quotedChain: isQuoteReply ? quotedChainPresentation : nil,
                                     quotedFocusRole: item.scrollTargetID.flatMap { quotedRoles[$0] } ?? .none
                                 )
+                                .modifier(TimelineSeenMessages(
+                                    item: item, isPresented: !target.isThread || chatStore.isThreadPresented
+                                ))
                                 .environment(\.timelineRowFrames, rowFrames)
                                 // Its quotes float over the rows above it.
                                 .zIndex(isQuoteReply ? 1 : 0)

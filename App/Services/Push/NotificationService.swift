@@ -22,7 +22,7 @@ final class NotificationService {
     /// foreground does not register it again.
     private var registeredToken: String?
 
-    @ObservationIgnored private(set) var isSignedIn = false
+    private(set) var isSignedIn = false
     @ObservationIgnored private var requestedAppleToken = false
     @ObservationIgnored private var notificationsAllowed = false
     @ObservationIgnored private var identity: PushIdentity?
@@ -47,6 +47,7 @@ final class NotificationService {
         messageSounds.setAppActive(active)
         #endif
         guard active else { return }
+        if isSignedIn { seenMessages.flush(server: pushServer) }
         Task { await refreshAuthorizationStatus() }
         let center = UNUserNotificationCenter.current()
         center.removeAllDeliveredNotifications()
@@ -63,6 +64,17 @@ final class NotificationService {
     /// Whether the user already saw this message in an open chat.
     func hasSeenMessage(_ messageID: String) -> Bool {
         seenMessages.contains(messageID)
+    }
+
+    /// The caller holds iOS background time while the last reports finish.
+    func flushSeenMessages() async {
+        guard isSignedIn else { return }
+        seenMessages.flush(server: pushServer)
+        await seenMessages.waitForUpload()
+    }
+
+    func cancelSeenMessageUpload() {
+        seenMessages.cancelUpload()
     }
 
     func configure(signedIn: Bool, force: Bool = false) async {
@@ -83,6 +95,7 @@ final class NotificationService {
             errorMessage = nil
             return
         }
+        seenMessages.flush(server: pushServer)
         guard !isPreparing else { return }
         isPreparing = true
         errorMessage = nil

@@ -57,9 +57,13 @@ struct RootView: View {
     /// and the share extension can only open the store once the app closes it.
     /// Commands still running get background time to finish first.
     private func closeCoreForSuspension() async {
-        let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Close Matrix Store")
+        let notifications = notificationService
+        let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Close Matrix Store") {
+            Task { @MainActor in notifications.cancelSeenMessageUpload() }
+        }
         await MatrixRuntime.shared.setKeepsOpen(false)
         await MatrixRuntime.shared.waitUntilClosed()
+        await notificationService.flushSeenMessages()
         if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
     }
     #endif

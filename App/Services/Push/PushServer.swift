@@ -48,7 +48,7 @@ nonisolated struct PushServer {
     /// Records messages already seen in Relay, so the server drops a Matrix
     /// push for one that arrives afterwards, on all of this account's devices.
     func markSeen(_ messages: [SeenMessage]) async throws {
-        _ = try await send("POST", body: JSONEncoder().encode(["messages": messages]), path: "seen-messages")
+        _ = try await send("POST", body: JSONEncoder().encode(["messages": messages]), path: "seen-messages", timeout: 5)
     }
 
     /// The pushkeys of every installation the server still delivers to.
@@ -63,8 +63,8 @@ nonisolated struct PushServer {
         _ = try await send("DELETE")
     }
 
-    private func send(_ method: String, body: Data? = nil, path: String? = nil) async throws -> Data {
-        var request = URLRequest(url: serverURL.appending(path: path ?? "devices/\(installationID)"), timeoutInterval: 20)
+    private func send(_ method: String, body: Data? = nil, path: String? = nil, timeout: TimeInterval = 20) async throws -> Data {
+        var request = URLRequest(url: serverURL.appending(path: path ?? "devices/\(installationID)"), timeoutInterval: timeout)
         request.httpMethod = method
         request.httpBody = body
         request.setValue("Bearer \(registrationSecret)", forHTTPHeaderField: "Authorization")
