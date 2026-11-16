@@ -106,12 +106,21 @@ func (s *Dispatcher) loadLastReadSortKeys(ctx context.Context, roomIDs ...id.Roo
 	return result, rows.Err()
 }
 
+// readReceiptMemberLimit is the most members a room may have for its read
+// receipts to be loaded. Who has seen a message means little in a larger
+// group, and its receipts arrive constantly. The app uses the same limit.
+const readReceiptMemberLimit = 25
+
 // loadReadReceipts returns how far each other person has read, by timeline
 // position, named as the room knows them. Bridge bots are excluded: their
-// receipts mean delivery, not reading.
+// receipts mean delivery, not reading. A room above readReceiptMemberLimit
+// members returns none.
 func (s *Dispatcher) loadReadReceipts(ctx context.Context, roomID id.RoomID) []wire.ReadReceipt {
 	cli := s.rt.Client()
 	if cli == nil || cli.Account == nil {
+		return nil
+	}
+	if count, err := s.roomMemberCount(ctx, roomID); err != nil || count > readReceiptMemberLimit {
 		return nil
 	}
 	// A user holds one receipt per thread; the furthest is how far they read.
@@ -145,6 +154,21 @@ func (s *Dispatcher) loadReadReceipts(ctx context.Context, roomID id.RoomID) []w
 		receipts = append(receipts, wire.ReadReceipt{UserID: userID, Name: name, SortKey: strconv.FormatInt(position, 10)})
 	}
 	return receipts
+}
+
+// roomMemberCount counts a room's joined and invited members, bridge bots
+// aside, as the chat summary's total does.
+func (s *Dispatcher) roomMemberCount(ctx context.Context, roomID id.RoomID) (int, error) {
+	const query = `
+		SELECT COUNT(*)
+		FROM current_state cs JOIN event e ON e.rowid = cs.event_rowid
+		WHERE cs.room_id = ? AND cs.event_type = 'm.room.member'
+		  AND COALESCE(NULLIF(cs.membership,''),json_extract(e.content,'$.membership')) IN ('join','invite')
+		  AND SUBSTR(SUBSTR(cs.state_key,2,INSTR(cs.state_key,':')-2),-3)<>'bot'
+	`
+	var count int
+	err := s.rt.Client().DB.QueryRow(ctx, query, roomID).Scan(&count)
+	return count, err
 }
 
 // isUnreadAfter reports whether a message's sort key lies past a read

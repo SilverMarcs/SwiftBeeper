@@ -56,7 +56,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             let unreadID = firstUnreadID ?? source.messageRevealRequest.flatMap { $0.alignsTop ? $0.messageID : nil }
             let outgoingMessages = source.timelineOutgoingMessages
             let typingBubble = source.typingBubble
+            // A large group's receipts say too little to show: its captions
+            // fall back to whether the newest message was sent, as Slack's do.
             let showsReadReceipts = chatStore.account(forAccountID: chat.accountID)?.showsReadReceipts == true
+                && !chat.isLargeGroup
             let timelineEntries = entriesCache.entries(
                 for: messages,
                 firstUnreadID: unreadID,
