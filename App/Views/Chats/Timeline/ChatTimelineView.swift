@@ -10,7 +10,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(InputManager.self) private var inputManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var firstUnreadID: String?
+    @State private var incomingMessageIDs: Set<Message.ID> = []
     @State private var isNearBottom = true
     /// Bumped by each scroll to the newest row; its completion only clears
     /// `isScrollingToLatest` when no newer scroll started meanwhile.
@@ -373,6 +375,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     scrollToLatest(with: proxy)
                 }
                 .onChange(of: target, initial: true) { _, _ in
+                    incomingMessageIDs = []
                     quotedFocus = nil
                     revealedQuotedChainKey = nil
                     rowFrames.reset()
@@ -388,6 +391,29 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .onChange(of: source.hasLoadedTimeline, initial: true) { _, loaded in
                     guard loaded, source.showsUnreadDivider else { return }
                     firstUnreadID = TimelineEntry.firstUnreadMessageID(in: messages, chat: chat)
+                }
+                .environment(\.incomingMessageIDs, incomingMessageIDs)
+                .onChange(of: TimelineIncomingTracker(
+                    target: target,
+                    windowID: source.timelineWindowID,
+                    isLoaded: source.hasLoadedTimeline,
+                    hasMoreNewer: source.hasMoreNewerTimeline,
+                    lastMessageID: messages.last?.id,
+                    lastSortKey: messages.last?.numericSortKey
+                )) { previous, current in
+                    guard scenePhase == .active, isFollowingLatest,
+                          focusedRowID == nil, source.messageRevealRequest == nil else { return }
+                    incomingMessageIDs = current.arrivals(since: previous, in: messages)
+                }
+                .task(id: incomingMessageIDs) {
+                    guard !incomingMessageIDs.isEmpty else { return }
+                    do {
+                        // Lazy history rows mustn't replay arrivals on a later scroll.
+                        try await Task.sleep(for: .milliseconds(600))
+                        incomingMessageIDs = []
+                    } catch {
+                        // A newer arrival or another viewport owns the state now.
+                    }
                 }
                 .onChange(of: MessageListTracker(
                     count: messages.count + outgoingMessages.count,

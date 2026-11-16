@@ -34,6 +34,7 @@ struct TimelineEntryRow: View {
             }
 
             MessageRowView(entry: entry, chat: chat)
+                .modifier(IncomingMessageEffect(messages: entry.messages))
                 .environment(\.quotedFocusRole, quotedFocusRole)
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .timelineContent).maxY } action: {
                     rowFrames?.update(entry.id, contentBottomEdge: $0)
