@@ -10,7 +10,11 @@ struct MessageQuickReactions: View {
     let chat: Chat
     var performAction: (@escaping () -> Void) -> Void = { $0() }
 
+    #if os(macOS)
+    private static let commonReactions = ["👍", "❤️", "😂", "😮", "🙏"]
+    #else
     private static let commonReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏", "👀", "👎"]
+    #endif
 
     var body: some View {
         ForEach(quickReactions, id: \.self) { emoji in
@@ -29,12 +33,16 @@ struct MessageQuickReactions: View {
     }
 
     private var quickReactions: [String] {
+        #if os(macOS)
+        return Self.commonReactions
+        #else
         guard let ownReactionKey,
               !Self.commonReactions.contains(ownReactionKey),
               message.visibleReactions.contains(where: { $0.reactionKey == ownReactionKey }) else {
             return Self.commonReactions
         }
         return Self.commonReactions + [ownReactionKey]
+        #endif
     }
 
     private func setOwnReaction(_ newValue: String?) {
