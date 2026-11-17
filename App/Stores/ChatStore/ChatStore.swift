@@ -84,6 +84,8 @@ final class ChatStore {
     /// The open chat. A snapshot, so a chat outside the loaded sidebar
     /// (a search result or a notification tap) stays open.
     var selectedChat: Chat?
+    /// The chats opened before and after this one, for Back and Forward.
+    let chatHistory = ChatNavigationHistory()
 
     var selectedChatID: String? {
         didSet {
@@ -93,6 +95,7 @@ final class ChatStore {
                 removeChatIfFilteredOut(oldValue)
                 onChatClosed?(oldValue)
             }
+            if let selectedChat { chatHistory.visit(selectedChat) }
             resetTimeline()
             updateMessageSubscriptions()
 
@@ -338,6 +341,7 @@ final class ChatStore {
             pendingNotificationThreadRootID = nil
             chatNavigationID = nil
         }
+        chatHistory.reset()
         resyncTask?.cancel()
         resyncTask = nil
         // Clearing the selection also resets the open timeline.
@@ -441,6 +445,7 @@ final class ChatStore {
             chatListTyping.chatUpdated(chat)
             applyChatUpsert(chat)
         case .chatDeleted(let chatID):
+            chatHistory.remove(chatID)
             removeChatLocally(chatID)
         case .messagesUpserted(let chatID, let incoming, let newMessageIDs):
             #if os(iOS)

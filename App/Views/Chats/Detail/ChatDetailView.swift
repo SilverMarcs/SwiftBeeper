@@ -4,9 +4,9 @@ import SwiftUI
 struct ChatDetailView: View {
     /// Keep lifecycle callbacks tied to this detail's navigation identity.
     let chatID: String?
-    let toggleSidebar: () -> Void
 
     @Environment(ChatStore.self) private var chatStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(InputManager.self) private var input
     @State private var isVisible = false
     @State private var showingChatInfo = false
@@ -44,10 +44,10 @@ struct ChatDetailView: View {
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             #endif
             .toolbar {
-                if isMacOrPad {
+                // A collapsed split view has its own back button to the list.
+                if isMacOrPad, horizontalSizeClass != .compact {
                     ToolbarItem(placement: .navigation) {
-                        Button("Toggle Sidebar", systemImage: "sidebar.left", action: toggleSidebar)
-                            .help("Show or hide the chat list")
+                        ChatHistoryNavigationButtons()
                     }
                 }
 

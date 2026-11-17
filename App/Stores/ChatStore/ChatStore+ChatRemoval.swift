@@ -7,12 +7,14 @@ extension ChatStore {
     /// to show.
     func deleteChat(_ chatID: String) async throws {
         try await APIClient.deleteChat(chatID: chatID)
+        chatHistory.remove(chatID)
         removeChatLocally(chatID)
     }
 
     /// Leaves a group, then drops it from the list.
     func leaveChat(_ chatID: String) async throws {
         try await APIClient.leaveChat(chatID: chatID)
+        chatHistory.remove(chatID)
         removeChatLocally(chatID)
     }
 }

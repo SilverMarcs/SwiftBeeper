@@ -3,7 +3,6 @@ import SwiftUI
 struct ContentView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Environment(ChatStore.self) private var chatStore
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
 
@@ -21,7 +20,7 @@ struct ContentView: View {
                 } detail: {
                     // One detail for every chat, as on macOS: the timeline
                     // viewport and composer re-key themselves per chat.
-                    ChatDetailView(chatID: chatStore.selectedChatID, toggleSidebar: toggleSidebar)
+                    ChatDetailView(chatID: chatStore.selectedChatID)
                 }
                 .presentsThreads()
                 .onChange(of: chatStore.chatNavigationID) {
@@ -36,16 +35,6 @@ struct ContentView: View {
             Button("OK") { chatStore.muteError = nil }
         } message: {
             Text(chatStore.muteError ?? "")
-        }
-    }
-
-    private func toggleSidebar() {
-        withAnimation {
-            if horizontalSizeClass == .compact {
-                preferredCompactColumn = .sidebar
-            } else {
-                columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-            }
         }
     }
 }

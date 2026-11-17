@@ -62,6 +62,27 @@ extension ChatStore {
         chatNavigationID = UUID()
     }
 
+    /// Reopens the chat before the open one in the navigation history.
+    func goBackInChatHistory() {
+        guard let chat = chatHistory.goBack() else { return }
+        openChatFromHistory(chat)
+    }
+
+    /// Reopens the chat after the open one in the navigation history.
+    func goForwardInChatHistory() {
+        guard let chat = chatHistory.goForward() else { return }
+        openChatFromHistory(chat)
+    }
+
+    /// Opens a history entry with its freshest copy. The filter and any
+    /// search stay; a chat outside them opens without a selected row.
+    private func openChatFromHistory(_ entry: Chat) {
+        let chat = chat(byID: entry.id) ?? entry
+        selectedChat = chat
+        selectedChatID = chat.id
+        chatNavigationID = UUID()
+    }
+
     // MARK: - Loading
 
     func loadChats() async {
@@ -357,7 +378,7 @@ extension ChatStore {
         }
 
         guard chatBelongsToCurrentFilter(incoming) || isOpenUnreadListChat(incoming) else {
-            removeChatLocally(incoming.id)
+            removeChatLocally(incoming.id, keepingUnlistedSelection: true)
             return
         }
 
@@ -393,20 +414,30 @@ extension ChatStore {
 
     /// Removes a chat from the sidebar and search results, closing it if it
     /// was open rather than jumping to another chat.
-    func removeChatLocally(_ chatID: String) {
+    ///
+    /// With `keepingUnlistedSelection`, an open chat outside the sidebar's
+    /// rows stays open: one kept across a filter change, or opened from
+    /// search or history. A listed chat leaving its filter, as when it's
+    /// archived, still closes.
+    func removeChatLocally(_ chatID: String, keepingUnlistedSelection: Bool = false) {
+        var wasListed = false
         // Upserts for chats outside the current filter land here constantly;
         // only write the lists that actually hold the chat.
         if let index = pinnedChats.firstIndex(where: { $0.id == chatID }) {
             pinnedChats.remove(at: index)
+            wasListed = true
         }
         if chats.contains(where: { $0.id == chatID }) {
             setChats(chats.filter { $0.id != chatID })
+            wasListed = true
         }
         if var results = searchResults, let index = results.firstIndex(where: { $0.id == chatID }) {
             results.remove(at: index)
             searchResults = results
         }
-        if selectedChatID == chatID {
+        // Until a new filter's list loads, the rows are the old filter's.
+        let isListed = wasListed && lastLoadedFilterID == selectedFilter.id
+        if selectedChatID == chatID, isListed || !keepingUnlistedSelection {
             selectedChatID = nil
         }
     }
@@ -420,9 +451,11 @@ extension ChatStore {
     }
 
     /// Reading the open chat keeps it in the Unread list until another chat
-    /// is selected, so the selection doesn't vanish mid-read.
+    /// is selected, so the selection doesn't vanish mid-read. An open chat
+    /// that wasn't listed, as one kept across a filter change, isn't added.
     private func isOpenUnreadListChat(_ chat: Chat) -> Bool {
         selectedInboxFilter == .unread && chat.id == selectedChatID && chat.isArchived != true
+            && (chats.contains { $0.id == chat.id } || pinnedChats.contains { $0.id == chat.id })
     }
 
     /// Mirrors the core's inbox and exact account filtering for chat events.
@@ -475,8 +508,8 @@ extension ChatStore {
         }
     }
 
-    /// Empties the sidebar, which also clears the selection and open timeline.
-    /// Starts over for another filter but keeps the current rows on screen
+    /// Starts over for another filter. The open chat stays open, unselected
+    /// in the new list if it isn't there, and the current rows stay on screen
     /// until the new list replaces them in one animated change: chats in both
     /// lists move into place and the rest leave, instead of the list blanking
     /// first. The rows still belong to the old filter, so paging waits for the
@@ -484,7 +517,6 @@ extension ChatStore {
     func prepareForFilterChange() {
         pinningChatIDs = []
         pinError = nil
-        selectedChatID = nil
         hasMoreChats = false
         chatWindowSize = Self.chatPageSize
         chatsError = nil
