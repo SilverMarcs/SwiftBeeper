@@ -5,20 +5,28 @@ import Foundation
 /// every row from all loaded messages each time grows with history; this hands
 /// back the previous rows while their inputs are unchanged.
 final class TimelineEntriesCache {
-    private struct Inputs: Equatable {
+    private struct RowInputs: Equatable {
         /// The messages array's storage. The cache keeps the array, so the
         /// store can't mutate that storage in place: a change means new storage.
         let messagesStorage: UnsafeRawPointer?
         let messageCount: Int
         let firstUnreadID: String?
-        let readReceipts: [ReadReceipt]
-        let groupMemberCount: Int?
         let followingTypingSenderID: String?
         let isThread: Bool
-        let continuesIntoOutgoing: Bool
+        let followingRowContinues: Bool
     }
 
-    private var inputs: Inputs?
+    /// Receipt changes update captions independently. Rows only need rebuilding
+    /// when that caption changes whether the newest bubble joins the typing row.
+    private struct CaptionInputs: Equatable {
+        let messagesStorage: UnsafeRawPointer?
+        let messageCount: Int
+        let readReceipts: [ReadReceipt]
+        let groupMemberCount: Int?
+    }
+
+    private var rowInputs: RowInputs?
+    private var captionInputs: CaptionInputs?
     private var messages: [Message] = []
     private var quotedMessages: [Message.ID: Message] = [:]
     private var entries: [TimelineEntry] = []
@@ -40,43 +48,51 @@ final class TimelineEntriesCache {
         isThread: Bool = false,
         continuesIntoOutgoing: Bool = false
     ) -> [TimelineEntry] {
-        let inputs = Inputs(
-            messagesStorage: messages.withUnsafeBufferPointer { UnsafeRawPointer($0.baseAddress) },
+        let storage = messages.withUnsafeBufferPointer { UnsafeRawPointer($0.baseAddress) }
+        let captionInputs = CaptionInputs(
+            messagesStorage: storage,
             messageCount: messages.count,
-            firstUnreadID: firstUnreadID,
-            readReceipts: readReceipts,
-            groupMemberCount: groupMemberCount,
-            followingTypingSenderID: followingTypingSenderID,
-            isThread: isThread,
-            continuesIntoOutgoing: continuesIntoOutgoing
-        )
-        if inputs == self.inputs, quotedMessages == self.quotedMessages {
-            return entries
-        }
-        newestSeenCaption = TimelineEntry.newestSeenCaption(
-            in: messages,
             readReceipts: readReceipts,
             groupMemberCount: groupMemberCount
         )
+        if captionInputs != self.captionInputs {
+            newestSeenCaption = TimelineEntry.newestSeenCaption(
+                in: messages,
+                readReceipts: readReceipts,
+                groupMemberCount: groupMemberCount
+            )
+            deliveryCaption = TimelineEntry.deliveryCaption(
+                in: messages,
+                readReceipts: readReceipts,
+                groupMemberCount: groupMemberCount
+            )
+            self.captionInputs = captionInputs
+        }
         // The newest row's sender typing again carries on its bubbles,
         // unless the caption of who has seen it sits between them.
         let typingContinues = followingTypingSenderID != nil
             && followingTypingSenderID == messages.last?.senderID
             && newestSeenCaption == nil
+        let rowInputs = RowInputs(
+            messagesStorage: storage,
+            messageCount: messages.count,
+            firstUnreadID: firstUnreadID,
+            followingTypingSenderID: followingTypingSenderID,
+            isThread: isThread,
+            followingRowContinues: continuesIntoOutgoing || typingContinues
+        )
+        if rowInputs == self.rowInputs, quotedMessages == self.quotedMessages {
+            return entries
+        }
         entries = TimelineEntry.entries(
             for: messages,
             firstUnreadID: firstUnreadID,
             quotedMessages: quotedMessages,
             followingTypingSenderID: followingTypingSenderID,
             isThread: isThread,
-            followingRowContinues: continuesIntoOutgoing || typingContinues
+            followingRowContinues: rowInputs.followingRowContinues
         )
-        deliveryCaption = TimelineEntry.deliveryCaption(
-            in: messages,
-            readReceipts: readReceipts,
-            groupMemberCount: groupMemberCount
-        )
-        self.inputs = inputs
+        self.rowInputs = rowInputs
         self.messages = messages
         self.quotedMessages = quotedMessages
         return entries
