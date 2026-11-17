@@ -13,8 +13,11 @@ struct ComposerDictationLifecycle: ViewModifier {
         let ownsDictation = input.dictationTarget == composer.target
         content
             #if os(iOS)
-            .sensoryFeedback(.impact(weight: .light, intensity: 0.8), trigger: input.dictation.feedbackID) { _, _ in
-                input.dictationTarget == composer.target
+            .sensoryFeedback(trigger: input.dictationFeedback) { _, event in
+                input.dictationTarget == composer.target ? Self.feedback(for: event) : nil
+            }
+            .sensoryFeedback(.error, trigger: input.dictation.error) { _, error in
+                input.dictationTarget == composer.target && error != nil
             }
             #endif
             .onChange(of: composer.target) { oldTarget, _ in
@@ -37,4 +40,14 @@ struct ComposerDictationLifecycle: ViewModifier {
                 Text(input.dictation.error ?? "")
             }
     }
+
+    #if os(iOS)
+    private static func feedback(for event: DictationFeedback?) -> SensoryFeedback? {
+        switch event?.kind {
+        case .recordingStarted, .transcriptReady: .impact(weight: .light, intensity: 0.8)
+        case .send: .impact(weight: .medium, intensity: 0.7)
+        case nil: nil
+        }
+    }
+    #endif
 }

@@ -13,6 +13,8 @@ import UniformTypeIdentifiers
 final class InputManager {
     let dictation = ComposerDictation()
     private(set) var isSubmittingDictation = false
+    /// The latest dictation haptic, played by the composer dictating.
+    private(set) var dictationFeedback: DictationFeedback?
     /// The composer the running dictation writes into.
     private(set) var dictationTarget: ComposerTarget?
     let chatStore: ChatStore
@@ -88,12 +90,22 @@ final class InputManager {
             dictationTarget = composer.target
         }
         let editingID = composer.editing?.id
-        dictation.toggle(provider: OpenAITranscriber(apiKey: settings.apiKey)) { [weak composer] text in
+        dictation.toggle(provider: OpenAITranscriber(apiKey: settings.apiKey), feedback: { [weak self] kind in
+            self?.provideDictationFeedback(kind)
+        }) { [weak self, weak composer] text in
             guard let composer, composer.editing?.id == editingID else { return }
             let draft = composer.text
             composer.text = draft + (draft.isEmpty || draft.last?.isWhitespace == true ? "" : " ") + text
             composer.requestDictationFocus()
+            self?.provideDictationFeedback(.transcriptReady)
         }
+    }
+
+    private func provideDictationFeedback(_ kind: DictationFeedback.Kind) {
+        // Send while recording is one action, with immediate feedback. Its
+        // transcription and eventual send must not produce more taps.
+        guard !isSubmittingDictation else { return }
+        dictationFeedback = DictationFeedback(kind)
     }
 
     /// Cancels dictation when it belongs to `composer`.
@@ -159,6 +171,7 @@ final class InputManager {
         if isDictating(in: composer) {
             let session = dictation.sessionID
             let composerMessageID = composer.activeMessage?.id
+            provideDictationFeedback(.send)
             isSubmittingDictation = true
             Task {
                 defer { isSubmittingDictation = false }
