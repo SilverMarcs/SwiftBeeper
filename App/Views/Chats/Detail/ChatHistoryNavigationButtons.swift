@@ -19,5 +19,9 @@ struct ChatHistoryNavigationButtons: View {
         } label: {
             Label("Chat History", systemImage: "chevron.left.chevron.right")
         }
+        // The navigation style joins the pair with a divider and, on macOS,
+        // keeps the group at the toolbar's leading edge; the default style
+        // moves it to the trailing side.
+        .controlGroupStyle(.navigation)
     }
 }
