@@ -31,6 +31,6 @@ struct ShareChat: Identifiable, Hashable, Decodable {
     /// The first letters of up to two words of the title.
     var initials: String {
         let letters = displayTitle.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }
-        return letters.isEmpty ? "?" : letters.joined()
+        return letters.isEmpty ? "?" : letters.joined().uppercased()
     }
 }

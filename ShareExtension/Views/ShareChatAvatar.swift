@@ -6,6 +6,9 @@ struct ShareChatAvatar: View {
     let chat: ShareChat
     @State private var image: CGImage?
 
+    /// The avatar's diameter in points.
+    private static let dimension: CGFloat = 40
+
     var body: some View {
         Group {
             if let image {
@@ -16,13 +19,19 @@ struct ShareChatAvatar: View {
                 Circle()
                     .fill(.quaternary)
                     .overlay {
+                        // Sized to the circle like Messages: a single
+                        // letter at about half the diameter, two a little
+                        // smaller. Matches the app's InitialsAvatarView.
                         Text(chat.initials)
-                            .font(.caption)
+                            .font(.system(size: Self.dimension * (chat.initials.count > 1 ? 0.46 : 0.52), design: .rounded))
                             .bold()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .padding(.horizontal, Self.dimension * 0.08)
                     }
             }
         }
-        .frame(width: 40, height: 40)
+        .frame(width: Self.dimension, height: Self.dimension)
         .clipShape(.circle)
         .task(id: chat.avatarURL) {
             image = await model.avatar(for: chat)

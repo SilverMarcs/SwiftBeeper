@@ -19,7 +19,7 @@ struct ProfileAvatarView: View {
                 SMVImage(url: displayURL, targetSize: targetSize)
             } else {
                 CachedAsyncImage(url: displayURL, targetSize: targetSize) {
-                    InitialsAvatarView(name: name, colorID: colorID)
+                    InitialsAvatarView(name: name, colorID: colorID, dimension: dimension)
                 }
             }
         }
