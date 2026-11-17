@@ -22,6 +22,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// messages arriving meanwhile should keep following.
     @State private var isScrollingToLatest = false
     @State private var restingPosition = TimelineRestingPosition()
+    /// The moves after a jump to the end, checked against the last row.
+    @State private var endChecks = TimelineEndChecks()
     /// The derived message rows, rebuilt only when their inputs change.
     @State private var entriesCache = TimelineEntriesCache()
     /// Long messages the reader chose to read in full.
@@ -134,6 +136,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             // Rows get the chat without its preview and unread state, so each
             // new message or read doesn't re-render every row.
             let rowChat = chat.forTimelineRows
+            // The last row that shows anything, which a jump to the end is
+            // checked against.
+            let endRowID = timelineItems.last?.id
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -186,16 +191,23 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     rowFrames.update(rowID, contentBottomEdge: nil)
                                 }
                             }
+
+                            // The end is the lazy stack's own last row, so
+                            // scrolling to it lays out the rows above it from
+                            // the end. Placed after the stack, it sits where
+                            // the stack's estimate of the rows above ends, and
+                            // once those rows are measured shorter SwiftUI
+                            // pulls the offset in but leaves the rows now in
+                            // view undrawn until the reader scrolls.
+                            Color.clear
+                                .frame(height: 1)
+                                .id(bottomAnchorID)
+                                .accessibilityHidden(true)
                         }
                         .animation(
                             reduceMotion ? nil : .easeInOut(duration: ChatVisualStyle.typingBubbleExpansionDuration),
                             value: typingBubble?.id
                         )
-                        // Keep the scroll target available independently of lazy rows.
-                        Color.clear
-                            .frame(height: 1)
-                            .id(bottomAnchorID)
-                            .accessibilityHidden(true)
                     }
                     // Where a quoted message's copy finds the row it moves
                     // from, however the timeline scrolls meanwhile.
@@ -242,6 +254,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     latestScrollGeneration += 1
                     isScrollingToLatest = false
                     restingPosition.isAtEnd = false
+                    endChecks.cancel()
                 })
                 .onScrollPhaseChange { _, phase in
                     guard phase == .tracking || phase == .interacting,
@@ -261,15 +274,43 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     geometry.isPastEnd
                 } action: { _, isPastEnd in
                     guard isPastEnd, !restingPosition.isScrolling else { return }
-                    scrollToLatest(with: proxy, animated: false)
+                    jumpToEnd(with: proxy)
                 }
                 .onScrollPhaseChange { _, phase, context in
                     restingPosition.isScrolling = phase != .idle
+                    // The reader takes over from a jump still landing.
+                    if phase == .tracking || phase == .interacting {
+                        endChecks.cancel()
+                    }
                     guard phase == .idle, context.geometry.isPastEnd else { return }
-                    scrollToLatest(with: proxy, animated: false)
+                    jumpToEnd(with: proxy)
                 }
-                // A viewport rebuilt mid-scroll never reports landing.
-                .onAppear { restingPosition.isScrolling = false }
+                // A jump to the end lands where the lazy stack estimated it,
+                // which can be past rows it then measures shorter, as when a
+                // chat opens with its messages already loaded: SwiftUI pulls
+                // the offset in but lays out none of the rows now in view,
+                // leaving the timeline blank until the reader scrolls.
+                // Scrolling to the last row that shows anything once the jump
+                // moves the timeline lays them out; the end target can't, as
+                // the stack already has it where it's asked to go. SwiftUI can
+                // move the offset a few times before the jump settles. A
+                // timeline shorter than the view shows all its rows.
+                .onScrollGeometryChange(for: CGFloat?.self) { geometry in
+                    geometry.contentSize.height > geometry.containerSize.height ? geometry.contentOffset.y : nil
+                } action: { _, offset in
+                    guard offset != nil, endChecks.take() else { return }
+                    settleAtEnd(endRowID, focusedRowID: focusedRowID, with: proxy)
+                }
+                .onAppear {
+                    // A viewport rebuilt mid-scroll never reports landing.
+                    restingPosition.isScrolling = false
+                    // A chat opening at its newest messages starts at the
+                    // lazy stack's estimate of its end; going to its end
+                    // target lays the rows out from there.
+                    guard source.hasLoadedTimeline, !source.hasMoreNewerTimeline,
+                          source.messageRevealRequest == nil else { return }
+                    jumpToEnd(with: proxy)
+                }
                 .id("\(target.chatID)-\(target.threadRootID ?? "")-\(source.hasLoadedTimeline)-\(source.timelineWindowID)")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.bottom, for: .alignment)
@@ -304,6 +345,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 // up, including when a context menu brings it back.
                 .onScrollGeometryChange(for: CGFloat.self, of: \.contentInsets.bottom) { oldInset, newInset in
                     guard newInset > oldInset else { return }
+                    // The keyboard follower moves the timeline from here on.
+                    endChecks.cancel()
                     if let activeComposerMessageID {
                         keyboardPlacedMessageID = activeComposerMessageID
                         scrollAboveComposer(TimelineEntry.rowID(for: activeComposerMessageID, in: timelineEntries), with: proxy)
@@ -677,6 +720,27 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         } completion: {
             guard generation == latestScrollGeneration else { return }
             isScrollingToLatest = false
+        }
+    }
+
+    /// Jumps to the newest row at once, then checks the next few moves
+    /// against the last row, as `settleAtEnd` describes.
+    private func jumpToEnd(with proxy: ScrollViewProxy) {
+        endChecks.arm()
+        scrollToLatest(with: proxy, animated: false)
+    }
+
+    /// Puts the timeline's last row at the bottom of the view, which lays out
+    /// the rows above it. A timeline the reader or a reveal is moving, one
+    /// that stops short of the newest messages, or one focused on a reply,
+    /// edit or quote stays where it is.
+    private func settleAtEnd(_ endRowID: String?, focusedRowID: Message.ID?, with proxy: ScrollViewProxy) {
+        guard let endRowID, focusedRowID == nil, !restingPosition.isScrolling,
+              source.messageRevealRequest == nil, !source.hasMoreNewerTimeline else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo(endRowID, anchor: .bottom)
         }
     }
 
