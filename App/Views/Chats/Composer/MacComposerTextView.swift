@@ -11,6 +11,8 @@ struct MacComposerTextView: NSViewRepresentable {
     @Binding var isFocused: Bool
     /// Told about the editor, so a send can read where the draft is drawn.
     let sendOrigin: ComposerSendOrigin
+    /// Told about the editor, so the mention menu can sit at its @.
+    let mentionMenu: MentionMenuController
     /// Where the caret goes when the draft is replaced from outside, as when
     /// a mention is inserted.
     let selection: NSRange?
@@ -44,6 +46,7 @@ struct MacComposerTextView: NSViewRepresentable {
         scrollView.documentView = editor
         context.coordinator.editor = editor
         sendOrigin.editor = editor
+        mentionMenu.editor = editor
         return scrollView
     }
 

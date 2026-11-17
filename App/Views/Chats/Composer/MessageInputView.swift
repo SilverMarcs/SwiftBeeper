@@ -18,6 +18,8 @@ struct MessageInputView: View {
     /// the composer: the field stays put while another chat's composer takes
     /// it over, so its frame wouldn't change to reach the new one.
     @State private var sendOrigin = ComposerSendOrigin(fieldCornerRadius: Self.fieldCornerRadius)
+    /// The mention menu at the editor's @, kept with the editor it follows.
+    @State private var mentionMenu = MentionMenuController()
 
     private static let fieldCornerRadius: CGFloat = 20
 
@@ -56,6 +58,7 @@ struct MessageInputView: View {
                             text: Bindable(composer).text,
                             isFocused: $isMessageFieldFocused,
                             sendOrigin: sendOrigin,
+                            mentionMenu: mentionMenu,
                             selection: composer.selection,
                             mentions: composer.draft.mentions.map(\.range),
                             placeholder: composer.prompt,
@@ -69,7 +72,7 @@ struct MessageInputView: View {
                             }
                             .padding(.horizontal, 4)
                             .padding(8)
-                            .composerMentionPopover(composer, isFocused: isMessageFieldFocused) { _ in
+                            .composerMentionMenu(composer, isFocused: isMessageFieldFocused, menu: mentionMenu) { _ in
                                 // The mention's insertion already placed the caret.
                                 focusMessageField()
                             }
