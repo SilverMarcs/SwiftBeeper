@@ -11,7 +11,7 @@ struct MessageSenderAvatar: View {
             ProfileAvatarView(
                 name: message.senderDisplayName,
                 colorID: message.senderID,
-                imageURLString: chat.participant(with: message.senderID)?.imgURL,
+                imageURLString: message.senderParticipant(in: chat).imgURL,
                 dimension: 28
             )
         }

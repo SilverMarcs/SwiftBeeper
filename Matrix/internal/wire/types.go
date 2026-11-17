@@ -122,6 +122,10 @@ type Message struct {
 	LinkedMessageID string       `json:"linkedMessageID"`
 	Reactions       []Reaction   `json:"reactions"`
 	SenderName      string       `json:"senderName"`
+	// Sender is the sender's profile from their member event. A chat's
+	// participants are only a sample, so it is how a group's timeline draws
+	// and opens every sender.
+	Sender *User `json:"sender,omitempty"`
 	// A visible personal mention, excluding reply fallback notifications.
 	IsPersonalMention bool   `json:"isPersonalMention,omitempty"`
 	Text              string `json:"text"`
@@ -229,7 +233,9 @@ type ListChatsOutput struct {
 // ReadReceipt is how far another participant has read a chat.
 type ReadReceipt struct {
 	UserID string `json:"userID"`
-	Name   string `json:"name"`
+	// Participant is the reader's profile from their member event, as a
+	// message's sender and a reaction's participant are.
+	Participant User `json:"participant"`
 	// SortKey is the furthest message they have read.
 	SortKey string `json:"sortKey"`
 }

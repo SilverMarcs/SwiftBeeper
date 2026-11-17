@@ -89,12 +89,12 @@ func (s *Dispatcher) searchMessages(ctx context.Context, input json.RawMessage) 
 	if err != nil {
 		return nil, err
 	}
-	names := s.loadNamesForEvents(ctx, messages)
+	members := s.loadMembersForEvents(ctx, messages)
 	for _, evt := range messages {
 		if _, ok := chats[evt.RoomID]; !ok {
 			continue
 		}
-		message, err := s.mapEventToMessage(evt, names[evt.RoomID], nil)
+		message, err := s.mapEventToMessage(evt, members[evt.RoomID], nil)
 		// The index also matched reply fallbacks quoting another message, and
 		// text an edit has since replaced.
 		if err != nil || !messageMatchesWords(message, words) {

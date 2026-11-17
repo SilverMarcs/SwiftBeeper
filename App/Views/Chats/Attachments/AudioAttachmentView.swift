@@ -100,7 +100,7 @@ struct AudioAttachmentView: View {
             givenDuration: attachment.duration,
             // Now Playing names the other side of the conversation.
             title: message.isSender ? chat.displayTitle : message.senderDisplayName,
-            avatarURL: message.isSender ? chat.imgURL : chat.participant(with: message.senderID)?.imgURL
+            avatarURL: message.isSender ? chat.imgURL : message.senderParticipant(in: chat).imgURL
         )
     }
 }

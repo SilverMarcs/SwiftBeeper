@@ -18,8 +18,9 @@ import (
 var errSkipEvent = errors.New("skip event")
 
 // mapEventToMessage maps a message or sticker event; anything else, edits
-// included, returns errSkipEvent.
-func (s *Dispatcher) mapEventToMessage(evt *database.Event, names map[string]string, reactions map[id.EventID][]wire.Reaction) (wire.Message, error) {
+// included, returns errSkipEvent. members holds the senders' profiles by
+// user ID.
+func (s *Dispatcher) mapEventToMessage(evt *database.Event, members map[string]wire.User, reactions map[id.EventID][]wire.Reaction) (wire.Message, error) {
 	evtType := evt.GetType().Type
 	if evt.RelationType == event.RelReplace ||
 		(evtType != event.EventMessage.Type && evtType != event.EventSticker.Type) {
@@ -41,8 +42,9 @@ func (s *Dispatcher) mapEventToMessage(evt *database.Event, names map[string]str
 		message.ThreadRootID = string(root)
 		message.IsThreadBroadcast = isThreadBroadcast(evt)
 	}
-	if name, ok := names[string(evt.Sender)]; ok {
-		message.SenderName = name
+	if sender, ok := members[string(evt.Sender)]; ok {
+		message.SenderName = sender.FullName
+		message.Sender = &sender
 	}
 	if err := applyStoredMessageContent(&message, evt, evtType, s.rt.Client().Account.UserID); err != nil {
 		return wire.Message{}, errSkipEvent

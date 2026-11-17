@@ -30,6 +30,13 @@ extension APIClient {
         return try await execute("get-chat", arguments: Arguments(chatID: chatID, maxParticipantCount: maxParticipantCount))
     }
 
+    /// One person's profile in a chat, from their member event. A chat's
+    /// participants are only a sample, so this finds anyone outside it.
+    static func getChatParticipant(chatID: String, userID: String) async throws -> ChatParticipant {
+        struct Arguments: Encodable { let chatID: String; let userID: String }
+        return try await execute("get-chat-participant", arguments: Arguments(chatID: chatID, userID: userID))
+    }
+
     /// Looks up an existing DM in the local database, on the source chat's account.
     static func findDirectChat(participantID: String, sourceChatID: String) async throws -> Chat? {
         struct Arguments: Encodable { let participantID: String; let sourceChatID: String }

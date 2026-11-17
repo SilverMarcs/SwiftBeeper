@@ -236,7 +236,7 @@ func (s *Dispatcher) mapRoomToChat(room *database.Room, summary *chatSummary, lo
 		chat.LastActivity = time.UnixMilli(ts).UTC()
 	}
 	if summary.preview != nil {
-		if preview, err := s.mapEventToMessage(summary.preview, summary.names, nil); err == nil {
+		if preview, err := s.mapEventToMessage(summary.preview, summary.profiles, nil); err == nil {
 			if !preview.IsSender {
 				if lastReadSortKey != "" {
 					lastRead, _ := strconv.ParseInt(lastReadSortKey, 10, 64)

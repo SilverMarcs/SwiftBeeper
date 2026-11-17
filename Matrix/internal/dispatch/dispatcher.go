@@ -75,6 +75,8 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.listChats(ctx, input, searchChatsLimit)
 	case "get-chat":
 		return s.getChat(ctx, input)
+	case "get-chat-participant":
+		return s.getChatParticipant(ctx, input)
 	case "find-direct-chat":
 		return s.findDirectChat(ctx, input)
 	case "search-messages":

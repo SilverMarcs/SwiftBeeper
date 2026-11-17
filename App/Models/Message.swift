@@ -13,6 +13,10 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let chatID: String
     let senderID: String
     let senderName: String?
+    /// The sender's profile from their member event. A group's participants
+    /// are only a small sample, so this is how the timeline draws and opens
+    /// senders outside it. Use `senderParticipant(in:)`.
+    let sender: ChatParticipant?
     let timestamp: Date
     let sortKey: String
     let text: String?

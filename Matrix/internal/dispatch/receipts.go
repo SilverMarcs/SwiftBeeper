@@ -114,7 +114,8 @@ const readReceiptMemberLimit = 25
 // loadReadReceipts returns how far each other person has read, by timeline
 // position, named as the room knows them. Bridge bots are excluded: their
 // receipts mean delivery, not reading. A room above readReceiptMemberLimit
-// members returns none.
+// members returns none. Each carries the reader's profile from the same
+// member event that names them.
 func (s *Dispatcher) loadReadReceipts(ctx context.Context, roomID id.RoomID) []wire.ReadReceipt {
 	cli := s.rt.Client()
 	if cli == nil || cli.Account == nil {
@@ -126,7 +127,8 @@ func (s *Dispatcher) loadReadReceipts(ctx context.Context, roomID id.RoomID) []w
 	// A user holds one receipt per thread; the furthest is how far they read.
 	const query = `
 		SELECT r.user_id, MAX(t.rowid),
-		       COALESCE(NULLIF(TRIM(json_extract(member.content,'$.displayname')),''),'')
+		       COALESCE(NULLIF(TRIM(json_extract(member.content,'$.displayname')),''),''),
+		       COALESCE(TRIM(json_extract(member.content,'$.avatar_url')),'')
 		FROM receipt r
 		JOIN event e ON e.event_id = r.event_id AND e.room_id = r.room_id
 		JOIN timeline t ON t.event_rowid = e.rowid AND t.room_id = r.room_id
@@ -143,15 +145,19 @@ func (s *Dispatcher) loadReadReceipts(ctx context.Context, roomID id.RoomID) []w
 	defer rows.Close()
 	var receipts []wire.ReadReceipt
 	for rows.Next() {
-		var userID, name string
+		var userID, name, avatarURL string
 		var position int64
-		if rows.Scan(&userID, &position, &name) != nil || position == 0 {
+		if rows.Scan(&userID, &position, &name, &avatarURL) != nil || position == 0 {
 			continue
 		}
 		if name == "" {
 			name = id.UserID(userID).Localpart()
 		}
-		receipts = append(receipts, wire.ReadReceipt{UserID: userID, Name: name, SortKey: strconv.FormatInt(position, 10)})
+		receipts = append(receipts, wire.ReadReceipt{
+			UserID:      userID,
+			Participant: newUser(userID, name, avatarURL, "", false),
+			SortKey:     strconv.FormatInt(position, 10),
+		})
 	}
 	return receipts
 }

@@ -12,8 +12,12 @@ struct ParticipantInfoView: View {
     @State private var lookupError: String?
     @State private var messageError: String?
     @State private var model = ChatInfoModel()
+    /// The member event's profile, when `participant` came without a photo,
+    /// as a mention of someone outside the chat's participant sample does.
+    @State private var resolvedParticipant: ChatParticipant?
 
     var body: some View {
+        let participant = resolvedParticipant.flatMap { $0.id == self.participant.id ? $0 : nil } ?? self.participant
         let isSelf = participant.isSelf == true || participant.id == chatStore.currentUserProfile?.id
         let network = chatStore.networkName(forAccountID: sourceChat.accountID)
 
@@ -52,6 +56,9 @@ struct ParticipantInfoView: View {
         .formStyle(.grouped)
         .infoScreenChrome(title: "Contact Info")
         .task(id: participant.id) {
+            await resolveParticipant()
+        }
+        .task(id: participant.id) {
             guard !isSelf else { return }
             await lookUpDirectChat()
         }
@@ -75,6 +82,13 @@ struct ParticipantInfoView: View {
         } else {
             messageError = lookupError ?? "No existing direct chat with this participant was found on this network."
         }
+    }
+
+    private func resolveParticipant() async {
+        guard participant.imgURL?.isEmpty != false,
+              let resolved = try? await APIClient.getChatParticipant(chatID: sourceChat.id, userID: participant.id),
+              !Task.isCancelled else { return }
+        resolvedParticipant = resolved
     }
 
     private func lookUpDirectChat() async {

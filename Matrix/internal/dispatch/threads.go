@@ -220,12 +220,12 @@ func (s *Dispatcher) mapEvents(ctx context.Context, roomID id.RoomID, events []*
 	if err := s.populateLastEditRefs(ctx, events); err != nil {
 		return nil, err
 	}
-	names := s.loadNamesForEvents(ctx, events)[roomID]
+	members := s.loadMembersForEvents(ctx, events)[roomID]
 	// Messages still render when their reactions can't be read.
 	reactions, _ := s.loadReactionMap(ctx, roomID, events)
 	messages := make([]wire.Message, 0, len(events))
 	for _, evt := range events {
-		if message, err := s.mapEventToMessage(evt, names, reactions); err == nil {
+		if message, err := s.mapEventToMessage(evt, members, reactions); err == nil {
 			message.TransactionID = evt.TransactionID
 			messages = append(messages, message)
 		}

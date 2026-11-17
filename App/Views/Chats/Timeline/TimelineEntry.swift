@@ -162,14 +162,14 @@ struct TimelineEntry: Identifiable, Equatable {
         let message = messages[index]
         guard message.deliveryStatus != .failed else { return nil }
 
-        var readers: [String: String] = [:]
+        var readers: [String: ChatParticipant] = [:]
         for receipt in readReceipts where receipt.numericSortKey >= message.numericSortKey {
-            readers[receipt.userID] = receipt.name
+            readers[receipt.userID] = receipt.participant
         }
         // Writing after the message means having seen it, receipt or not.
         // Servers don't turn that into a receipt for others to see.
         for later in messages[(index + 1)...] where !isBridgeBot(later.senderID) {
-            readers[later.senderID] = readers[later.senderID] ?? later.senderDisplayName
+            readers[later.senderID] = readers[later.senderID] ?? later.senderProfile
         }
         guard !readers.isEmpty else {
             guard index == messages.endIndex - 1,
@@ -191,10 +191,10 @@ struct TimelineEntry: Identifiable, Equatable {
         groupMemberCount: Int?
     ) -> DeliveryIndicator? {
         guard let groupMemberCount, let newest = messages.last, !newest.isSender else { return nil }
-        var readers: [String: String] = [:]
+        var readers: [String: ChatParticipant] = [:]
         for receipt in readReceipts
         where receipt.numericSortKey >= newest.numericSortKey && receipt.userID != newest.senderID {
-            readers[receipt.userID] = receipt.name
+            readers[receipt.userID] = receipt.participant
         }
         guard !readers.isEmpty else { return nil }
         // Everyone but the user and the sender.
@@ -206,9 +206,9 @@ struct TimelineEntry: Identifiable, Equatable {
 
     /// Readers by first name, as the caption lists them, then by ID so equal
     /// names keep their order between passes.
-    private static func sortedReaders(_ readers: [String: String]) -> [DeliveryReader] {
-        readers
-            .map { (reader: DeliveryReader(id: $0.key, name: $0.value), firstName: DeliveryIndicator.firstName(of: $0.value)) }
+    private static func sortedReaders(_ readers: [String: ChatParticipant]) -> [ChatParticipant] {
+        readers.values
+            .map { (reader: $0, firstName: DeliveryIndicator.firstName(of: $0.displayName)) }
             .sorted {
                 switch $0.firstName.localizedStandardCompare($1.firstName) {
                 case .orderedAscending: true

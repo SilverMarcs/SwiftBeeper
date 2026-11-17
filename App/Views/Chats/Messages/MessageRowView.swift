@@ -30,7 +30,7 @@ struct MessageRowView: View {
             } else if showsSenderIdentity {
                 if entry.isLastInGroup {
                     MessageSenderAvatar(message: message, chat: chat) {
-                        profileSheetParticipant = chat.participant(with: message.senderID)
+                        profileSheetParticipant = message.senderParticipant(in: chat)
                     }
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .timelineContent).maxY } action: {
                         rowFrames?.update(entry.id, senderAvatarBottomEdge: $0)
@@ -42,7 +42,7 @@ struct MessageRowView: View {
                         .overlay(alignment: .bottom) {
                             if let copy = quotedFocusRole.avatarCopy {
                                 MessageSenderAvatar(message: message, chat: chat) {
-                                    profileSheetParticipant = chat.participant(with: message.senderID)
+                                    profileSheetParticipant = message.senderParticipant(in: chat)
                                 }
                                 .quotedMessageMorph(from: copy.origin, isPresented: copy.isPresented)
                                 .id(copy.id)

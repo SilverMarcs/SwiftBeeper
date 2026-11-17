@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"go.mau.fi/gomuks/pkg/hicli/database"
@@ -94,7 +93,7 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 	if err = s.populateLastEditRefs(ctx, events); err != nil {
 		return nil, err
 	}
-	names := s.loadNamesForEvents(ctx, events)[roomID]
+	members := s.loadMembersForEvents(ctx, events)[roomID]
 	reactions, err := s.loadReactionMap(ctx, roomID, events)
 	if err != nil {
 		return nil, err
@@ -103,7 +102,7 @@ func (s *Dispatcher) listMessages(ctx context.Context, input json.RawMessage) (a
 	oldest := before
 	for index, evt := range events {
 		oldest = int64(evt.TimelineRowID)
-		mapped, err := s.mapEventToMessage(evt, names, reactions)
+		mapped, err := s.mapEventToMessage(evt, members, reactions)
 		if err != nil {
 			continue
 		}
@@ -364,10 +363,11 @@ func (s *Dispatcher) populateTimelinePositions(ctx context.Context, events []*da
 	return rows.Err()
 }
 
-// loadNamesForEvents resolves display names, per room, for only the senders
-// in this batch, not every member of their rooms. Member events also need the
-// affected user's display name.
-func (s *Dispatcher) loadNamesForEvents(ctx context.Context, events []*database.Event) map[id.RoomID]map[string]string {
+// loadMembersForEvents resolves profiles, per room, for only the senders in
+// this batch, not every member of their rooms. Member events also need the
+// affected user's display name. A chat's participants are only a small
+// avatar sample, so each message carries its sender's profile from here.
+func (s *Dispatcher) loadMembersForEvents(ctx context.Context, events []*database.Event) map[id.RoomID]map[string]wire.User {
 	keys := make([]database.RoomStateGUID, 0, len(events))
 	seen := make(map[database.RoomStateGUID]bool)
 	for _, evt := range events {
@@ -383,14 +383,15 @@ func (s *Dispatcher) loadNamesForEvents(ctx context.Context, events []*database.
 			}
 		}
 	}
-	names := make(map[id.RoomID]map[string]string)
+	profiles := make(map[id.RoomID]map[string]wire.User)
 	if len(keys) == 0 {
-		return names
+		return profiles
 	}
 	members, err := s.rt.Client().DB.CurrentState.GetMany(ctx, keys)
 	if err != nil {
-		return names
+		return profiles
 	}
+	self := string(s.rt.Client().Account.UserID)
 	for _, member := range members {
 		if member.StateKey == nil {
 			continue
@@ -399,14 +400,10 @@ func (s *Dispatcher) loadNamesForEvents(ctx context.Context, events []*database.
 		if json.Unmarshal(member.GetContent(), &content) != nil {
 			continue
 		}
-		name := strings.TrimSpace(content.Displayname)
-		if name == "" {
-			name = *member.StateKey
+		if profiles[member.RoomID] == nil {
+			profiles[member.RoomID] = make(map[string]wire.User)
 		}
-		if names[member.RoomID] == nil {
-			names[member.RoomID] = make(map[string]string)
-		}
-		names[member.RoomID][*member.StateKey] = name
+		profiles[member.RoomID][*member.StateKey] = userFromMemberEvent(*member.StateKey, content, self)
 	}
-	return names
+	return profiles
 }

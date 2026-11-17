@@ -38,7 +38,8 @@ type chatSummary struct {
 	accountMembers []wire.User
 	total          int
 	preview        *database.Event
-	names          map[string]string
+	// Profiles by user ID: the sampled members, then the preview's sender.
+	profiles map[string]wire.User
 }
 
 // loadRoomPage returns the next rooms in sidebar order after position.
@@ -88,7 +89,7 @@ func (s *Dispatcher) loadChatMemberSummaries(ctx context.Context, rooms []*datab
 	}
 	roomArgs := make([]any, 0, len(rooms))
 	for _, room := range rooms {
-		result[room.ID] = &chatSummary{members: []wire.User{}, names: make(map[string]string)}
+		result[room.ID] = &chatSummary{members: []wire.User{}, profiles: make(map[string]wire.User)}
 		roomArgs = append(roomArgs, room.ID)
 	}
 	ghostClauses := []string{"0"}
@@ -149,7 +150,7 @@ func (s *Dispatcher) loadChatMemberSummaries(ctx context.Context, rooms []*datab
 			summary.members = append(summary.members, user)
 		}
 		summary.accountMembers = append(summary.accountMembers, user)
-		summary.names[user.ID] = user.FullName
+		summary.profiles[user.ID] = user
 	}
 	err = rows.Err()
 	rows.Close()
@@ -206,7 +207,7 @@ func (s *Dispatcher) loadChatPreviews(ctx context.Context, rooms []*database.Roo
 	if err = s.populateTimelinePositions(ctx, events); err != nil {
 		return err
 	}
-	names := s.loadNamesForEvents(ctx, events)
+	profiles := s.loadMembersForEvents(ctx, events)
 	byRoom := make(map[id.RoomID]*database.Event, len(events))
 	for _, evt := range events {
 		byRoom[evt.RoomID] = evt
@@ -218,8 +219,8 @@ func (s *Dispatcher) loadChatPreviews(ctx context.Context, rooms []*database.Roo
 		}
 		summary.preview = byRoom[room.ID]
 		if summary.preview != nil {
-			for key, name := range names[room.ID] {
-				summary.names[key] = name
+			for key, profile := range profiles[room.ID] {
+				summary.profiles[key] = profile
 			}
 		}
 	}

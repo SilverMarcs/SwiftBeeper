@@ -3,7 +3,7 @@ import SwiftUI
 /// Who has seen a group message: a capsule of their overlapping avatars,
 /// the first few of them, then how many more.
 struct SeenByPillView: View {
-    let readers: [DeliveryReader]
+    let readers: [ChatParticipant]
     let chat: Chat
 
     /// Grows with the caption text it stands in for.
@@ -32,10 +32,9 @@ struct SeenByPillView: View {
         .clipShape(.capsule)
     }
 
-    /// The reader's profile, for their photo, or their receipt's name when
-    /// the chat hasn't loaded them.
-    private func participant(for reader: DeliveryReader) -> ChatParticipant {
-        chat.participant(with: reader.id)
-            ?? ChatParticipant(id: reader.id, username: nil, fullName: reader.name, imgURL: nil, isSelf: false)
+    /// The chat's loaded participant when the sample has them, otherwise
+    /// the profile their receipt carries, as for a message's sender.
+    private func participant(for reader: ChatParticipant) -> ChatParticipant {
+        chat.participant(with: reader.id) ?? reader
     }
 }

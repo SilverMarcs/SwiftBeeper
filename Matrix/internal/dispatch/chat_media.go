@@ -145,9 +145,9 @@ func (s *Dispatcher) loadChatMediaPage(ctx context.Context, roomID id.RoomID, ki
 	if err = s.populateLastEditRefs(ctx, events); err != nil {
 		return wire.ChatMessagePageOutput{}, err
 	}
-	names := s.loadNamesForEvents(ctx, events)[roomID]
+	members := s.loadMembersForEvents(ctx, events)[roomID]
 	for _, evt := range events {
-		message, err := s.mapEventToMessage(evt, names, nil)
+		message, err := s.mapEventToMessage(evt, members, nil)
 		// A Reel shows only its thumbnail until it's resolved, which the
 		// timeline does as it plays.
 		isReel := len(message.Attachments) > 0 && message.Attachments[0].Type == wire.AttachmentTypeReel
