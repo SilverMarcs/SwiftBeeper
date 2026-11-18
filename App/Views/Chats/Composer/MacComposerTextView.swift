@@ -2,9 +2,10 @@
 import SwiftUI
 
 /// The macOS composer's editor: an `NSTextView` that grows with the draft
-/// up to `maximumLines` and scrolls past them, with the draft's mentions in
-/// the accent color. It looks and behaves as the vertical `TextField` it
-/// replaced: Return sends, and Shift- or Option-Return adds a line.
+/// up to `maximumLines` and scrolls past them, with the draft's Markdown
+/// styled as it will be sent and its mentions in the accent color. It looks
+/// and behaves as the vertical `TextField` it replaced: Return sends, and
+/// Shift- or Option-Return adds a line, carrying on a list or quote.
 struct MacComposerTextView: NSViewRepresentable {
     @Binding var text: String
     /// Asks for focus, and follows it.
@@ -23,7 +24,7 @@ struct MacComposerTextView: NSViewRepresentable {
     let onReturn: () -> Void
 
     /// The tallest the editor grows before it scrolls.
-    static let maximumLines = 7
+    static let maximumLines = 10
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -69,9 +70,10 @@ struct MacComposerTextView: NSViewRepresentable {
             coordinator.styledText = editor.string
             coordinator.styledMentions = mentions
             if let storage = editor.textStorage {
-                ComposerMentionStyle.apply(
+                coordinator.spans = ComposerMarkdownStyle.apply(
                     to: storage,
                     mentions: mentions,
+                    selection: editor.selectedRange(),
                     font: MacComposerEditor.font,
                     textColor: .textColor,
                     mentionColor: NSColor(Color.accentColor)
@@ -94,7 +96,12 @@ struct MacComposerTextView: NSViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         guard let width = proposal.width, width.isFinite else { return nil }
-        let height = MacComposerEditor.fittingHeight(of: text, width: width, maximumLines: Self.maximumLines)
+        let height = MacComposerEditor.fittingHeight(
+            of: text,
+            selection: context.coordinator.editor?.selectedRange(),
+            width: width,
+            maximumLines: Self.maximumLines
+        )
         return CGSize(width: width, height: height)
     }
 
@@ -104,6 +111,9 @@ struct MacComposerTextView: NSViewRepresentable {
         /// The text and mentions the editor was last styled for.
         var styledText: String?
         var styledMentions: [NSRange] = []
+        /// The styled text's Markdown, whose markup shows as the selection
+        /// reaches it.
+        var spans: [ComposerMarkdownSpan] = []
 
         init(parent: MacComposerTextView) {
             self.parent = parent
@@ -129,6 +139,13 @@ struct MacComposerTextView: NSViewRepresentable {
                 editor.typingAttributes = ComposerMentionStyle.plainAttributes(font: MacComposerEditor.font, textColor: .textColor)
             }
             let range = editor.selectedRange()
+            // Typing restyles once the draft updates; a caret moving through
+            // styled text shows the markup it reaches.
+            if !editor.hasMarkedText(), styledText == editor.string, let storage = editor.textStorage {
+                ComposerMarkdownStyle.updateHiddenMarkup(in: storage, spans: spans, selection: range)
+                // Quote bars are drawn beside the text, outside what changed.
+                editor.needsDisplay = true
+            }
             let draft = editor.string
             // Wait for the text to land in the draft, then report only a
             // caret that still matches it.
@@ -140,17 +157,34 @@ struct MacComposerTextView: NSViewRepresentable {
             }
         }
 
-        /// Return sends; Shift- or Option-Return starts a new line. A
-        /// composition, such as Japanese input, keeps its own Return.
+        /// Return sends; Shift- or Option-Return starts a new line, which
+        /// carries on a list or quote. Tab and Shift-Tab nest list items. A
+        /// composition, such as Japanese input, keeps its own keys.
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            guard selector == #selector(NSResponder.insertNewline(_:)), !textView.hasMarkedText() else { return false }
-            let modifiers = NSApp.currentEvent?.modifierFlags ?? []
-            if modifiers.contains(.shift) || modifiers.contains(.option) {
-                textView.insertNewlineIgnoringFieldEditor(nil)
-            } else {
-                parent.onReturn()
+            guard let editor, !textView.hasMarkedText() else { return false }
+            switch selector {
+            case #selector(NSResponder.insertNewline(_:)):
+                let modifiers = NSApp.currentEvent?.modifierFlags ?? []
+                if modifiers.contains(.shift) || modifiers.contains(.option) {
+                    if let edit = ComposerMarkdownEdit.newline(in: editor.string, selection: editor.selectedRange()) {
+                        editor.perform(edit)
+                    } else {
+                        textView.insertNewlineIgnoringFieldEditor(nil)
+                    }
+                } else {
+                    parent.onReturn()
+                }
+                return true
+            case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
+                let outward = selector == #selector(NSResponder.insertBacktab(_:))
+                guard let edit = ComposerMarkdownEdit.indent(in: editor.string, selection: editor.selectedRange(), outward: outward) else {
+                    return false
+                }
+                editor.perform(edit)
+                return true
+            default:
+                return false
             }
-            return true
         }
     }
 }

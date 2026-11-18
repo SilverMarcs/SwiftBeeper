@@ -36,6 +36,9 @@ struct RelayApp: App {
             withAppEnvironment(AppStartupView().mainWindowMinimumSize())
         }
         .defaultSize(width: 1100, height: 750)
+        .commands {
+            ComposerFormatCommands()
+        }
 
         Settings {
             withAppEnvironment(SettingsView())

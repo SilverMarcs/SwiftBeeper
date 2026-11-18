@@ -3,8 +3,8 @@ import AppKit
 import SwiftUI
 
 /// The text view behind `MacComposerTextView`: plain text in the body font,
-/// with a placeholder, focus reported as it moves, and Escape left to the
-/// window, as the `TextField` it replaced did.
+/// styled by its Markdown, with a placeholder, focus reported as it moves,
+/// and Escape left to the window, as the `TextField` it replaced did.
 final class MacComposerEditor: NSTextView {
     /// Shown while the draft is empty.
     var placeholder = "" {
@@ -23,7 +23,7 @@ final class MacComposerEditor: NSTextView {
 
     convenience init() {
         let storage = NSTextStorage()
-        let layoutManager = NSLayoutManager()
+        let layoutManager = ComposerLayoutManager()
         storage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true
@@ -85,11 +85,14 @@ final class MacComposerEditor: NSTextView {
         ])
     }
 
-    /// The editor's height at `width` for `text`: its wrapped lines, from one
-    /// up to `maximumLines`, past which it scrolls.
-    static func fittingHeight(of text: String, width: CGFloat, maximumLines: Int) -> CGFloat {
+    /// The editor's height at `width` for `text` with `selection`: its
+    /// wrapped lines, from one up to `maximumLines`, past which it scrolls.
+    static func fittingHeight(of text: String, selection: NSRange?, width: CGFloat, maximumLines: Int) -> CGFloat {
         let storage = NSTextStorage(string: text.isEmpty ? " " : text, attributes: [.font: font])
-        let layoutManager = NSLayoutManager()
+        // Laid out as shown: code's monospaced font sets its own line
+        // height, and hidden markup and quote indents change the wrapping.
+        ComposerMarkdownStyle.apply(to: storage, mentions: [], selection: selection, font: font, textColor: .textColor, mentionColor: .textColor)
+        let layoutManager = ComposerLayoutManager()
         storage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: NSSize(width: max(width, 1), height: CGFloat.greatestFiniteMagnitude))
         container.lineFragmentPadding = lineFragmentPadding

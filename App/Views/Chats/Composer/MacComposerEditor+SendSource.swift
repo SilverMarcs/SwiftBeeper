@@ -25,7 +25,7 @@ extension MacComposerEditor {
     /// it, in the bubble's white.
     private func visibleText(in visible: CGRect, frame: CGRect) -> MessageSendPicture? {
         guard !string.isEmpty, let textStorage, visible.width > 0, visible.height > 0 else { return nil }
-        let text = NSMutableAttributedString(attributedString: textStorage)
+        let text = NSMutableAttributedString(attributedString: textStorage.composerDisplayed)
         text.addAttribute(.foregroundColor, value: NSColor.white, range: NSRange(location: 0, length: text.length))
         let scale = window?.backingScaleFactor ?? 2
         guard let context = CGContext(
