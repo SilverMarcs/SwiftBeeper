@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// The timeline's typing bubble, in place of a chat row's preview, after a
-/// bold label of who is typing in a group chat. It sits over the preview's
-/// reserved lines rather than in them, so the row keeps its height whatever
-/// the bubble's.
+/// A compact typing bubble in place of a chat row's preview, after a bold
+/// label of who is typing in a group chat. It sits on the first of the
+/// preview's reserved lines, like preview text, so the row keeps its height.
 struct ChatRowTypingIndicator: View {
     let typing: ChatTypingState
     let chat: Chat
@@ -13,7 +12,7 @@ struct ChatRowTypingIndicator: View {
         Text(verbatim: " ")
             .hidden()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .leading) {
+            .overlay(alignment: .topLeading) {
                 HStack {
                     if chat.isGroupChat, let typistsLabel = typing.typistsLabel {
                         // Styled like the last message's sender label.
@@ -23,7 +22,7 @@ struct ChatRowTypingIndicator: View {
                             .lineLimit(1, reservesSpace: false)
                     }
 
-                    TypingBubbleView()
+                    ChatRowTypingBubble()
                         // The row dims its preview text; the dots match the timeline's.
                         .foregroundStyle(.primary)
                         // A long label truncates before the bubble shrinks.

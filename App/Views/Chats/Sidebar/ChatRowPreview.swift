@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A chat row's preview: the timeline's typing bubble while anyone is typing,
+/// A chat row's preview: a compact typing bubble while anyone is typing,
 /// otherwise the last message. Both keep the same reserved lines of the row's
 /// font, so swapping them never changes the row's height.
 ///

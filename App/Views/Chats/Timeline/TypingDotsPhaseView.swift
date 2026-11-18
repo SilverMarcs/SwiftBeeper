@@ -2,8 +2,14 @@ import SwiftUI
 
 struct TypingDotsPhaseView: View {
     let highlightedDot: Int?
-    @ScaledMetric(relativeTo: .body) private var diameter = 7.0
-    @ScaledMetric(relativeTo: .body) private var spacing = 4.0
+    @ScaledMetric private var diameter: Double
+    @ScaledMetric private var spacing: Double
+
+    init(highlightedDot: Int?, size: TypingDotsSize) {
+        self.highlightedDot = highlightedDot
+        _diameter = ScaledMetric(wrappedValue: size.diameter, relativeTo: .body)
+        _spacing = ScaledMetric(wrappedValue: size.spacing, relativeTo: .body)
+    }
 
     var body: some View {
         HStack(spacing: spacing) {

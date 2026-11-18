@@ -1,11 +1,8 @@
 import SwiftUI
 
-/// Only these three shapes animate; no timer or animation state reaches the store.
+/// The dots in a timeline typing bubble, sized to one line of message text.
 struct TypingDotsView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .body) private var minimumWidth = 32.0
-    @State private var isVisible = false
 
     var body: some View {
         // Reserve the exact line box used by message text, including its pixel rounding.
@@ -13,18 +10,8 @@ struct TypingDotsView: View {
             .hidden()
             .frame(minWidth: minimumWidth)
             .overlay {
-                if isVisible && scenePhase == .active && !reduceMotion {
-                    PhaseAnimator([0, 1, 2, 3]) { phase in
-                        TypingDotsPhaseView(highlightedDot: phase)
-                    } animation: { _ in
-                        .easeInOut(duration: 0.35)
-                    }
-                } else {
-                    TypingDotsPhaseView(highlightedDot: nil)
-                }
+                TypingDotsAnimationView(size: .regular)
             }
             .accessibilityHidden(true)
-            .onAppear { isVisible = true }
-            .onDisappear { isVisible = false }
     }
 }
