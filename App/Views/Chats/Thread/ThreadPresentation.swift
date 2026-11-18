@@ -48,8 +48,19 @@ private struct ThreadPresentation: ViewModifier {
                 // A hidden inspector's content stays in the hierarchy, and
                 // so would its toolbar.
                 if chatStore.isThreadPresented {
+                    if let root = thread.root, chatStore.isThreadUnread(root) {
+                        #if os(macOS)
+                        // The inspector's toolbar section starts at its leading edge.
+                        ToolbarItem(placement: .primaryAction) {
+                            ThreadMarkAsReadButton(rootID: thread.rootID, chatID: thread.chatID)
+                        }
+                        #else
+                        ToolbarItem(placement: .topBarLeading) {
+                            ThreadMarkAsReadButton(rootID: thread.rootID, chatID: thread.chatID)
+                        }
+                        #endif
+                    }
                     #if os(macOS)
-                    // The inspector's toolbar section starts at its leading edge.
                     ToolbarSpacer(.flexible)
                     #endif
                     ToolbarItem(placement: .primaryAction) {

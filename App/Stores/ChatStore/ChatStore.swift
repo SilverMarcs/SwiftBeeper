@@ -119,8 +119,11 @@ final class ChatStore {
     /// The latest thread opened from the timeline. It outlives its
     /// presentation, so the inspector keeps its content while it hides.
     var activeThread: ThreadStore?
-    /// The open chat's threads with replies you haven't seen, for the toolbar.
+    /// The open chat's threads with replies you haven't read, for the toolbar.
     var unreadThreads: [Message] = []
+    /// Thread roots marked as read whose refreshed summaries haven't arrived
+    /// yet, so their unread dots clear at once.
+    var threadRootIDsMarkedRead: Set<String> = []
     @ObservationIgnored var unreadThreadsTask: Task<Void, Never>?
     var isThreadPresented = false {
         didSet {
@@ -467,7 +470,6 @@ final class ChatStore {
             reconcileOutgoingMessages(with: incoming, chatID: chatID)
             if isThreadPresented, let activeThread, chatID == activeThread.chatID {
                 activeThread.upsert(incoming)
-                if incoming.contains(where: { $0.threadRootID == activeThread.rootID }) { markThreadSeen(activeThread) }
             }
             // Background chats read their timeline from the database on open.
             if chatID == selectedChatID {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The footer under a thread root, like Slack's: who replied and how many
-/// replies. Tapping it opens the thread.
+/// replies. Tapping it opens the thread; its context menu marks it as read.
 struct ThreadSummaryButton: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -11,6 +11,7 @@ struct ThreadSummaryButton: View {
     let chat: Chat
 
     var body: some View {
+        let isUnread = chatStore.isThreadUnread(message)
         Button {
             chatStore.showThread(for: message)
         } label: {
@@ -24,7 +25,7 @@ struct ThreadSummaryButton: View {
                     .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(summary.replyCount)))
                     .foregroundStyle(.secondary)
 
-                if summary.hasUnread == true {
+                if isUnread {
                     // The chat list's unread dot.
                     Image(systemName: "circle.fill")
                         .imageScale(.small)
@@ -46,6 +47,14 @@ struct ThreadSummaryButton: View {
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Open Thread", systemImage: "bubble.left.and.text.bubble.right") {
+                chatStore.showThread(for: message)
+            }
+            if isUnread {
+                ThreadMarkAsReadButton(rootID: message.id, chatID: message.chatID)
+            }
+        }
         // Scoped to the footer, so its capsule resizes with the count while
         // the row around it stays put.
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy, value: summary.replyCount)

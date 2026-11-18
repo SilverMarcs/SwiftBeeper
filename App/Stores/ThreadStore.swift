@@ -81,7 +81,6 @@ final class ThreadStore {
             if let root = output.root { self.root = root }
             upsert(output.items)
             hasLoadedTimeline = true
-            if chatStore?.isThreadPresented == true, chatStore?.activeThread === self { chatStore?.markThreadSeen(self) }
             error = nil
         } catch {
             guard !Task.isCancelled else { return }

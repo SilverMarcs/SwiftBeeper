@@ -70,7 +70,7 @@ extension APIClient {
         return output.items
     }
 
-    /// Records that the thread was opened, clearing its unread dot on every device.
+    /// Marks the thread as read, clearing its unread dot on every device.
     static func markThreadSeen(chatID: String, threadRootID: String) async throws {
         try await executeRaw("mark-thread-seen", arguments: ThreadArguments(chatID: chatID, threadRootID: threadRootID))
     }

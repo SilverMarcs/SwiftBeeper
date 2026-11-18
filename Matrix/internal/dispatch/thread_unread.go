@@ -19,10 +19,10 @@ import (
 
 // A thread is unread while it has a reply that notified you, one in a thread
 // you started or follow or that mentions you, newer than both your read
-// receipt for the chat and when you last opened the thread. When you opened
-// each thread lives in room account data, so every device clears the same
-// threads, and nothing reaches the network bridged behind the chat the way a
-// read receipt would.
+// receipt for the chat and when you last marked the thread as read. When you
+// last read each thread lives in room account data, so every device clears the
+// same threads, and nothing reaches the network bridged behind the chat the
+// way a read receipt would.
 
 var threadSeenType = event.Type{Type: RelayRulePrefix + "thread_seen", Class: event.AccountDataEventType}
 
@@ -35,7 +35,7 @@ const (
 )
 
 type threadSeenContent struct {
-	// When you last opened each thread, by root event ID, in Unix milliseconds.
+	// When you last marked each thread as read, by root event ID, in Unix milliseconds.
 	Roots map[id.EventID]int64 `json:"roots"`
 }
 
@@ -142,7 +142,7 @@ func (s *Dispatcher) listUnreadThreads(ctx context.Context, input json.RawMessag
 	return wire.GetMessagesOutput{Items: messages}, nil
 }
 
-// markThreadSeen records that you opened a thread, clearing its unread dot on
+// markThreadSeen marks a thread as read, clearing its unread dot on
 // every device. It writes only when the thread was unread.
 func (s *Dispatcher) markThreadSeen(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {

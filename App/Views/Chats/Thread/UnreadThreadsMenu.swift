@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A toolbar menu of the open chat's threads with replies you haven't seen.
-/// Choosing one opens it, which clears it from the menu.
+/// Choosing one opens it; it stays listed until it's marked as read.
 struct UnreadThreadsMenu: View {
     @Environment(ChatStore.self) private var chatStore
 
