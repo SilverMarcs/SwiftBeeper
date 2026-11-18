@@ -68,6 +68,20 @@ final class ChatTypingState {
         }
     }
 
+    /// Who is typing, for the sender label a group chat's row shows before
+    /// the typing dots, like its last message's. Nil while no one is.
+    var typistsLabel: String? {
+        guard let first = participants.first else { return nil }
+        switch participants.count {
+        case 1:
+            return Self.shortName(of: first)
+        case 2:
+            return String(localized: "\(Self.shortName(of: first)) & \(Self.shortName(of: participants[1]))")
+        default:
+            return String(localized: "\(participants.count) people")
+        }
+    }
+
     /// A first name, like the preview's sender label. A typist whose member
     /// state isn't stored locally comes through named by their Matrix ID.
     private static func shortName(of participant: ChatParticipant) -> String {

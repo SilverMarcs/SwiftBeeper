@@ -39,8 +39,8 @@ struct ChatRowView: View {
                 }
 
                 HStack {
-                    // Typing swaps text within these reserved lines, so the
-                    // row never changes height for it.
+                    // Typing shows its bubble over these reserved lines, so
+                    // the row never changes height for it.
                     ChatRowPreview(chat: chat)
                         #if os(iOS)
                         .font(.callout)

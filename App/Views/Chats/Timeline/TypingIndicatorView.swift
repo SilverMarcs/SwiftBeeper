@@ -20,8 +20,7 @@ struct TypingIndicatorView: View {
                         .foregroundStyle(IdentityColor(id: participant.id).nameStyle)
                 }
 
-                TypingDotsView()
-                    .messageBubbleChrome(isOutgoing: false)
+                TypingBubbleView()
             }
 
             Spacer(minLength: 50)
