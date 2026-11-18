@@ -4,11 +4,16 @@ import SwiftUI
 /// `MessageTextView`.
 struct MessageBlockView: View {
     let block: MessageBlock
+    @Environment(\.drawsMessageTextLines) private var drawsLines
 
     var body: some View {
         switch block {
         case .text(let attributed):
-            Text(attributed)
+            if drawsLines, attributed.characters.contains("\n") {
+                MessageTextLines(text: attributed)
+            } else {
+                Text(attributed)
+            }
         case .quote(let blocks):
             MessageQuoteBlockView(blocks: blocks)
         case .heading(let level, let attributed):
