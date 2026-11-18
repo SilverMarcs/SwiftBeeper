@@ -6,6 +6,7 @@ import SwiftUI
 struct MessageInputView: View {
     @Environment(InputManager.self) private var input
     @Environment(ChatStore.self) private var chatStore
+    @Environment(DictationSettings.self) private var dictationSettings
 
     let composer: Composer
     let chat: Chat
@@ -70,8 +71,11 @@ struct MessageInputView: View {
                             } action: { frame in
                                 sendOrigin.editorFrame = frame
                             }
-                            .padding(.horizontal, 4)
-                            .padding(8)
+                            .padding(.vertical, 8)
+                            .padding(.leading, 12)
+                            // The dictation button's own margin spaces the
+                            // text from it; without it, the field's edge does.
+                            .padding(.trailing, dictationSettings.isEnabled ? 0 : 12)
                             .composerMentionMenu(composer, isFocused: isMessageFieldFocused, menu: mentionMenu) { _ in
                                 // The mention's insertion already placed the caret.
                                 focusMessageField()
