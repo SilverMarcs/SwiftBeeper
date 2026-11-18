@@ -73,6 +73,9 @@ struct AudioAttachmentView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
+        // White on the outgoing bubble, like its text; the slider follows the tint.
+        .foregroundStyle(message.isSender ? .white : .primary)
+        .tint(message.isSender ? .white : .accentColor)
         .opacity(isLoading ? 0.4 : 1.0)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

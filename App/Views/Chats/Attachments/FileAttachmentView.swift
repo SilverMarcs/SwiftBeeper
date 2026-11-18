@@ -34,6 +34,9 @@ struct FileAttachmentView: View {
                     }
                 }
             }
+            // Plain buttons label in `.primary`, which is dark on the
+            // light-mode outgoing bubble; `.secondary` derives from this.
+            .foregroundStyle(isOutgoing ? .white : .primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .bubbleBackground(isOutgoing: isOutgoing)
