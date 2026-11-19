@@ -20,4 +20,10 @@ extension PendingAttachment {
         if mimeType.hasPrefix("audio/") { return "waveform" }
         return "doc"
     }
+
+    /// The symbol for this attachment's kind in a chat list draft preview,
+    /// matching `Attachment.previewSymbol`.
+    var previewSymbol: String {
+        mimeType.hasPrefix("image/") ? "photo" : symbolName
+    }
 }

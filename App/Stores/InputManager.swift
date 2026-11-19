@@ -71,6 +71,22 @@ final class InputManager {
         composers.values.contains(where: \.isFocused)
     }
 
+    /// The chat composer's unsent draft, for the chat list, or nil when it
+    /// has none or is editing a sent message. Creates the composer, so a draft
+    /// typed after a row first reads this still updates that row.
+    func draftPreview(forChatID chatID: String) -> ChatDraftPreview? {
+        let composer = composer(for: ComposerTarget(chatID: chatID))
+        guard !composer.isEditing else { return nil }
+        let text = composer.text.trimmed
+        let attachments = composer.pendingAttachments
+        // Mixed kinds share a paperclip, as a sent message's preview does.
+        let symbol = attachments.first.map { first in
+            attachments.allSatisfy { $0.previewSymbol == first.previewSymbol } ? first.previewSymbol : "paperclip"
+        }
+        guard !text.isEmpty || symbol != nil else { return nil }
+        return ChatDraftPreview(text: text, symbol: symbol)
+    }
+
     /// Appends a reply that failed to send from a notification to that chat's
     /// draft, so it is ready to resend when the chat opens.
     func restoreNotificationDraft(_ text: String, for chatID: String) {
