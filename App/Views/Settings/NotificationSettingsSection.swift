@@ -6,15 +6,9 @@ struct NotificationSettingsSection: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingError = false
-    #if os(iOS)
-    @AppStorage(MessageSounds.enabledKey) private var messageSoundsEnabled = true
-    #endif
 
     var body: some View {
         Section {
-            #if os(iOS)
-            Toggle("Conversation Sounds", isOn: $messageSoundsEnabled)
-            #endif
             LabeledContent("Notifications") {
                 switch notificationService.authorizationStatus {
                 case .denied:

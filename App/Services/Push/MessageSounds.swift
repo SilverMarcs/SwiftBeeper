@@ -7,8 +7,6 @@ import OSLog
 /// Foreground conversation sounds. Background alerts remain owned by APNs.
 @MainActor
 final class MessageSounds {
-    static let enabledKey = "messageSoundsEnabled"
-
     // Public playback API, private system asset paths. These are the Messages
     // conversation sounds, not the user's incoming notification alert tone.
     private let sentSound = MessageSounds.makeSound(named: "SentMessage")
@@ -69,7 +67,6 @@ final class MessageSounds {
 
     private var canPlay: Bool {
         activeSince != nil
-            && (UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true)
             // Keep conversation sounds out of the dictation recording.
             && AVAudioSession.sharedInstance().category != .record
     }
@@ -88,6 +85,8 @@ final class MessageSounds {
                 .error("System sound \(name, privacy: .public) unavailable: \(status)")
             return nil
         }
+        // System sounds default to IsUISound = 1, honoring silent mode and
+        // the system sound-effects preference.
         return sound
     }
 
