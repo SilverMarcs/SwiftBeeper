@@ -24,9 +24,12 @@ struct ReactionPillsLayout: Layout {
             var x = alignsTrailing ? bounds.maxX - row.width : bounds.minX
             for index in row.indices {
                 let size = subviews[index].sizeThatFits(.unspecified)
+                // Placed at their ideal size, as measured. Proposing that
+                // size back squeezes a pill's "+N" Text to nothing at
+                // fractional widths, leaving its slot empty.
                 subviews[index].place(
                     at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
-                    proposal: ProposedViewSize(size)
+                    proposal: .unspecified
                 )
                 x += size.width + spacing
             }

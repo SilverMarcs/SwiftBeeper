@@ -24,14 +24,14 @@ struct ReactionPillButton: View {
             LongPressGesture().onEnded { _ in
                 didLongPress = true
                 longPressCount += 1
-                showReactionDetails(pill.message, in: chat)
+                showReactionDetails(pill.message, in: chat, reactionKey: pill.group.reactionKey)
             }
         )
         .sensoryFeedback(.impact, trigger: longPressCount)
         .accessibilityAddTraits(pill.isOwn ? .isSelected : [])
         .accessibilityHint(pill.isOwn ? "Removes your reaction" : "Reacts with \(pill.group.reactionKey)")
         .accessibilityAction(named: "Show Reactions") {
-            showReactionDetails(pill.message, in: chat)
+            showReactionDetails(pill.message, in: chat, reactionKey: pill.group.reactionKey)
         }
         .help("Hold to see who reacted")
     }
