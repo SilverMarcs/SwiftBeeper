@@ -6,7 +6,7 @@ struct UnreadThreadsMenu: View {
     @Environment(ChatStore.self) private var chatStore
 
     var body: some View {
-        Menu("Unread Threads", systemImage: "bubble.left.and.text.bubble.right") {
+        Menu("Unread Threads", systemImage: "text.bubble") {
             ForEach(chatStore.unreadThreads) { root in
                 Button {
                     chatStore.showThread(for: root)
