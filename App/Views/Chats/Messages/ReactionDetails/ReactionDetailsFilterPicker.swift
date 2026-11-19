@@ -7,8 +7,9 @@ struct ReactionDetailsFilterPicker: View {
     /// The reaction shown, or nil for all of them.
     @Binding var selection: String?
     /// The room the toolbar leaves beside its close button. A toolbar item
-    /// is offered next to none, so the picker can't size itself to it.
-    let maxWidth: CGFloat
+    /// is offered next to none, so the picker can't size itself to it. Nil
+    /// leaves the picker at its natural width.
+    let maxWidth: CGFloat?
 
     var body: some View {
         // Each reaction with its count while they fit, then without counts,

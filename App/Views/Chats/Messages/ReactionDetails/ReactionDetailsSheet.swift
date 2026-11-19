@@ -31,6 +31,18 @@ struct ReactionDetailsSheet: View {
                 )
             }
             .toolbar {
+                #if os(macOS)
+                // A macOS sheet drops navigation and principal items and
+                // lays the rest out in its bottom bar, which widens the
+                // sheet to fit every segment.
+                ToolbarItem(placement: .primaryAction) {
+                    ReactionDetailsFilterPicker(
+                        groups: details.message.groupedReactions,
+                        selection: $selectedKey,
+                        maxWidth: nil
+                    )
+                }
+                #else
                 ToolbarItem(placement: .navigation) {
                     ReactionDetailsFilterPicker(
                         groups: details.message.groupedReactions,
@@ -41,10 +53,13 @@ struct ReactionDetailsSheet: View {
                 // The picker's own capsule; the item's glass would span its
                 // full frame.
                 .sharedBackgroundVisibility(.hidden)
+                #endif
                 InfoSheetCloseButton { dismiss() }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { sheetWidth = $0 }
             #if !os(macOS)
+            // Not on macOS, where the picker sits in the bottom bar and
+            // sizing it from the sheet would widen the sheet without end.
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { sheetWidth = $0 }
             .navigationBarTitleDisplayMode(.inline)
             #endif
         }
