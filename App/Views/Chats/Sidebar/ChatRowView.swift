@@ -15,7 +15,7 @@ struct ChatRowView: View {
             NetworkBadgedAvatarView(chat: chat, dimension: 48, networkImageURL: networkImageURL)
             #endif
 
-            VStack(alignment: .leading, spacing: Self.titleSpacing) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(chat.displayTitle)
                         .font(.headline)
@@ -93,10 +93,7 @@ struct ChatRowView: View {
 
     #if os(macOS)
     private static let avatarSpacing: CGFloat = 8
-    /// Name and preview sit line to line, as in Messages.
-    private static let titleSpacing: CGFloat = 0
     #else
     private static let avatarSpacing: CGFloat = 12
-    private static let titleSpacing: CGFloat = 3
     #endif
 }
