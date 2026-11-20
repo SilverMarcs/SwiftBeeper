@@ -73,7 +73,7 @@ struct ChatRowView: View {
         }
         #if os(macOS)
         .padding(.horizontal, 5)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         #else
         .padding(-1)
         #endif
