@@ -8,17 +8,18 @@ struct ChatRowView: View {
     let networkImageURL: String?
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.avatarSpacing) {
             #if os(macOS)
             NetworkBadgedAvatarView(chat: chat, dimension: 43, networkImageURL: networkImageURL)
             #else
             NetworkBadgedAvatarView(chat: chat, dimension: 48, networkImageURL: networkImageURL)
             #endif
 
-            VStack(alignment: .leading, spacing: 4) {
+            // Name and preview sit line to line, as in Messages.
+            VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text(chat.displayTitle)
-                        .font(.body)
+                        .font(.headline)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
@@ -33,7 +34,11 @@ struct ChatRowView: View {
 
                     if let timeText = chat.lastActivityText {
                         Text(timeText)
+                            #if os(macOS)
+                            .font(.callout)
+                            #else
                             .font(.subheadline)
+                            #endif
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -43,7 +48,7 @@ struct ChatRowView: View {
                     // the row never changes height for it.
                     ChatRowPreview(chat: chat)
                         #if os(iOS)
-                        .font(.callout)
+                        .font(.subheadline)
                         #else
                         .font(.body)
                         #endif
@@ -68,7 +73,8 @@ struct ChatRowView: View {
             }
         }
         #if os(macOS)
-        .padding(5)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 12)
         #else
         .padding(-1)
         #endif
@@ -85,4 +91,10 @@ struct ChatRowView: View {
         }
         .menuOrder(.fixed)
     }
+
+    #if os(macOS)
+    private static let avatarSpacing: CGFloat = 8
+    #else
+    private static let avatarSpacing: CGFloat = 12
+    #endif
 }
