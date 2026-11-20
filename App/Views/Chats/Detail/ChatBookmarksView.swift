@@ -30,6 +30,7 @@ struct ChatBookmarksView: View {
                 }
             }
         }
+        .contentMargins(.top, 10, for: .scrollContent)
         .animation(.default, value: shown.map(\.id))
         .navigationTitle("Bookmarks")
         #if os(iOS)
