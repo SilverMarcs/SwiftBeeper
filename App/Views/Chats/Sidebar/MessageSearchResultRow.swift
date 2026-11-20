@@ -1,59 +1,36 @@
 import SwiftUI
 
-/// A message matching the chat list's search: its chat's avatar and name,
-/// when it was sent, and its text around the match, after the sender's name
-/// in groups.
+/// A message matching the chat list's search, laid out like a chat row: its
+/// chat's avatar and name, when it was sent, and its text around the match
+/// with the match highlighted, after a bold sender label as in chat previews.
 struct MessageSearchResultRow: View {
     let message: Message
     let chat: Chat?
+    /// The logo badging the avatar; nil shows the plain avatar.
+    let networkImageURL: String?
     let query: String
 
     var body: some View {
-        HStack(spacing: 8) {
-            if let chat {
-                #if os(macOS)
-                ChatAvatarView(chat: chat, dimension: 43)
-                #else
-                ChatAvatarView(chat: chat, dimension: 48)
-                #endif
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(chat?.displayTitle ?? message.senderDisplayName)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Text(message.timestamp.chatListText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text(senderPrefix + MessageSearchSnippet.text(resultText, query: query))
-                    #if os(iOS)
-                    .font(.callout)
-                    #endif
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2, reservesSpace: true)
-            }
-        }
-        #if os(macOS)
-        .padding(5)
-        #else
-        .padding(-1)
-        #endif
+        ChatRowLayout(
+            chat: chat,
+            networkImageURL: networkImageURL,
+            title: chat?.displayTitle ?? message.senderDisplayName,
+            timeText: message.timestamp.chatListText
+        ) {
+            let sender = Text(senderPrefix).bold()
+            let snippet = Text(MessageSearchSnippet.text(resultText, query: query))
+            Text("\(sender)\(snippet)")
+        } badges: {}
         .contentShape(.rect)
     }
 
     /// "You: " for your messages, and the sender's first name in groups.
     /// A sender known only by Matrix ID, such as one who left, gets none.
-    private var senderPrefix: AttributedString {
-        if message.isSender { return AttributedString(String(localized: "You: ")) }
+    private var senderPrefix: String {
+        if message.isSender { return String(localized: "You: ") }
         guard chat?.isGroupChat == true, !message.senderDisplayName.hasPrefix("@"),
               let firstName = message.senderDisplayName.split(whereSeparator: \.isWhitespace).first else { return "" }
-        return AttributedString("\(firstName): ")
+        return "\(firstName): "
     }
 
     /// The text that matched: the message's, or its file's name.
