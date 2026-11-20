@@ -21,7 +21,9 @@ final class Composer {
             dismissedMentionQuery = nil
         }
     }
-    var pendingAttachments: [PendingAttachment] = []
+    var pendingAttachments: [PendingAttachment] = [] {
+        didSet { PendingAttachmentImageSource.update(from: oldValue, to: pendingAttachments) }
+    }
     private(set) var replyingTo: Message?
     private(set) var editing: Message?
     var isSavingEdit = false
