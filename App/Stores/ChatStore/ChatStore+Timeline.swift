@@ -198,6 +198,7 @@ extension ChatStore {
         newerMessagesCursor = nil
         closeThread()
         refreshUnreadThreads()
+        refreshBookmarks()
         messagesError = nil
     }
 

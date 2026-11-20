@@ -174,21 +174,26 @@ func isHungryservRoom(roomID id.RoomID) bool {
 
 // loadThreadHistoryFromTimeline is the thread fetch for rooms without
 // /relations. The local timeline is contiguous back to its oldest row, so once
-// it reaches the root every later reply is local. Until then it pages the room
-// back toward the root, a bounded number of pages.
+// it reaches the root every later reply is local.
 func (s *Dispatcher) loadThreadHistoryFromTimeline(ctx context.Context, roomID id.RoomID, root *database.Event) error {
+	return s.pageTimelineUntil(ctx, roomID, root.ID, threadHistoryPages)
+}
+
+// pageTimelineUntil pages the room back from the server until its local
+// timeline holds eventID, at most pages times. Another pagination of the
+// same timeline already running ends it; what's local stands.
+func (s *Dispatcher) pageTimelineUntil(ctx context.Context, roomID id.RoomID, eventID id.EventID, pages int) error {
 	cli := s.rt.Client()
-	for range threadHistoryPages {
+	for range pages {
 		var inTimeline bool
-		err := cli.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM timeline WHERE room_id=? AND event_rowid=?)`, roomID, root.RowID).Scan(&inTimeline)
+		err := cli.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM timeline JOIN event ON event.rowid=timeline.event_rowid
+			WHERE timeline.room_id=? AND event.event_id=?)`, roomID, eventID).Scan(&inTimeline)
 		if err != nil || inTimeline {
 			return err
 		}
 		resp, err := cli.PaginateServer(ctx, roomID, threadHistoryPageSize, false)
 		switch {
 		case errors.Is(err, hicli.ErrPaginationAlreadyInProgress):
-			// The chat's own pagination is paging the same timeline; the
-			// replies the thread has locally stand.
 			return nil
 		case err != nil:
 			return err

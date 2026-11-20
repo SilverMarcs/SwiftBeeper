@@ -44,8 +44,9 @@ type chatSummary struct {
 
 // loadRoomPage returns the next rooms in sidebar order after position.
 func (s *Dispatcher) loadRoomPage(ctx context.Context, position *roomPosition) ([]*database.Room, error) {
-	query := roomSelectBaseQuery + `WHERE sorting_timestamp>0 AND room_type<>'m.space'`
-	var args []any
+	// The Bookmarks room stores Beeper's bookmarks, not a conversation.
+	query := roomSelectBaseQuery + `WHERE sorting_timestamp>0 AND room_type<>'m.space' AND room_id<>?`
+	args := []any{bookmarksRoomID}
 	if position != nil {
 		query += ` AND (sorting_timestamp<? OR (sorting_timestamp=? AND room_id>?))`
 		args = append(args, position.ts, position.ts, position.roomID)

@@ -28,6 +28,7 @@ type Dispatcher struct {
 	threads       threadFollows
 	searchIndex   messageSearchIndex
 	linkPreviews  linkPreviewCache
+	bookmarks     bookmarkState
 }
 
 func New(rt *gomuksruntime.Runtime) *Dispatcher {
@@ -135,6 +136,10 @@ func (s *Dispatcher) Execute(ctx context.Context, action string, input json.RawM
 		return s.removeReaction(ctx, input)
 	case "delete-message":
 		return s.deleteMessage(ctx, input)
+	case "set-message-bookmark":
+		return s.setMessageBookmark(ctx, input)
+	case "list-message-bookmarks":
+		return s.listMessageBookmarks(ctx, input)
 	default:
 		return nil, fmt.Errorf("unknown Matrix command: %s", action)
 	}

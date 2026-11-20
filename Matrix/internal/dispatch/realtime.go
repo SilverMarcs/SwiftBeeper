@@ -28,6 +28,8 @@ const (
 	realtimeSignalResyncRequired         = "resync.required"
 	realtimeSignalPushPreferencesChanged = "push.preferences.changed"
 	realtimeSignalSyncStatus             = "sync.status"
+	// Beeper's Bookmarks changed, here or in another Beeper app.
+	realtimeSignalBookmarks = "bookmarks.changed"
 )
 
 // realtimeChange is one change sent to the app. Seq increases by one per

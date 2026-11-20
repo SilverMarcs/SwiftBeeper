@@ -48,6 +48,13 @@ struct MessageContextMenu: View {
             if message.hasText || message.isDeletedMessage {
                 Button("Copy Message", systemImage: "doc.on.doc", action: copyMessageText)
             }
+
+            if chatStore.messageBookmarks.isAvailable, !message.isDeletedMessage {
+                let isBookmarked = chatStore.isBookmarked(message)
+                Button(isBookmarked ? "Remove Bookmark" : "Bookmark", systemImage: isBookmarked ? "bookmark.slash" : "bookmark") {
+                    Task { await chatStore.setBookmarked(message, !isBookmarked) }
+                }
+            }
         } header: {
             #if !os(macOS)
             Text(message.timestampText)

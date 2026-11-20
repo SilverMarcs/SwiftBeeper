@@ -35,7 +35,7 @@ struct ChatInfoView: View {
                     .listRowInsets(.init())
                 }
 
-                ChatInfoMediaSection(info: model.info)
+                ChatInfoMediaSection(chatID: chat.id, info: model.info)
 
                 if chat.isGroupChat, let participants = detailedParticipants ?? chat.participants {
                     ChatInfoMembersSection(chat: chat, participants: participants, previewLimit: Self.participantPreviewLimit)
@@ -58,6 +58,8 @@ struct ChatInfoView: View {
                     ParticipantInfoView(participant: participant, sourceChat: chat, onOpenChat: openChat)
                 case .media(let kind):
                     ChatMediaBrowserView(chatID: chat.id, kind: kind)
+                case .bookmarks:
+                    ChatBookmarksView(chat: chat, onOpen: openBookmark)
                 }
             }
             .toolbar {
@@ -82,5 +84,11 @@ struct ChatInfoView: View {
     private func openChat(_ chat: Chat) {
         onOpenChat(chat)
         dismiss()
+    }
+
+    /// Closes chat info to show a bookmarked message in the timeline below.
+    private func openBookmark(_ message: Message) {
+        dismiss()
+        Task { await chatStore.revealMessage(message) }
     }
 }

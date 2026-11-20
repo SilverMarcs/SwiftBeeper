@@ -4,4 +4,5 @@ import Foundation
 enum ChatInfoDestination: Hashable {
     case participant(ChatParticipant)
     case media(ChatMediaKind)
+    case bookmarks
 }

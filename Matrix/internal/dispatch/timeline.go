@@ -219,9 +219,19 @@ func (s *Dispatcher) loadNewerTimelineEvents(ctx context.Context, roomID id.Room
 // a page newer than it, then it and the older events. The caller's page limit
 // trims the older side.
 func (s *Dispatcher) loadTimelineAround(ctx context.Context, roomID id.RoomID, eventID id.EventID) (events []*database.Event, hasMore, hasMoreNewer bool, err error) {
-	var anchor int64
-	err = s.rt.Client().DB.QueryRow(ctx, `SELECT timeline.rowid FROM timeline JOIN event ON event.rowid=timeline.event_rowid
-		WHERE timeline.room_id=? AND event.event_id=?`, roomID, eventID).Scan(&anchor)
+	findAnchor := func() (anchor int64, err error) {
+		err = s.rt.Client().DB.QueryRow(ctx, `SELECT timeline.rowid FROM timeline JOIN event ON event.rowid=timeline.event_rowid
+			WHERE timeline.room_id=? AND event.event_id=?`, roomID, eventID).Scan(&anchor)
+		return
+	}
+	anchor, err := findAnchor()
+	// A bookmark can be older than the stored timeline; page back for it.
+	if errors.Is(err, sql.ErrNoRows) {
+		if err = s.pageTimelineUntil(ctx, roomID, eventID, bookmarkHistoryPages); err != nil {
+			return nil, false, false, fmt.Errorf("failed to load the message's history: %w", err)
+		}
+		anchor, err = findAnchor()
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, false, errors.New("Message not found")
 	} else if err != nil {

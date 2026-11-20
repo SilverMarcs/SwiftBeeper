@@ -240,6 +240,15 @@ type ReadReceipt struct {
 	SortKey string `json:"sortKey"`
 }
 
+// ListMessageBookmarksOutput is a chat's bookmarked messages, most recently
+// bookmarked first. Available is false for accounts without Beeper's
+// Bookmarks room. Items holds the messages that could be read, when asked for.
+type ListMessageBookmarksOutput struct {
+	Available  bool      `json:"available"`
+	MessageIDs []string  `json:"messageIDs"`
+	Items      []Message `json:"items,omitempty"`
+}
+
 type ListMessagesOutput struct {
 	Items        []Message `json:"items"`
 	HasMore      bool      `json:"hasMore"`

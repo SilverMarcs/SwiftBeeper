@@ -93,6 +93,15 @@ struct GetMessagesOutput: Decodable {
     let items: [Message]
 }
 
+/// A chat's bookmarked messages, most recently bookmarked first. `available`
+/// is false for accounts without Beeper's Bookmarks. `items` holds the
+/// messages when asked for, without any that couldn't be read.
+struct ListMessageBookmarksOutput: Decodable {
+    let available: Bool
+    let messageIDs: [String]
+    let items: [Message]?
+}
+
 /// A thread from the local database: its root and replies, oldest first.
 struct ListThreadOutput: Decodable {
     let root: Message?

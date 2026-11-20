@@ -18,6 +18,8 @@ enum RealtimeEvent {
     case messagesUpserted(chatID: String, messages: [Message], newMessageIDs: Set<String>)
     case receiptUpdated(chatID: String, receipts: [ReadReceipt])
     case typingUpdated(chatID: String, participants: [ChatParticipant])
+    /// Beeper's Bookmarks changed, from this device or another Beeper app.
+    case bookmarksChanged
     case failed(String)
 }
 

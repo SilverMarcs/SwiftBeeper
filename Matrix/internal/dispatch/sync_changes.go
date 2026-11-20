@@ -50,7 +50,12 @@ func (h *eventHub) processSyncComplete(syncComplete *jsoncmd.SyncComplete) {
 	if cli == nil || cli.Account == nil || !h.isWatching("", false) {
 		return
 	}
+	if room := syncComplete.Rooms[bookmarksRoomID]; room != nil && (len(room.Events) > 0 || len(room.Timeline) > 0) {
+		h.signal(realtimeSignalBookmarks)
+	}
 	changes := syncChanges(syncComplete, cli.Account.UserID, metaChanged)
+	// Its events change other chats' bookmarks; the room itself isn't listed.
+	changes = slices.DeleteFunc(changes, func(change syncChange) bool { return change.ChatID == string(bookmarksRoomID) })
 	upserted := make(map[id.RoomID]bool)
 	for _, change := range changes {
 		if change.Type == realtimeTypeChatUpserted {

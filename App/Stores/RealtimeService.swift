@@ -90,6 +90,8 @@ final class RealtimeService {
             onEvent(.notificationPreferencesChanged)
         case "push.preferences.changed":
             onEvent(.notificationPreferencesChanged)
+        case "bookmarks.changed":
+            onEvent(.bookmarksChanged)
         case "sync.status":
             if let status = envelope.status.flatMap(MatrixSyncStatus.init(rawValue:)) {
                 onEvent(.syncStatusChanged(status))

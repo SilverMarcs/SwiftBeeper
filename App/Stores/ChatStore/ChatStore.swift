@@ -124,6 +124,9 @@ final class ChatStore {
     /// Thread roots marked as read whose refreshed summaries haven't arrived
     /// yet, so their unread dots clear at once.
     var threadRootIDsMarkedRead: Set<String> = []
+    /// The open chat's bookmarked messages, which rows observe on their own.
+    let messageBookmarks = MessageBookmarks()
+    @ObservationIgnored var bookmarksTask: Task<Void, Never>?
     @ObservationIgnored var unreadThreadsTask: Task<Void, Never>?
     var isThreadPresented = false {
         didSet {
@@ -484,6 +487,8 @@ final class ChatStore {
         case .typingUpdated(let chatID, let participants):
             if chatID == selectedChatID { updateTyping(participants) }
             updateListTyping(chatID: chatID, participants: participants)
+        case .bookmarksChanged:
+            refreshBookmarks(coalescing: true)
         case .failed(let message):
             clearAllTyping()
             messagesError = message
@@ -499,6 +504,7 @@ final class ChatStore {
             guard let self, !Task.isCancelled else { return }
             await loadChats()
             await loadMessages()
+            refreshBookmarks()
             if isThreadPresented { activeThread?.load(fetchingHistory: false) }
         }
     }

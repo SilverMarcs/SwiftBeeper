@@ -100,6 +100,7 @@ struct MessageRowView: View {
                 // The bubbles' outer corners, where they meet the rows beside.
                 .environment(\.messageBubbleJoins, entry.bubbleJoins)
                 .alignmentGuide(.messageBubbleTop) { $0[.top] }
+                .modifier(MessageBookmarkTint(messageIDs: entry.messages.map(\.id), chatID: chat.id))
 
                 // Outside the bubbles' context menu, so holding a pill opens
                 // the sheet of who reacted instead. The pills reach up over
