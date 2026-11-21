@@ -49,6 +49,8 @@ struct ReactionContextMenuBridge: UIViewRepresentable {
         private var host: UIHostingController<ReactionAccessoryBar>?
         private var installationTask: Task<Void, Never>?
 
+        var isOutgoing: Bool { source?.message.isSender ?? false }
+
         func update(_ source: ReactionContextMenuBridge) {
             // The accessory snapshots the latest source for each presentation.
             self.source = source

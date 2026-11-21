@@ -155,6 +155,18 @@ final class ReactionContextMenuDelegate: NSObject, UIContextMenuInteractionDeleg
         return order.reversed()
     }
 
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configuration: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier identifier: any NSCopying) -> UITargetedPreview? {
+        let preview = originalDelegate?.contextMenuInteraction?(interaction, configuration: configuration, highlightPreviewForItemWithIdentifier: identifier)
+        if let preview, let window = interaction.view?.window {
+            // A press can end before the menu opens, so look up the message
+            // without holding on to it as the selection.
+            let pressed = selected ?? target(at: interaction.location(in: interaction.view), in: interaction.view)?.coordinator
+            let isOutgoing = pressed?.isOutgoing ?? false
+            ContextMenuPreviewFitting.fitIfNeeded(preview, for: configuration, in: window, isOutgoing: isOutgoing)
+        }
+        return preview
+    }
+
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willEndFor configuration: UIContextMenuConfiguration, animator: (any UIContextMenuInteractionAnimating)?) {
         originalDelegate?.contextMenuInteraction?(interaction, willEndFor: configuration, animator: animator)
         let action = pendingAction
