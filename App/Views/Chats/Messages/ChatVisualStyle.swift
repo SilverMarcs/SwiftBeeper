@@ -41,16 +41,6 @@ enum ChatVisualStyle {
             ? RectangleCornerRadii(topLeading: full, bottomLeading: full, bottomTrailing: bottom, topTrailing: top)
             : RectangleCornerRadii(topLeading: top, bottomLeading: bottom, bottomTrailing: full, topTrailing: full))
     }
-
-    /// A quote is a faded copy of the bubble it quotes: the user's own message
-    /// takes a wash of the accent color its bubble is filled with, wherever
-    /// the reply sits.
-    static func replyPreviewFill(quotesOwnMessage: Bool) -> AnyShapeStyle {
-        if quotesOwnMessage {
-            return AnyShapeStyle(Color.accentColor.quaternary)
-        }
-        return AnyShapeStyle(.quinary)
-    }
 }
 
 // MARK: - Adaptive background modifiers

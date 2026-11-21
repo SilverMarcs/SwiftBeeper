@@ -1,19 +1,15 @@
 import SwiftUI
 
-/// The quoted message above a reply, drawn as a faded copy of the bubble it
-/// quotes: a wash of the accent colour for the user's own message, the
-/// incoming bubble's grey for anyone else's. In a group, the sender's name
-/// heads it, in their colour; a direct chat has only two people, so the fill
-/// alone says who wrote it. Tapping it shows that message above `reply`, or
-/// runs `action` when one is given.
+/// The quoted message above a reply, on the same grey fill in every chat,
+/// headed by who wrote it: "You" for the user's own message, otherwise the
+/// sender's name in their colour. Tapping it shows that message above
+/// `reply`, or runs `action` when one is given.
 struct ReplyPreviewView: View {
     @Environment(\.showQuotedMessage) private var showQuotedMessage
 
     let linkedMessage: Message?
     /// The message that quotes it; nil for an optimistic row.
     var reply: Message?
-    /// False in a direct chat, where the fill already tells the two apart.
-    var showsSenderName = true
     var action: (() -> Void)?
 
     var body: some View {
@@ -25,12 +21,10 @@ struct ReplyPreviewView: View {
             }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                if showsSenderName {
-                    Text(linkedMessage?.senderDisplayName ?? "Unknown")
-                        .font(.caption)
-                        .bold()
-                        .foregroundStyle(senderColor.map { AnyShapeStyle($0.nameStyle) } ?? AnyShapeStyle(.secondary))
-                }
+                Text(senderName)
+                    .font(.caption)
+                    .bold()
+                    .foregroundStyle(senderColor.map { AnyShapeStyle($0.nameStyle) } ?? AnyShapeStyle(.secondary))
 
                 Text(linkedMessage?.displayText ?? "Original message")
                     .font(.caption)
@@ -40,17 +34,17 @@ struct ReplyPreviewView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(ChatVisualStyle.replyPreviewFill(quotesOwnMessage: quotesOwnMessage))
+            .background(.quinary)
             .clipShape(.rect(cornerRadius: 8))
             .contentShape(.rect(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        // The name stays in the spoken label even where it isn't shown.
         .accessibilityLabel(accessibilityLabel)
     }
 
-    private var quotesOwnMessage: Bool {
-        linkedMessage?.isSender == true
+    private var senderName: String {
+        if linkedMessage?.isSender == true { return "You" }
+        return linkedMessage?.senderDisplayName ?? "Unknown"
     }
 
     /// Someone else's colour; nil for the user's own message or a missing one.
@@ -60,7 +54,6 @@ struct ReplyPreviewView: View {
     }
 
     private var accessibilityLabel: String {
-        let sender = quotesOwnMessage ? "you" : linkedMessage?.senderDisplayName ?? "unknown sender"
-        return "Reply to \(sender): \(linkedMessage?.displayText ?? "Original message")"
+        return "Reply to \(senderName): \(linkedMessage?.displayText ?? "Original message")"
     }
 }

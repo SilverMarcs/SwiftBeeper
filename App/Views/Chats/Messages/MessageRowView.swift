@@ -75,14 +75,14 @@ struct MessageRowView: View {
 
                 if isThreadBroadcast {
                     // The thread's first message, quoted like a reply.
-                    ReplyPreviewView(linkedMessage: entry.threadRoot, showsSenderName: !chat.isSingleChat) {
+                    ReplyPreviewView(linkedMessage: entry.threadRoot) {
                         chatStore.showThread(for: message)
                     }
                     .accessibilityHint("Opens the thread")
                     .modifier(TypingBubbleContentReveal())
                     .quotedFocusHandoff(quotedFocusRole.replyPreview)
                 } else if message.linkedMessageID?.isEmpty == false {
-                    ReplyPreviewView(linkedMessage: entry.linkedMessage, reply: message, showsSenderName: !chat.isSingleChat)
+                    ReplyPreviewView(linkedMessage: entry.linkedMessage, reply: message)
                         .modifier(TypingBubbleContentReveal())
                         .quotedFocusHandoff(quotedFocusRole.replyPreview)
                 }

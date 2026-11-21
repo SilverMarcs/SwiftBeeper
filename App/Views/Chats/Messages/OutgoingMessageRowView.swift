@@ -20,12 +20,12 @@ struct OutgoingMessageRowView: View {
                         .font(.subheadline)
                         .lineLimit(1)
                     let root = entry.threadRoot ?? chatStore.activeThread.flatMap { $0.rootID == rootID ? $0.root : nil }
-                    ReplyPreviewView(linkedMessage: root, showsSenderName: showsQuotedSenderName) {
+                    ReplyPreviewView(linkedMessage: root) {
                         if let root { chatStore.showThread(for: root) }
                     }
                     .accessibilityHint("Opens the thread")
                 } else if message.replyToMessageID?.isEmpty == false {
-                    ReplyPreviewView(linkedMessage: entry.linkedMessage, showsSenderName: showsQuotedSenderName)
+                    ReplyPreviewView(linkedMessage: entry.linkedMessage)
                 }
 
                 // The gallery or each attachment, then the text, as bubbles
@@ -56,10 +56,5 @@ struct OutgoingMessageRowView: View {
             }
         }
         .accessibilityElement(children: .contain)
-    }
-
-    /// Matches the confirmed row: a direct chat's quotes go without names.
-    private var showsQuotedSenderName: Bool {
-        chatStore.selectedChat?.isSingleChat != true
     }
 }
