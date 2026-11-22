@@ -9,7 +9,8 @@ import SwiftUI
 /// glass with the editor and, in a slot at its trailing end, dictation or
 /// Send. While the editor has focus the bar reaches nearer the edges, as a
 /// focused search field does, and the field grows upwards with the draft;
-/// the buttons stay on its bottom line.
+/// the buttons stay on its bottom line. Once the field is tall enough,
+/// dictation moves into the empty slot column above Send, so both show.
 struct ComposerBarLayout: Layout {
     var isFocused: Bool
     /// The editor's height, at least `rowHeight`.
@@ -27,6 +28,18 @@ struct ComposerBarLayout: Layout {
     static let trailingSlotWidth: CGFloat = 44
     /// Between the field's end and the trailing slot.
     private static let trailingSlotInset: CGFloat = 4
+    /// How far above Send's centre dictation sits once stacked.
+    private static let stackedDictationOffset: CGFloat = 44
+    /// The lowest dictation's centre may sit in the field once stacked, so
+    /// the waveform stays clear of the field's rounded top corner.
+    private static let stackedDictationTopInset: CGFloat = 22
+
+    /// Whether a field `editorHeight` tall has room for dictation above Send
+    /// rather than sharing its slot. Two lines of body text leave only a few
+    /// points between the waveform and Send, so this starts at three.
+    static func stacksDictation(editorHeight: CGFloat) -> Bool {
+        editorHeight >= rowHeight + 36
+    }
 
     /// The editor's width in a bar `width` wide.
     static func editorWidth(in width: CGFloat, isFocused: Bool) -> CGFloat {
@@ -63,10 +76,15 @@ struct ComposerBarLayout: Layout {
 
         let slot = CGRect(x: trailing - Self.trailingSlotInset - Self.trailingSlotWidth, y: rowY,
                           width: Self.trailingSlotWidth, height: row)
+        let stacks = Self.stacksDictation(editorHeight: bounds.height)
         for part in [ComposerBarPart.dictation, .send] {
             guard let subview = subviews.first(where: { $0.composerBarPart == part }) else { continue }
             let size = subview.sizeThatFits(.unspecified)
-            frames[part] = CGRect(x: slot.midX - size.width / 2, y: slot.midY - size.height / 2,
+            var midY = slot.midY
+            if stacks && part == .dictation {
+                midY = max(slot.midY - Self.stackedDictationOffset, bounds.minY + Self.stackedDictationTopInset)
+            }
+            frames[part] = CGRect(x: slot.midX - size.width / 2, y: midY - size.height / 2,
                                   width: size.width, height: size.height)
         }
         frames[.editor] = CGRect(x: leading, y: bounds.minY, width: max(slot.minX - leading, 0), height: bounds.height)

@@ -9,7 +9,8 @@ import SwiftUI
 /// one row, reaching nearer the edges as a focused search field does, and the
 /// field grows upwards with the draft, a line at a time, while the buttons
 /// stay on its bottom line. Once there's something to send, Send takes
-/// dictation's place at the field's end.
+/// dictation's place at the field's end; a draft tall enough moves
+/// dictation above Send instead, so both show.
 struct ComposerBar: View {
     @Environment(InputManager.self) private var input
     @Environment(ChatStore.self) private var chatStore
@@ -47,8 +48,15 @@ struct ComposerBar: View {
     /// an edit saves. A recording keeps dictation there until it has become
     /// text, so it can be finished.
     private var showsSend: Bool {
-        composer.isSavingEdit || (composer.hasContent && !input.isDictating(in: composer))
+        stacksDictation || composer.isSavingEdit || (composer.hasContent && !input.isDictating(in: composer))
     }
+
+    /// A tall draft has room for dictation above Send, so both show.
+    private var stacksDictation: Bool {
+        dictationSettings.isEnabled && ComposerBarLayout.stacksDictation(editorHeight: editorHeight)
+    }
+
+    private var showsDictation: Bool { stacksDictation || !showsSend }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,10 +112,10 @@ struct ComposerBar: View {
                     if dictationSettings.isEnabled {
                         ComposerDictationButton(composer: composer, isInline: true, symbolScale: .large)
                             .buttonStyle(.plain)
-                            .opacity(showsSend ? 0 : 1)
-                            .scaleEffect(showsSend ? 0.5 : 1)
-                            .allowsHitTesting(!showsSend)
-                            .accessibilityHidden(showsSend)
+                            .opacity(showsDictation ? 1 : 0)
+                            .scaleEffect(showsDictation ? 1 : 0.5)
+                            .allowsHitTesting(showsDictation)
+                            .accessibilityHidden(!showsDictation)
                             .composerBarPart(.dictation)
                     }
 
@@ -138,6 +146,7 @@ struct ComposerBar: View {
         // smoothly, and the timeline follows it.
         .animation(.smooth(duration: 0.25), value: editorHeight)
         .animation(.smooth(duration: 0.2), value: showsSend)
+        .animation(.smooth(duration: 0.2), value: showsDictation)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         // Another conversation's composer can take over the bar, as when iPad
         // switches chats with the keyboard up.
