@@ -26,6 +26,8 @@ final class TimelineKeyboardFollower {
     private struct Follow {
         /// When the latest move began; another can begin before one ends.
         var startTime: CFTimeInterval
+        /// Where the timeline was drawn when the follow began.
+        var startOffset: CGFloat
         /// The timeline's safe area in the last pass, and when it last changed.
         var safeAreaBottom: CGFloat
         var safeAreaChangedAt: CFTimeInterval
@@ -119,6 +121,9 @@ final class TimelineKeyboardFollower {
         }
         guard followsLatest(), currentComposer() != nil,
               !scrollView.isDragging, !scrollView.isDecelerating else { return }
+        // A timeline shorter than the view rests at its top, and the
+        // composer moves over the space below it.
+        guard !fitsInView(scrollView) else { return }
         let distance = endOffset(of: scrollView) - scrollView.contentOffset.y
         guard isShowing ? distance < scrollView.bounds.height : abs(distance) < 8 else { return }
         startFollow(in: scrollView)
@@ -156,7 +161,12 @@ final class TimelineKeyboardFollower {
 
     private func startFollow(in scrollView: UIScrollView) {
         let now = CACurrentMediaTime()
-        follow = Follow(startTime: now, safeAreaBottom: scrollView.safeAreaInsets.bottom, safeAreaChangedAt: now)
+        follow = Follow(
+            startTime: now,
+            startOffset: scrollView.layer.presentation()?.bounds.origin.y ?? scrollView.contentOffset.y,
+            safeAreaBottom: scrollView.safeAreaInsets.bottom,
+            safeAreaChangedAt: now
+        )
         startObserving()
         // SwiftUI may set the offset again during the commit, as layout runs.
         offsetObservation = scrollView.observe(\.contentOffset) { [weak self] scrollView, _ in
@@ -221,7 +231,7 @@ final class TimelineKeyboardFollower {
             var springDisplacement: CGFloat = 0
             if let spring = keyboardSpring(above: composer) {
                 if follow.mirrored != spring.id {
-                    mirror(spring, in: scrollView)
+                    mirror(spring, in: scrollView, startOffset: follow.startOffset)
                     follow.mirrored = spring.id
                 }
                 springDisplacement = spring.displacement
@@ -260,10 +270,17 @@ final class TimelineKeyboardFollower {
 
     /// Copies the composer's keyboard spring onto the timeline, inverted: the
     /// composer drawn lower than its model means the timeline's end is too.
-    private func mirror(_ spring: KeyboardSpring, in scrollView: UIScrollView) {
+    private func mirror(_ spring: KeyboardSpring, in scrollView: UIScrollView, startOffset: CGFloat) {
         guard let copy = spring.animation.copy() as? CABasicAnimation else { return }
         copy.isAdditive = true
-        copy.fromValue = NSValue(cgPoint: CGPoint(x: 0, y: -spring.from))
+        // A timeline whose top rests in view on one side of the move goes
+        // less far than the composer does: it starts from where it was drawn
+        // rather than as far back as the composer, which would first draw it
+        // that much further away.
+        var from = -spring.from
+        let moved = startOffset - scrollView.contentOffset.y
+        if abs(moved) < abs(from), moved * from >= 0 { from = moved }
+        copy.fromValue = NSValue(cgPoint: CGPoint(x: 0, y: from))
         copy.toValue = NSValue(cgPoint: CGPoint(x: 0, y: -spring.to))
         copy.isRemovedOnCompletion = true
         // Before it starts, it holds the timeline where the composer is drawn.
@@ -324,6 +341,13 @@ final class TimelineKeyboardFollower {
         let end = scrollView.contentSize.height - scrollView.bounds.height
             + scrollView.contentInset.bottom + scrollView.safeAreaInsets.bottom
         return max(end, -scrollView.adjustedContentInset.top)
+    }
+
+    /// Whether the content fits between the bars and the composer as they
+    /// are laid out now.
+    private func fitsInView(_ scrollView: UIScrollView) -> Bool {
+        let insets = scrollView.adjustedContentInset
+        return scrollView.contentSize.height + insets.top + insets.bottom <= scrollView.bounds.height
     }
 
     /// An additive offset held until the next pass replaces it.

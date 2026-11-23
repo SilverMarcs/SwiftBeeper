@@ -46,7 +46,15 @@ struct RelayApp: App {
         }
         #else
         WindowGroup {
+            #if DEBUG
+            if TimelineLabController.isEnabled {
+                withAppEnvironment(TimelineLabRootView())
+            } else {
+                withAppEnvironment(AppStartupView())
+            }
+            #else
             withAppEnvironment(AppStartupView())
+            #endif
         }
         #endif
     }
