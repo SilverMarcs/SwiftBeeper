@@ -69,7 +69,7 @@ struct MessageRowView: View {
                             ForwardedLabel()
                         }
                     }
-                    .font(.subheadline)
+                    .chatFont(.subheadline)
                     .lineLimit(1)
                 }
 
@@ -115,7 +115,7 @@ struct MessageRowView: View {
                     ThreadSummaryButton(message: message, summary: thread, chat: chat)
                 } else if isInThread, message.isThreadBroadcast == true {
                     Text(chat.isSingleChat ? "Also sent as direct message" : "Also sent to \(chat.displayTitle)")
-                        .font(.caption2)
+                        .chatFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
 

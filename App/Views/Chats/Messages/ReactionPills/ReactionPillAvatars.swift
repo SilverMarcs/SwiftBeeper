@@ -21,7 +21,7 @@ struct ReactionPillAvatars: View {
 
             if pill.group.count > Self.shownLimit {
                 Text("+\(pill.group.count - Self.shownLimit)")
-                    .font(.caption)
+                    .chatFont(.caption)
                     .foregroundStyle(pill.isOwn ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             }
         }

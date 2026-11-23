@@ -25,6 +25,7 @@ struct MessageContentView: View {
                             .italic()
                     }
                 }
+                .chatFont(.body)
                 .foregroundStyle(isOutgoing ? .white : .primary)
                 .messageTextSelection(id: message.id)
                 .fixedSize(horizontal: false, vertical: true)

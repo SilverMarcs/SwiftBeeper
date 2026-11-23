@@ -17,7 +17,7 @@ struct ReactionOverflowButton: View {
             Text("+\(hiddenCount)")
                 // Rolls with the pills' animation; see `ReactionPillsView`.
                 .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(hiddenCount)))
-                .font(.subheadline)
+                .chatFont(.subheadline)
                 .foregroundStyle(.secondary)
                 .reactionPillChrome(isOwn: false)
         }

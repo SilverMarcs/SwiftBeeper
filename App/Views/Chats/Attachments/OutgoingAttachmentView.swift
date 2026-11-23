@@ -20,7 +20,7 @@ struct OutgoingAttachmentView: View {
                         .font(.title)
 
                     Text(attachment.fileName)
-                        .font(.callout)
+                        .chatFont(.callout)
                         .lineLimit(2)
                         .truncationMode(.middle)
                 }

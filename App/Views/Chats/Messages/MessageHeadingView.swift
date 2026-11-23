@@ -7,11 +7,11 @@ struct MessageHeadingView: View {
 
     var body: some View {
         Text(text)
-            .font(font)
+            .chatFont(style)
             .bold()
     }
 
-    private var font: Font {
+    private var style: Font.TextStyle {
         switch level {
         case 1: .title3
         case 2: .headline

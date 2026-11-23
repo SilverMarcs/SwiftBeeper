@@ -24,7 +24,7 @@ struct DeliveryCaptionView: View {
                         .accessibilityLabel(indicator.label)
                 } else {
                     Text(indicator.label)
-                        .font(.caption2)
+                        .chatFont(.caption2)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(isOutgoing ? .trailing : .leading)
                 }

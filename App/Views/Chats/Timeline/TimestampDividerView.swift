@@ -9,7 +9,7 @@ struct TimestampDividerView: View {
     var body: some View {
         let time = timestamp.formatted(date: .omitted, time: .shortened)
         Text("\(Text(dayLabel).bold()) \(time)")
-            .font(.caption)
+            .chatFont(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
     }

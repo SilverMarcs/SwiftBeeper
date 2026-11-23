@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, PlatformApplicationDelegate, UNUserNotificati
     #if os(macOS)
     func applicationDidFinishLaunching(_ notification: Notification) {
         prepareNotificationCenter()
+        ChatTextSize.zoomInOnUnshiftedPlus()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

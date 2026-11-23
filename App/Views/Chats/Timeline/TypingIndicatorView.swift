@@ -15,7 +15,7 @@ struct TypingIndicatorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 if !chat.isSingleChat && isFirstInGroup {
                     Text(participant.displayName)
-                        .font(.subheadline)
+                        .chatFont(.subheadline)
                         .bold()
                         .foregroundStyle(IdentityColor(id: participant.id).nameStyle)
                 }

@@ -7,11 +7,11 @@ struct VideoTooLargeLabel: View {
     var body: some View {
         VStack {
             Label("Video Too Large to Play", systemImage: "film")
-                .font(.subheadline)
+                .chatFont(.subheadline)
                 .bold()
             if let fileSize {
                 Text(Int64(fileSize).formatted(.byteCount(style: .file)))
-                    .font(.caption)
+                    .chatFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }

@@ -6,7 +6,7 @@ struct MessageCodeBlockView: View {
 
     var body: some View {
         Text(verbatim: code)
-            .font(.callout.monospaced())
+            .chatFont(.callout, design: .monospaced)
             .padding(8)
             .background(.quinary, in: .rect(cornerRadius: 6))
     }

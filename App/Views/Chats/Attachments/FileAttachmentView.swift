@@ -24,12 +24,12 @@ struct FileAttachmentView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(attachment.fileName ?? "Attachment")
-                        .font(.callout)
+                        .chatFont(.callout)
                         .lineLimit(1)
 
                     if let fileSize = attachment.fileSize {
                         Text(Int64(fileSize).formatted(.byteCount(style: .file)))
-                            .font(.caption)
+                            .chatFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }

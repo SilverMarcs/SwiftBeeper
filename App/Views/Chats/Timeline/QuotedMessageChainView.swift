@@ -34,7 +34,7 @@ struct QuotedMessageChainView: View {
                     HStack(spacing: 6) {
                         Color.clear.frame(width: 28, height: 1)
                         SenderNameLabel(message: message)
-                            .font(.subheadline)
+                            .chatFont(.subheadline)
                             .lineLimit(1)
                             .quotedMessageMorph(
                                 from: presentation.senderNameOrigin,

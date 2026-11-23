@@ -22,12 +22,12 @@ struct ReplyPreviewView: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(senderName)
-                    .font(.caption)
+                    .chatFont(.caption)
                     .bold()
                     .foregroundStyle(senderColor.map { AnyShapeStyle($0.nameStyle) } ?? AnyShapeStyle(.secondary))
 
                 Text(linkedMessage?.displayText ?? "Original message")
-                    .font(.caption)
+                    .chatFont(.caption)
                     .foregroundStyle(.secondary)
                     .strikethrough(linkedMessage?.hasRetainedDeletedContent == true)
                     .lineLimit(2)

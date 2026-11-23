@@ -6,7 +6,7 @@ struct UnreadDividerView: View {
         HStack(spacing: 8) {
             DividerLine()
             Text("New Messages")
-                .font(.caption)
+                .chatFont(.caption)
                 .bold()
                 .foregroundStyle(.secondary)
             DividerLine()

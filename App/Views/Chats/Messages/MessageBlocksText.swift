@@ -9,7 +9,7 @@ struct MessageBlocksText: View {
 
     var body: some View {
         MessageBlocksView(blocks: blocks)
-            .font(.body)
+            .chatFont(.body)
             .foregroundStyle(isOutgoing ? .white : .primary)
             // Links follow the tint; white keeps contrast on the accent fill.
             .tint(isOutgoing ? .white : .accentColor)

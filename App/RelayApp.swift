@@ -39,6 +39,7 @@ struct RelayApp: App {
         .defaultSize(width: 1100, height: 750)
         .commands {
             ComposerFormatCommands()
+            ChatTextSizeCommands()
         }
 
         Settings {

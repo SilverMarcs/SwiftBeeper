@@ -15,6 +15,7 @@ struct ChatDetailView: View {
     var body: some View {
         let selectedChat = chatStore.selectedChat
         ChatTimelineView(source: chatStore)
+            .chatTextSize()
             #if os(macOS)
             .navigationTitle("")
             #endif

@@ -69,7 +69,7 @@ struct AudioAttachmentView: View {
             .disabled(!isReady)
 
             Text(Duration.seconds(isSeeking || isPlaying ? currentTime : duration), format: .time(pattern: .minuteSecond))
-                .font(.caption)
+                .chatFont(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }

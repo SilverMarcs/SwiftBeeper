@@ -17,7 +17,7 @@ struct OutgoingMessageRowView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 if isThreadBroadcast, let rootID = message.broadcastThreadRootID {
                     ThreadBroadcastLabel(followsName: false)
-                        .font(.subheadline)
+                        .chatFont(.subheadline)
                         .lineLimit(1)
                     let root = entry.threadRoot ?? chatStore.activeThread.flatMap { $0.rootID == rootID ? $0.root : nil }
                     ReplyPreviewView(linkedMessage: root) {

@@ -29,6 +29,7 @@ struct MessageTextView: View {
                         expandedMessages.toggle(expansionID)
                     }
                     .buttonBorderShape(.capsule)
+                    .chatFont(.body)
                     // Muted like the text, not the bubble's link tint.
                     .foregroundStyle(isOutgoing ? .white : .primary)
                 }

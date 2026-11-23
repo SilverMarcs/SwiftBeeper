@@ -21,7 +21,7 @@ struct SeenByPillView: View {
 
             if readers.count > Self.shownLimit {
                 Text("+\(readers.count - Self.shownLimit)")
-                    .font(.caption2)
+                    .chatFont(.caption2)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .padding(.trailing, 4)

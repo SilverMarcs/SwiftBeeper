@@ -23,7 +23,7 @@ struct ReactionPillLabel: View {
                     .foregroundStyle(pill.isOwn ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             }
         }
-        .font(.subheadline)
+        .chatFont(.subheadline)
         .reactionPillChrome(isOwn: pill.isOwn)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)

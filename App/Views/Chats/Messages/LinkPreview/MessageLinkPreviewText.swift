@@ -9,18 +9,18 @@ struct MessageLinkPreviewText: View {
         VStack(alignment: .leading, spacing: 2) {
             if let title = preview.title {
                 Text(title)
-                    .font(.subheadline)
+                    .chatFont(.subheadline)
                     .bold()
                     .lineLimit(2)
             }
             if let description = preview.description {
                 Text(description)
-                    .font(.footnote)
+                    .chatFont(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
             Text(preview.domain)
-                .font(.caption)
+                .chatFont(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }

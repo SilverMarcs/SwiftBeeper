@@ -9,7 +9,7 @@ struct LoadServerHistoryButton: View {
         Button("Load Older History", systemImage: "clock.arrow.circlepath") {
             Task { await load() }
         }
-        .font(.caption)
+        .chatFont(.caption)
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
         .controlSize(.small)

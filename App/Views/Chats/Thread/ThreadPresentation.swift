@@ -38,6 +38,7 @@ private struct ThreadPresentation: ViewModifier {
     /// The thread's timeline and composer, the same as the chat's.
     private func threadView(_ thread: ThreadStore) -> some View {
         ChatTimelineView(source: thread)
+            .chatTextSize()
             #if os(iOS)
             // macOS keeps the window title for the chat.
             .navigationTitle("Thread")

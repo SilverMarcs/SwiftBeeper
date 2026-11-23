@@ -31,7 +31,7 @@ struct MessageDeliveryStatusView: View {
                 .help(error)
             }
         }
-        .font(.caption2)
+        .chatFont(.caption2)
         .padding(.trailing, 3)
     }
 }

@@ -37,7 +37,7 @@ struct ThreadSummaryButton: View {
                     .foregroundStyle(.tertiary)
                     .imageScale(.small)
             }
-            .font(.caption)
+            .chatFont(.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             // The neutral bubble fill on both sides, so the secondary text
