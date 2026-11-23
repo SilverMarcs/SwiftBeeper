@@ -28,6 +28,6 @@ extension TimelineEntry {
         if message.isSender, row.contains(where: { $0.deliveryStatus == .failed }) {
             return true
         }
-        return row.contains { !$0.visibleReactions.isEmpty }
+        return row.contains { $0.reactions?.isEmpty == false }
     }
 }

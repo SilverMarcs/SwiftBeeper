@@ -212,14 +212,11 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 			if reactionEvt.RedactedBy != "" {
 				continue
 			}
-			var reaction event.ReactionEventContent
-			if json.Unmarshal(reactionEvt.GetContent(), &reaction) != nil {
+			parsed, ok := parseReactionContent(reactionEvt.GetContent())
+			if !ok {
 				continue
 			}
-			key := strings.TrimSpace(reaction.RelatesTo.Key)
-			if key == "" {
-				continue
-			}
+			key, shortcode := s.resolvedReaction(ctx, parsed)
 			dedupeKey := string(reactionEvt.Sender) + "\x1f" + key
 			if _, ok := seen[dedupeKey]; ok {
 				continue
@@ -228,6 +225,7 @@ func (s *Dispatcher) loadReactionMap(ctx context.Context, roomID id.RoomID, even
 			reactions = append(reactions, wire.Reaction{
 				ID:            string(reactionEvt.Sender) + key,
 				ReactionKey:   key,
+				Shortcode:     shortcode,
 				ParticipantID: string(reactionEvt.Sender),
 				Participant:   participants[string(reactionEvt.Sender)],
 			})

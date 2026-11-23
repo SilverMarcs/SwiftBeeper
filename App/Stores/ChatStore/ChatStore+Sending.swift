@@ -213,9 +213,9 @@ extension ChatStore {
 
     // MARK: - Reactions and deletion
 
-    func addReaction(to messageID: String, in chatID: String, reactionKey: String) async {
+    func addReaction(to messageID: String, in chatID: String, reactionKey: String, shortcode: String? = nil) async {
         do {
-            try await APIClient.addReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey)
+            try await APIClient.addReaction(chatID: chatID, messageID: messageID, reactionKey: reactionKey, shortcode: shortcode)
         } catch {
             handleMessageError(error)
         }

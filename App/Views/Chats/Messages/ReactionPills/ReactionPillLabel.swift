@@ -12,7 +12,7 @@ struct ReactionPillLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text(pill.group.reactionKey)
+            ReactionGlyph(pill.group.appearance, textStyle: .subheadline, isOnAccent: pill.isOwn)
 
             if !chat.isSingleChat {
                 ReactionPillAvatars(pill: pill, chat: chat)
@@ -33,7 +33,7 @@ struct ReactionPillLabel: View {
         let names = pill.group.participantIDs.map { id in
             isSelf(id) ? "You" : pill.participant(with: id, in: chat)?.displayName ?? "Someone"
         }
-        return "\(pill.group.reactionKey), \(names.formatted(.list(type: .and)))"
+        return "\(pill.group.spokenName), \(names.formatted(.list(type: .and)))"
     }
 
     private func isSelf(_ id: String) -> Bool {

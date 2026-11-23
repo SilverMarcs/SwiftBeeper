@@ -5,9 +5,9 @@ import SwiftUI
 struct ShowReactionDetailsAction {
     let action: (ReactionDetails) -> Void
 
-    /// Opens filtered to `reactionKey`, or to all reactions when it's nil.
-    func callAsFunction(_ message: Message, in chat: Chat, reactionKey: String? = nil) {
-        action(ReactionDetails(message: message, chat: chat, reactionKey: reactionKey))
+    /// Opens filtered to `appearance`, or to all reactions when it's nil.
+    func callAsFunction(_ message: Message, in chat: Chat, appearance: ReactionAppearance? = nil) {
+        action(ReactionDetails(message: message, chat: chat, appearance: appearance))
     }
 }
 

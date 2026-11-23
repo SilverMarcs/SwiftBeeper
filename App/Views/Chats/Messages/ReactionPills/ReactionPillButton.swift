@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// One reaction pill. A tap reacts the same way, or takes the user's
-/// reaction back; holding it opens the sheet of who reacted.
+/// reaction back; holding it opens the sheet of who reacted. Reactions Relay
+/// can't draw can't be sent either, so tapping their pill opens the sheet.
 struct ReactionPillButton: View {
     @Environment(ChatStore.self) private var chatStore
     @Environment(\.showReactionDetails) private var showReactionDetails
@@ -24,16 +25,25 @@ struct ReactionPillButton: View {
             LongPressGesture().onEnded { _ in
                 didLongPress = true
                 longPressCount += 1
-                showReactionDetails(pill.message, in: chat, reactionKey: pill.group.reactionKey)
+                showDetails()
             }
         )
         .sensoryFeedback(.impact, trigger: longPressCount)
         .accessibilityAddTraits(pill.isOwn ? .isSelected : [])
-        .accessibilityHint(pill.isOwn ? "Removes your reaction" : "Reacts with \(pill.group.reactionKey)")
+        .accessibilityHint(accessibilityHint)
         .accessibilityAction(named: "Show Reactions") {
-            showReactionDetails(pill.message, in: chat, reactionKey: pill.group.reactionKey)
+            showDetails()
         }
         .help("Hold to see who reacted")
+    }
+
+    private var accessibilityHint: String {
+        if pill.group.appearance == .unrecognized { return "Shows who reacted" }
+        return pill.isOwn ? "Removes your reaction" : "Reacts with \(pill.group.spokenName)"
+    }
+
+    private func showDetails() {
+        showReactionDetails(pill.message, in: chat, appearance: pill.group.appearance)
     }
 
     private func toggle() {
@@ -41,16 +51,20 @@ struct ReactionPillButton: View {
             didLongPress = false
             return
         }
+        guard let reactionKey = pill.group.appearance.reactionKey else {
+            showDetails()
+            return
+        }
         // Played by the timeline: a pill the user was last to react with
         // leaves once the reaction is taken back.
         reactionToggleFeedback?.play()
         let message = pill.message
-        let reactionKey = pill.group.reactionKey
+        let shortcode = pill.group.shortcode
         Task {
             if pill.isOwn {
                 await chatStore.removeReaction(from: message.id, in: message.chatID, reactionKey: reactionKey)
             } else {
-                await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey)
+                await chatStore.addReaction(to: message.id, in: message.chatID, reactionKey: reactionKey, shortcode: shortcode)
             }
         }
     }

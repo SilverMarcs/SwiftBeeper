@@ -83,7 +83,10 @@ type Reaction struct {
 	ID            string `json:"id"`
 	ParticipantID string `json:"participantID"`
 	ReactionKey   string `json:"reactionKey"`
-	Participant   *User  `json:"participant,omitempty"`
+	// A bridged custom emoji's name, such as ":party_parrot:". Its key is
+	// its mxc:// image, or the shortcode itself when no image is known.
+	Shortcode   string `json:"shortcode,omitempty"`
+	Participant *User  `json:"participant,omitempty"`
 }
 
 type AttachmentType string

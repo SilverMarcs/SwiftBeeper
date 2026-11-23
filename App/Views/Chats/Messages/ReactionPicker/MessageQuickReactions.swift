@@ -38,7 +38,7 @@ struct MessageQuickReactions: View {
         #else
         guard let ownReactionKey,
               !Self.commonReactions.contains(ownReactionKey),
-              message.visibleReactions.contains(where: { $0.reactionKey == ownReactionKey }) else {
+              ReactionAppearance(reactionKey: ownReactionKey).isEmoji else {
             return Self.commonReactions
         }
         return Self.commonReactions + [ownReactionKey]

@@ -9,7 +9,7 @@ struct ReactionDetailsSheet: View {
     let details: ReactionDetails
 
     /// The reaction listed, or nil for all of them.
-    @State private var selectedKey: String?
+    @State private var selectedAppearance: ReactionAppearance?
     @State private var sheetWidth: CGFloat = 320
 
     /// The toolbar's close button and margins, left beside the picker.
@@ -17,7 +17,7 @@ struct ReactionDetailsSheet: View {
 
     init(details: ReactionDetails) {
         self.details = details
-        _selectedKey = State(initialValue: details.reactionKey)
+        _selectedAppearance = State(initialValue: details.appearance)
     }
 
     var body: some View {
@@ -38,7 +38,7 @@ struct ReactionDetailsSheet: View {
                 ToolbarItem(placement: .primaryAction) {
                     ReactionDetailsFilterPicker(
                         groups: details.message.groupedReactions,
-                        selection: $selectedKey,
+                        selection: $selectedAppearance,
                         maxWidth: nil
                     )
                 }
@@ -46,7 +46,7 @@ struct ReactionDetailsSheet: View {
                 ToolbarItem(placement: .navigation) {
                     ReactionDetailsFilterPicker(
                         groups: details.message.groupedReactions,
-                        selection: $selectedKey,
+                        selection: $selectedAppearance,
                         maxWidth: max(sheetWidth - Self.closeButtonAllowance, 0)
                     )
                 }
@@ -70,8 +70,8 @@ struct ReactionDetailsSheet: View {
     }
 
     private var reactions: [Reaction] {
-        let reactions = details.message.visibleReactions
-        guard let selectedKey else { return reactions }
-        return reactions.filter { $0.reactionKey == selectedKey }
+        let reactions = details.message.reactions ?? []
+        guard let selectedAppearance else { return reactions }
+        return reactions.filter { $0.appearance == selectedAppearance }
     }
 }

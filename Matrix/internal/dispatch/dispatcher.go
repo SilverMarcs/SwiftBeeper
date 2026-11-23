@@ -29,6 +29,7 @@ type Dispatcher struct {
 	searchIndex   messageSearchIndex
 	linkPreviews  linkPreviewCache
 	bookmarks     bookmarkState
+	customEmoji   customEmojiCache
 }
 
 func New(rt *gomuksruntime.Runtime) *Dispatcher {

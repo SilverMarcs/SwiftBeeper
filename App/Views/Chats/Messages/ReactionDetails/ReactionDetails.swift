@@ -6,5 +6,5 @@ struct ReactionDetails: Identifiable {
     let message: Message
     let chat: Chat
     /// The reaction the sheet opens filtered to, or nil for all of them.
-    let reactionKey: String?
+    let appearance: ReactionAppearance?
 }

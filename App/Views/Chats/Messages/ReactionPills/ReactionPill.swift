@@ -1,8 +1,9 @@
 import Foundation
 
-/// One reaction key on one message, drawn as a pill below the message's bubbles.
+/// One reaction key on one message, drawn as a pill below the message's
+/// bubbles, or every reaction on it Relay can't draw.
 struct ReactionPill: Identifiable, Equatable {
-    var id: String { "\(message.id)-\(group.reactionKey)" }
+    var id: String { "\(message.id)-\(group.id)" }
     let message: Message
     let group: GroupedReaction
     /// Whether the user is among those who reacted with it.

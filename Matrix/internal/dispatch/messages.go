@@ -297,6 +297,15 @@ type reactionRequest struct {
 	ChatID      string `json:"chatID"`
 	MessageID   string `json:"messageID"`
 	ReactionKey string `json:"reactionKey"`
+	// A custom emoji's name, sent along with its mxc:// key so bridges
+	// and other clients can name it.
+	Shortcode string `json:"shortcode,omitempty"`
+}
+
+// customEmojiReactionContent is a reaction with a custom emoji's shortcode.
+type customEmojiReactionContent struct {
+	event.ReactionEventContent
+	Shortcode string `json:"com.beeper.reaction.shortcode,omitempty"`
 }
 
 // decodeReaction decodes and validates a reaction command. The key in req is
@@ -317,8 +326,13 @@ func (s *Dispatcher) addReaction(ctx context.Context, input json.RawMessage) (an
 	if err != nil {
 		return nil, err
 	}
-	content := &event.ReactionEventContent{
-		RelatesTo: event.RelatesTo{Type: event.RelAnnotation, EventID: eventID, Key: req.ReactionKey},
+	content := &customEmojiReactionContent{
+		ReactionEventContent: event.ReactionEventContent{
+			RelatesTo: event.RelatesTo{Type: event.RelAnnotation, EventID: eventID, Key: req.ReactionKey},
+		},
+	}
+	if strings.HasPrefix(req.ReactionKey, "mxc://") {
+		content.Shortcode = strings.TrimSpace(req.Shortcode)
 	}
 	if _, err = s.rt.Client().Send(ctx, roomID, event.EventReaction, content, false, false); err != nil {
 		return nil, fmt.Errorf("failed to add reaction: %w", err)
@@ -326,7 +340,8 @@ func (s *Dispatcher) addReaction(ctx context.Context, input json.RawMessage) (an
 	return wire.Success, nil
 }
 
-// removeReaction redacts the user's own reactions with this key.
+// removeReaction redacts the user's own reactions with this key, including
+// shortcode-only custom emoji shown under their image's key.
 func (s *Dispatcher) removeReaction(ctx context.Context, input json.RawMessage) (any, error) {
 	req, roomID, eventID, err := decodeReaction(input)
 	if err != nil {
@@ -343,8 +358,11 @@ func (s *Dispatcher) removeReaction(ctx context.Context, input json.RawMessage) 
 		if evt.Sender != cli.Account.UserID || evt.RedactedBy != "" {
 			continue
 		}
-		var reaction event.ReactionEventContent
-		if json.Unmarshal(evt.GetContent(), &reaction) == nil && reaction.RelatesTo.Key == reactionKey {
+		reaction, ok := parseReactionContent(evt.GetContent())
+		if !ok {
+			continue
+		}
+		if resolved, _ := s.resolvedReaction(ctx, reaction); reaction.key == reactionKey || resolved == reactionKey {
 			toRedact = append(toRedact, evt.ID)
 		}
 	}

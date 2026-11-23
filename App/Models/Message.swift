@@ -6,6 +6,9 @@ struct Reaction: Codable, Identifiable, Hashable, Sendable {
     let participantID: String
     /// The reactor's profile, independent of the chat's small avatar sample.
     let participant: ChatParticipant?
+    /// A bridged custom emoji's name, such as ":party_parrot:". Its key is
+    /// its mxc:// image, or the shortcode itself when no image is known.
+    let shortcode: String?
 }
 
 struct Message: Identifiable, Codable, Equatable, Sendable {
@@ -154,33 +157,32 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
         return timestamp.formatted(date: .abbreviated, time: .shortened)
     }
 
-    /// Reactions Relay can render, in the order the core reported them.
-    var visibleReactions: [Reaction] {
-        // Custom emoji and GIF reactions have no image representation in Relay.
-        // Keep their data, but don't render raw shortcodes or media URLs.
-        reactions?.filter {
-            !($0.reactionKey.hasPrefix(":") && $0.reactionKey.hasSuffix(":"))
-                && !$0.reactionKey.hasPrefix("mxc://")
-                && !$0.reactionKey.hasPrefix("https://")
-                && !$0.reactionKey.hasPrefix("http://")
-        } ?? []
-    }
-
-    /// Visible reactions grouped by key: the most reacted first, ties in the
-    /// order they were first reacted with. Empty when there are none.
+    /// Reactions grouped by key: the most reacted first, ties in the order
+    /// they were first reacted with, and the ones Relay can't draw last, in
+    /// one group. Empty when there are none.
     var groupedReactions: [GroupedReaction] {
         var groups: [GroupedReaction] = []
-        var indexByKey: [String: Int] = [:]
-        for reaction in visibleReactions {
-            if let index = indexByKey[reaction.reactionKey] {
+        var indexByAppearance: [ReactionAppearance: Int] = [:]
+        for reaction in reactions ?? [] {
+            let appearance = reaction.appearance
+            if let index = indexByAppearance[appearance] {
                 groups[index].participantIDs.append(reaction.participantID)
             } else {
-                indexByKey[reaction.reactionKey] = groups.count
-                groups.append(GroupedReaction(reactionKey: reaction.reactionKey, participantIDs: [reaction.participantID]))
+                indexByAppearance[appearance] = groups.count
+                groups.append(GroupedReaction(
+                    appearance: appearance,
+                    shortcode: reaction.shortcode,
+                    participantIDs: [reaction.participantID]
+                ))
             }
         }
         return groups.enumerated()
-            .sorted { ($0.element.count, $1.offset) > ($1.element.count, $0.offset) }
+            .sorted { lhs, rhs in
+                let lhsDrawn = lhs.element.appearance != .unrecognized
+                let rhsDrawn = rhs.element.appearance != .unrecognized
+                if lhsDrawn != rhsDrawn { return lhsDrawn }
+                return (lhs.element.count, rhs.offset) > (rhs.element.count, lhs.offset)
+            }
             .map(\.element)
     }
 }

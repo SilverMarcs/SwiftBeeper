@@ -96,8 +96,11 @@ extension APIClient {
         try await executeRaw("edit-message", arguments: Arguments(chatID: chatID, messageID: messageID, text: text, mentions: mentions))
     }
 
-    static func addReaction(chatID: String, messageID: String, reactionKey: String) async throws {
-        try await executeRaw("add-reaction", arguments: ReactionArguments(chatID: chatID, messageID: messageID, reactionKey: reactionKey))
+    /// `shortcode` names a custom emoji whose key is its mxc:// image.
+    static func addReaction(chatID: String, messageID: String, reactionKey: String, shortcode: String? = nil) async throws {
+        try await executeRaw("add-reaction", arguments: ReactionArguments(
+            chatID: chatID, messageID: messageID, reactionKey: reactionKey, shortcode: shortcode
+        ))
     }
 
     static func removeReaction(chatID: String, messageID: String, reactionKey: String) async throws {
@@ -123,4 +126,5 @@ private struct ReactionArguments: Encodable {
     let chatID: String
     let messageID: String
     let reactionKey: String
+    var shortcode: String? = nil
 }

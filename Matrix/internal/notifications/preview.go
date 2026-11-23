@@ -261,7 +261,7 @@ func notificationBody(ctx context.Context, cli *mautrix.Client, req Request, sen
 			(target.Type != event.EventMessage && target.Type != event.EventEncrypted && target.Type != event.EventSticker) {
 			return "", "", errors.New("reaction is not to your message")
 		}
-		return "Reacted " + reaction.RelatesTo.Key + " to your message", target.ID, nil
+		return "Reacted " + reactionPreviewKey(reaction.RelatesTo.Key, content) + " to your message", target.ID, nil
 	}
 	if typ != event.EventMessage.Type && typ != event.EventSticker.Type {
 		return "", "", errors.New("not a message")
@@ -358,4 +358,20 @@ func truncate(s string, limit int) string {
 		return string(runes[:limit]) + "…"
 	}
 	return s
+}
+
+// reactionPreviewKey is how a notification names a reaction: its emoji, or a
+// custom emoji's shortcode in place of its image's mxc:// URL.
+func reactionPreviewKey(key string, content json.RawMessage) string {
+	key = strings.TrimSpace(key)
+	if !strings.HasPrefix(key, "mxc://") {
+		return key
+	}
+	var custom struct {
+		Shortcode string `json:"com.beeper.reaction.shortcode"`
+	}
+	if json.Unmarshal(content, &custom) == nil && strings.TrimSpace(custom.Shortcode) != "" {
+		return strings.TrimSpace(custom.Shortcode)
+	}
+	return "a custom emoji"
 }
