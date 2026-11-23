@@ -20,6 +20,7 @@ import (
 	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/id"
 
+	"relay/core/internal/floe"
 	"relay/core/internal/wire"
 )
 
@@ -44,12 +45,20 @@ func (s *Dispatcher) LocalAsset(ctx context.Context, source string) (string, err
 		s.assets.touch(decryptedPath)
 		return decryptedPath, nil
 	}
-	var encFile *attachment.EncryptedFile
-	if media, err := s.rt.Client().DB.Media.Get(ctx, parsedMXC); err == nil && media != nil {
-		encFile = media.EncFile
+	var decrypt decryptFunc
+	if media, err := s.rt.Client().DB.Media.Get(ctx, parsedMXC); err == nil && media != nil && media.EncFile != nil {
+		if media.EncFile.Version == floe.Version {
+			file, err := s.floeFile(ctx, normalized)
+			if err != nil {
+				return "", err
+			}
+			decrypt = file.Decrypt
+		} else {
+			decrypt = aesDecrypt(media.EncFile)
+		}
 	}
 	cachePath := plainPath
-	if encFile != nil {
+	if decrypt != nil {
 		cachePath = decryptedPath
 	} else if _, err := os.Stat(plainPath); err == nil {
 		s.assets.touch(plainPath)
@@ -65,7 +74,7 @@ func (s *Dispatcher) LocalAsset(ctx context.Context, source string) (string, err
 			return fmt.Errorf("failed to download asset: %w", err)
 		}
 		defer resp.Body.Close()
-		if err = streamToCache(resp.Body, encFile, cacheDir, cachePath); err != nil {
+		if err = streamToCache(resp.Body, decrypt, cacheDir, cachePath); err != nil {
 			return err
 		}
 		s.assets.pruneSoon(cacheDir, s.uploadRootDir())
@@ -106,21 +115,54 @@ func (s *Dispatcher) ClearMediaCache() error {
 	return nil
 }
 
+// decryptFunc writes the plaintext of the ciphertext it reads, failing if the
+// ciphertext was tampered with or truncated.
+type decryptFunc func(ciphertext io.Reader, plaintext io.Writer) error
+
+func aesDecrypt(encFile *attachment.EncryptedFile) decryptFunc {
+	return func(ciphertext io.Reader, plaintext io.Writer) error {
+		if err := encFile.PrepareForDecryption(); err != nil {
+			return err
+		}
+		decrypter := encFile.DecryptStream(ciphertext)
+		if _, err := io.Copy(plaintext, decrypter); err != nil {
+			return err
+		}
+		// Closing the decrypter verifies the SHA-256 of the whole ciphertext.
+		return decrypter.Close()
+	}
+}
+
+// floeFile finds the keys of FLOE-encrypted media in an event that references
+// it. The SDK's media table drops them, as its mautrix-go predates FLOE, and
+// rows stored so far stay keyless even after an SDK upgrade.
+func (s *Dispatcher) floeFile(ctx context.Context, mxc string) (*floe.File, error) {
+	rows, err := s.rt.Client().DB.Query(ctx, `SELECT coalesce(e.decrypted, e.content) FROM media_reference r
+		JOIN event e ON e.rowid=r.event_rowid WHERE r.media_mxc=?`, mxc)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var content []byte
+		if err = rows.Scan(&content); err != nil {
+			return nil, err
+		}
+		if file := floe.FindFile(content, mxc); file != nil {
+			return file, nil
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return nil, errors.New("failed to find the media's encryption keys")
+}
+
 // streamToCache writes the download to cachePath, decrypting it on the way
-// when encFile is set, so large media never sits in memory whole. It writes
+// when decrypt is set, so large media never sits in memory whole. It writes
 // to a unique temporary file first, so concurrent requests for the same media
 // can't interleave and a failed or tampered download never becomes the cache.
-func streamToCache(body io.Reader, encFile *attachment.EncryptedFile, cacheDir, cachePath string) error {
-	var source io.Reader = body
-	var decrypter io.ReadCloser
-	if encFile != nil {
-		if err := encFile.PrepareForDecryption(); err != nil {
-			return fmt.Errorf("failed to decrypt asset: %w", err)
-		}
-		decrypter = encFile.DecryptStream(body)
-		source = decrypter
-	}
-
+func streamToCache(body io.Reader, decrypt decryptFunc, cacheDir, cachePath string) error {
 	temp, err := os.CreateTemp(cacheDir, "download-*.tmp")
 	if err != nil {
 		return fmt.Errorf("failed to save downloaded asset: %w", err)
@@ -128,18 +170,18 @@ func streamToCache(body io.Reader, encFile *attachment.EncryptedFile, cacheDir, 
 	tempPath := temp.Name()
 	defer os.Remove(tempPath) // No-op once renamed into place.
 
-	_, err = io.Copy(temp, source)
-	if closeErr := temp.Close(); err == nil {
-		err = closeErr
+	if decrypt != nil {
+		if err = decrypt(body, temp); err != nil {
+			err = fmt.Errorf("failed to decrypt asset: %w", err)
+		}
+	} else if _, err = io.Copy(temp, body); err != nil {
+		err = fmt.Errorf("failed to read downloaded asset: %w", err)
+	}
+	if closeErr := temp.Close(); err == nil && closeErr != nil {
+		err = fmt.Errorf("failed to save downloaded asset: %w", closeErr)
 	}
 	if err != nil {
-		return fmt.Errorf("failed to read downloaded asset: %w", err)
-	}
-	// Closing the decrypter verifies the SHA-256 of the whole ciphertext.
-	if decrypter != nil {
-		if err = decrypter.Close(); err != nil {
-			return fmt.Errorf("failed to decrypt asset: %w", err)
-		}
+		return err
 	}
 	if err = os.Rename(tempPath, cachePath); err != nil {
 		return fmt.Errorf("failed to finalize cached asset: %w", err)
