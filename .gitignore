@@ -12,3 +12,4 @@ xcuserdata/
 /PushServer/.env*
 *.p8
 /App/Configuration/*.private.json
+/.release/

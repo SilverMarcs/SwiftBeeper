@@ -4,6 +4,7 @@ import SwiftUI
 struct RelayApp: App {
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var appUpdater = AppUpdater()
     #else
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
@@ -38,6 +39,10 @@ struct RelayApp: App {
         }
         .defaultSize(width: 1100, height: 750)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { appUpdater.checkForUpdates() }
+                    .disabled(!appUpdater.canCheckForUpdates)
+            }
             ComposerFormatCommands()
             ChatTextSizeCommands()
         }

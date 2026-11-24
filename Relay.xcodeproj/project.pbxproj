@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1B64E10309BE47A0BC591001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; platformFilter = macos; productRef = 1B64E10309BE47A0BC591003 /* Sparkle */; };
 		EA5DB29634D72B6B9B10F9FF /* ShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DBB80B6C3C148CA8B4BF14BB /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4900F6EF78F8F5B2F3228ECA /* SwiftMediaViewer in Frameworks */ = {isa = PBXBuildFile; productRef = FA828B92661D73409A155297 /* SwiftMediaViewer */; };
 		65E043351D7771289EF3323C /* SwiftOGG in Frameworks */ = {isa = PBXBuildFile; productRef = 7A21AB7F64A017C4E07D2E60 /* SwiftOGG */; };
@@ -158,6 +159,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B64E10309BE47A0BC591001 /* Sparkle in Frameworks */,
 				4900F6EF78F8F5B2F3228ECA /* SwiftMediaViewer in Frameworks */,
 				65E043351D7771289EF3323C /* SwiftOGG in Frameworks */,
 				4DD85005884A7644A13BA51F /* RelayCore.framework in Frameworks */,
@@ -245,6 +247,7 @@
 			);
 			name = Relay;
 			packageProductDependencies = (
+				1B64E10309BE47A0BC591003 /* Sparkle */,
 				FA828B92661D73409A155297 /* SwiftMediaViewer */,
 				7A21AB7F64A017C4E07D2E60 /* SwiftOGG */,
 			);
@@ -345,6 +348,7 @@
 			mainGroup = DC658091D1A7F7FB428FB8C2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				1B64E10309BE47A0BC591002 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				289DEDE04374286A5643DFAA /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */,
 				8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */,
 			);
@@ -630,6 +634,7 @@
 				COMPILATION_CACHE_ENABLE_CACHING = YES;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
+				"CURRENT_PROJECT_VERSION[sdk=macosx*]" = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = J52QUTREBS;
 				ENABLE_APP_SANDBOX = NO;
@@ -656,6 +661,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 0.2;
+				"MARKETING_VERSION[sdk=macosx*]" = 0.2.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -755,6 +761,7 @@
 				COMPILATION_CACHE_ENABLE_CACHING = YES;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
+				"CURRENT_PROJECT_VERSION[sdk=macosx*]" = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = J52QUTREBS;
 				ENABLE_APP_SANDBOX = NO;
@@ -776,6 +783,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 0.2;
+				"MARKETING_VERSION[sdk=macosx*]" = 0.2.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				OTHER_LDFLAGS = (
@@ -806,7 +814,10 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
 				INFOPLIST_FILE = "Configuration/Relay-Info.plist";
+				"INFOPLIST_FILE[sdk=macosx*]" = "Configuration/Relay-macOS-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				"RELAY_SPARKLE_FEED_URL[sdk=macosx*]" = "https://github.com/SilverMarcs/SwiftBeeper/releases/latest/download/appcast.xml";
+				"RELAY_SPARKLE_PUBLIC_KEY[sdk=macosx*]" = "SmkMIv6K9zac8FHP/Ldv6jy0T2DE4WKLsvXcW9+5UsI=";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
@@ -850,7 +861,10 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Matrix/Build/$(RELAY_CORE_PLATFORM)/Headers";
 				INFOPLIST_FILE = "Configuration/Relay-Info.plist";
+				"INFOPLIST_FILE[sdk=macosx*]" = "Configuration/Relay-macOS-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				"RELAY_SPARKLE_FEED_URL[sdk=macosx*]" = "https://github.com/SilverMarcs/SwiftBeeper/releases/latest/download/appcast.xml";
+				"RELAY_SPARKLE_PUBLIC_KEY[sdk=macosx*]" = "SmkMIv6K9zac8FHP/Ldv6jy0T2DE4WKLsvXcW9+5UsI=";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
@@ -1001,6 +1015,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		1B64E10309BE47A0BC591002 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.1;
+			};
+		};
 		289DEDE04374286A5643DFAA /* XCRemoteSwiftPackageReference "SwiftMediaViewer" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SilverMarcs/SwiftMediaViewer";
@@ -1020,6 +1042,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1B64E10309BE47A0BC591003 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1B64E10309BE47A0BC591002 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		7A21AB7F64A017C4E07D2E60 /* SwiftOGG */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8CFE8189734FF0D5110447B0 /* XCRemoteSwiftPackageReference "swift-ogg" */;
