@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import RelayUpdates
+#endif
 
 @main
 struct RelayApp: App {

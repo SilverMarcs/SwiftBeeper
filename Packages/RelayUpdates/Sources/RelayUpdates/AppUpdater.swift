@@ -5,11 +5,11 @@ import Sparkle
 
 /// Owns Sparkle for the lifetime of the app and keeps its menu state current.
 @MainActor
-final class AppUpdater: ObservableObject {
-    @Published private(set) var canCheckForUpdates = false
+public final class AppUpdater: ObservableObject {
+    @Published public private(set) var canCheckForUpdates = false
     private let controller: SPUStandardUpdaterController
 
-    init() {
+    public init() {
         // Development copies should never replace themselves with a release.
         #if DEBUG
         let startsUpdater = false
@@ -26,7 +26,7 @@ final class AppUpdater: ObservableObject {
             .assign(to: &$canCheckForUpdates)
     }
 
-    func checkForUpdates() {
+    public func checkForUpdates() {
         controller.checkForUpdates(nil)
     }
 }
