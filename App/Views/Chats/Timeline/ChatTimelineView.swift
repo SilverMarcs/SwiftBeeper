@@ -264,16 +264,25 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
                 .onScrollPhaseChange { _, phase in
                     restingPosition.isScrolling = phase != .idle
+                    if phase == .tracking || phase == .interacting {
+                        restingPosition.settlesAtEndUntil = nil
+                    }
                 }
                 .onAppear {
                     // A viewport rebuilt mid-scroll never reports landing.
                     restingPosition.isScrolling = false
+                    restingPosition.settlesAtEndUntil = nil
                     // A chat opens at its newest messages. Going to the end
                     // target, the lazy stack's own last row, lays the rows
                     // out from there.
                     guard source.hasLoadedTimeline, !source.hasMoreNewerTimeline,
                           source.messageRevealRequest == nil else { return }
                     scrollToLatest(with: proxy, animated: false)
+                    #if os(macOS)
+                    // On iOS the first scroll lands at the end, and the
+                    // keyboard follower moves the timeline as it opens.
+                    restingPosition.settlesAtEndUntil = .now + Self.endSettlingWindow
+                    #endif
                 }
                 // Rebuilt when the first page arrives, so a chat opened
                 // before its messages lands at their end like one opened
@@ -345,11 +354,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     guard nearTop, !messages.isEmpty else { return }
                     Task { await source.loadOlderTimeline() }
                 }
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    Self.isNearBottom(geometry)
-                } action: { _, nearBottom in
-                    isNearBottom = nearBottom
-                }
                 // A stretch that stops short of the newest loads its next
                 // newer page a screen ahead of the bottom. The value is the
                 // content height while that close, so a page too short to
@@ -366,6 +370,15 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 } action: { _, geometry in
                     scrollAnchor.update(geometry)
                     rowFrames.containerHeight = geometry.containerSize.height
+                    // Read from the whole geometry rather than a transform
+                    // of its own: on macOS, that one could miss the lazy
+                    // stack measuring rows shorter as a chat opens, leaving
+                    // Jump to Latest up at the end.
+                    let nearBottom = Self.isNearBottom(geometry)
+                    if nearBottom != isNearBottom {
+                        isNearBottom = nearBottom
+                    }
+                    settleAtEnd(geometry, focusedRowID: focusedRowID, with: proxy)
                 }
                 // Older rows or the history header changed above the reader:
                 // put the row they were looking at back where it was.
@@ -656,6 +669,32 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// Whether all the content fits between the bars and the composer.
     private static func contentFits(_ geometry: ScrollGeometry) -> Bool {
         geometry.contentSize.height <= geometry.containerSize.height
+    }
+
+    /// How long after opening the timeline keeps going back to its end.
+    private static var endSettlingWindow: Duration { .seconds(1) }
+
+    /// A chat that just opened at its end goes back there when measuring its
+    /// rows moved the end away: the first scroll lands where the lazy stack
+    /// estimated the end, and a page of older messages loading as it opens
+    /// keeps the rows in view rather than the end.
+    private func settleAtEnd(_ geometry: ScrollGeometry, focusedRowID: Message.ID?, with proxy: ScrollViewProxy) {
+        guard let deadline = restingPosition.settlesAtEndUntil else { return }
+        guard ContinuousClock.now < deadline, focusedRowID == nil,
+              source.messageRevealRequest == nil, !source.hasMoreNewerTimeline else {
+            restingPosition.settlesAtEndUntil = nil
+            return
+        }
+        // The app's own animated scroll to a new message is on its way there.
+        guard !restingPosition.isScrolling else { return }
+        let distanceFromEnd = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.visibleRect.maxY
+        guard !Self.contentFits(geometry), abs(distanceFromEnd) > 1 else { return }
+        // After this geometry update rather than inside it: SwiftUI doesn't
+        // report where a scroll made during it lands.
+        Task { @MainActor in
+            guard restingPosition.settlesAtEndUntil != nil, !restingPosition.isScrolling else { return }
+            scrollToLatest(with: proxy, animated: false)
+        }
     }
 
     private static func isNearBottom(_ geometry: ScrollGeometry) -> Bool {
