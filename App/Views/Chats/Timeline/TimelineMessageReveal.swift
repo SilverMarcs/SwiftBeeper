@@ -5,7 +5,7 @@ import SwiftUI
 struct TimelineMessageReveal<Source: TimelineSource>: ViewModifier {
     let source: Source
     let entries: [TimelineEntry]
-    let proxy: ScrollViewProxy
+    let proxy: TimelineScrollProxy
     let frames: TimelineRowFrames
     let topInset: CGFloat
     let willReveal: () -> Void

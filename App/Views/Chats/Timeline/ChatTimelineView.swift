@@ -27,8 +27,10 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// Long messages the reader chose to read in full.
     @State private var expandedMessages = ExpandedMessages()
     @State private var selectableMessages = SelectableMessages()
+    #if os(iOS)
     /// Keeps the reader's row in place when older pages land above it.
     @State private var scrollAnchor = TimelineScrollAnchor()
+    #endif
     /// Where rows sit, for the quoted messages a tapped quote moves up.
     @State private var rowFrames = TimelineRowFrames()
     /// The reply whose tapped quote the timeline focuses on, with the
@@ -136,7 +138,11 @@ struct ChatTimelineView<Source: TimelineSource>: View {
             // new message or read doesn't re-render every row.
             let rowChat = chat.forTimelineRows
 
-            ScrollViewReader { proxy in
+            TimelineScrollReader(targetID: { rowID in
+                // A typing handoff keeps its row identity; navigation still
+                // addresses the message's canonical ID.
+                timelineItems.first { $0.scrollTargetID == rowID }?.id ?? rowID
+            }) { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
                         LazyVStack(spacing: 0) {
@@ -180,7 +186,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                     geometry.frame(in: .scrollView)
                                 } action: { frame in
                                     guard let rowID = item.scrollTargetID else { return }
+                                    #if os(iOS)
                                     scrollAnchor.update(rowID, frame: frame)
+                                    #endif
                                     rowFrames.update(rowID, visibleFrame: frame)
                                     if rowFrames.isVisible(rowID, below: topContentInset) {
                                         chatStore.mentionNavigation.didSee(rowID)
@@ -188,7 +196,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                 }
                                 .onDisappear {
                                     guard let rowID = item.scrollTargetID else { return }
+                                    #if os(iOS)
                                     scrollAnchor.update(rowID, frame: nil)
+                                    #endif
                                     rowFrames.update(rowID, visibleFrame: nil)
                                     rowFrames.update(rowID, contentBottomEdge: nil)
                                 }
@@ -205,6 +215,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                                 .id(bottomAnchorID)
                                 .accessibilityHidden(true)
                         }
+                        #if os(macOS)
+                        .scrollTargetLayout()
+                        #endif
                         .animation(
                             reduceMotion ? nil : .easeInOut(duration: ChatVisualStyle.typingBubbleExpansionDuration),
                             value: typingBubble?.id
@@ -264,25 +277,16 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 }
                 .onScrollPhaseChange { _, phase in
                     restingPosition.isScrolling = phase != .idle
-                    if phase == .tracking || phase == .interacting {
-                        restingPosition.settlesAtEndUntil = nil
-                    }
                 }
                 .onAppear {
                     // A viewport rebuilt mid-scroll never reports landing.
                     restingPosition.isScrolling = false
-                    restingPosition.settlesAtEndUntil = nil
                     // A chat opens at its newest messages. Going to the end
                     // target, the lazy stack's own last row, lays the rows
                     // out from there.
                     guard source.hasLoadedTimeline, !source.hasMoreNewerTimeline,
                           source.messageRevealRequest == nil else { return }
                     scrollToLatest(with: proxy, animated: false)
-                    #if os(macOS)
-                    // On iOS the first scroll lands at the end, and the
-                    // keyboard follower moves the timeline as it opens.
-                    restingPosition.settlesAtEndUntil = .now + Self.endSettlingWindow
-                    #endif
                 }
                 // Rebuilt when the first page arrives, so a chat opened
                 // before its messages lands at their end like one opened
@@ -368,7 +372,9 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .onScrollGeometryChange(for: ScrollGeometry.self) { geometry in
                     geometry
                 } action: { _, geometry in
+                    #if os(iOS)
                     scrollAnchor.update(geometry)
+                    #endif
                     rowFrames.containerHeight = geometry.containerSize.height
                     // Read from the whole geometry rather than a transform
                     // of its own: on macOS, that one could miss the lazy
@@ -378,8 +384,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     if nearBottom != isNearBottom {
                         isNearBottom = nearBottom
                     }
-                    settleAtEnd(geometry, focusedRowID: focusedRowID, with: proxy)
                 }
+                #if os(iOS)
                 // Older rows or the history header changed above the reader:
                 // put the row they were looking at back where it was.
                 .onChange(of: TimelineTopTracker(
@@ -396,7 +402,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                         proxy.scrollTo(anchor.rowID, anchor: anchor.anchor)
                     }
                 }
-                #if os(iOS)
                 // Only the reader decides; a scroll of the app's own leaves it.
                 // Mid-scroll counts as away, so a fling back through the
                 // conversation isn't pulled down by a tap on the composer.
@@ -422,8 +427,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                     rowFrames.reset()
                     #if os(iOS)
                     composerRevealTask?.cancel()
-                    #endif
                     scrollAnchor.reset()
+                    #endif
                     firstUnreadID = nil
                     isNearBottom = true
                     isScrollingToLatest = false
@@ -671,32 +676,6 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         geometry.contentSize.height <= geometry.containerSize.height
     }
 
-    /// How long after opening the timeline keeps going back to its end.
-    private static var endSettlingWindow: Duration { .seconds(1) }
-
-    /// A chat that just opened at its end goes back there when measuring its
-    /// rows moved the end away: the first scroll lands where the lazy stack
-    /// estimated the end, and a page of older messages loading as it opens
-    /// keeps the rows in view rather than the end.
-    private func settleAtEnd(_ geometry: ScrollGeometry, focusedRowID: Message.ID?, with proxy: ScrollViewProxy) {
-        guard let deadline = restingPosition.settlesAtEndUntil else { return }
-        guard ContinuousClock.now < deadline, focusedRowID == nil,
-              source.messageRevealRequest == nil, !source.hasMoreNewerTimeline else {
-            restingPosition.settlesAtEndUntil = nil
-            return
-        }
-        // The app's own animated scroll to a new message is on its way there.
-        guard !restingPosition.isScrolling else { return }
-        let distanceFromEnd = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.visibleRect.maxY
-        guard !Self.contentFits(geometry), abs(distanceFromEnd) > 1 else { return }
-        // After this geometry update rather than inside it: SwiftUI doesn't
-        // report where a scroll made during it lands.
-        Task { @MainActor in
-            guard restingPosition.settlesAtEndUntil != nil, !restingPosition.isScrolling else { return }
-            scrollToLatest(with: proxy, animated: false)
-        }
-    }
-
     private static func isNearBottom(_ geometry: ScrollGeometry) -> Bool {
         geometry.visibleRect.maxY >= geometry.contentSize.height - 80
     }
@@ -734,7 +713,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     }
 
     /// - Parameter animation: How to scroll, rather than easing out.
-    private func scrollToLatest(with proxy: ScrollViewProxy, animated: Bool = true, animation: Animation? = nil) {
+    private func scrollToLatest(with proxy: TimelineScrollProxy, animated: Bool = true, animation: Animation? = nil) {
         latestScrollGeneration += 1
         let generation = latestScrollGeneration
         isScrollingToLatest = true
@@ -750,7 +729,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// fits in the view stays at its top instead, where every row shows:
     /// SwiftUI takes it past its top by as much as its top inset when asked
     /// for a row at the bottom, and asks for that again as the insets change.
-    private func scrollToBottom(of rowID: String, with proxy: ScrollViewProxy) {
+    private func scrollToBottom(of rowID: String, with proxy: TimelineScrollProxy) {
         if restingPosition.contentFits {
             proxy.scrollTo(topAnchorID, anchor: .top)
         } else {
@@ -766,7 +745,7 @@ struct ChatTimelineView<Source: TimelineSource>: View {
     /// Aligns the reply/edit target's bottom edge with the composer, above
     /// the keyboard when it's up. A message taller than the viewport keeps
     /// its end visible.
-    private func scrollAboveComposer(_ rowID: Message.ID, with proxy: ScrollViewProxy) {
+    private func scrollAboveComposer(_ rowID: Message.ID, with proxy: TimelineScrollProxy) {
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
             scrollToBottom(of: rowID, with: proxy)
         }

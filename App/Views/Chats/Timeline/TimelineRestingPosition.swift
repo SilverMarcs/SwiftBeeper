@@ -12,8 +12,4 @@ final class TimelineRestingPosition {
     var isScrolling = false
     /// Whether all the content fits in the view, which then rests at its top.
     var contentFits = false
-    /// Until when a chat that just opened at its end goes back there as the
-    /// lazy stack measures its rows, which moves the end away from where the
-    /// first scroll left the view. The reader scrolling ends it sooner.
-    var settlesAtEndUntil: ContinuousClock.Instant?
 }
