@@ -1,10 +1,10 @@
 import Foundation
 
 extension MessageBlockParser {
-    /// A chat list preview's source with block Markdown flattened into plain
-    /// lines, using the same rules as the timeline: headings and quotes keep
-    /// their text, list items a bullet or number, tables their cells, and code
-    /// its lines. Fences, rules and blank lines are dropped so the two preview
+    /// A chat row's or reply quote's source with block Markdown flattened into
+    /// plain lines, using the same rules as the timeline: headings and quotes
+    /// keep their text, list items a bullet or number, tables their cells, and
+    /// code its lines. Fences, rules and blank lines are dropped so the two preview
     /// lines show text. Inline Markdown is left for the preview renderer.
     static func previewSource(_ source: String) -> String {
         guard mayContainBlocks(source) || source.contains("\n\n") || source.contains("|") else { return source }

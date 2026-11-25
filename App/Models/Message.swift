@@ -143,7 +143,17 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
 
     var hasText: Bool { visibleText != nil }
 
-    /// Formatting is presentation only; previews and copying use the plain body.
+    /// Source for one-glance previews (chat rows, reply quotes); pass it
+    /// through `previewAttributed`. Messages with mentions use the formatted
+    /// body, so a mention shows its name as in the timeline; everything else
+    /// uses the plain body.
+    var previewSource: String {
+        if hasText, let formattedText, formattedText.hasMentionLinks { return formattedText }
+        return displayText
+    }
+
+    /// Formatting is presentation only; copying uses the plain body, and
+    /// previews use `previewSource`.
     var displayFormattedText: String {
         if let formattedText, !formattedText.isEmpty { return formattedText }
         return displayText

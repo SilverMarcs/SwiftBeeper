@@ -2,8 +2,10 @@ import SwiftUI
 
 /// The quoted message above a reply, on the same grey fill in every chat,
 /// headed by who wrote it: "You" for the user's own message, otherwise the
-/// sender's name in their colour. Tapping it shows that message above
-/// `reply`, or runs `action` when one is given.
+/// sender's name, either in the colour their ID hashes to. The text is
+/// flattened like a chat list preview, so Markdown and blank lines don't use
+/// up its two lines. Tapping it shows that message above `reply`, or runs
+/// `action` when one is given.
 struct ReplyPreviewView: View {
     @Environment(\.showQuotedMessage) private var showQuotedMessage
 
@@ -26,7 +28,7 @@ struct ReplyPreviewView: View {
                     .bold()
                     .foregroundStyle(senderColor.map { AnyShapeStyle($0.nameStyle) } ?? AnyShapeStyle(.secondary))
 
-                Text(linkedMessage?.displayText ?? "Original message")
+                Text(quotedText)
                     .chatFont(.caption)
                     .foregroundStyle(.secondary)
                     .strikethrough(linkedMessage?.hasRetainedDeletedContent == true)
@@ -42,18 +44,22 @@ struct ReplyPreviewView: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
+    /// The quoted text as shown, which VoiceOver reads too.
+    private var quotedText: AttributedString {
+        linkedMessage?.previewSource.previewAttributed ?? "Original message"
+    }
+
     private var senderName: String {
         if linkedMessage?.isSender == true { return "You" }
         return linkedMessage?.senderDisplayName ?? "Unknown"
     }
 
-    /// Someone else's colour; nil for the user's own message or a missing one.
+    /// The sender's colour, the user's own included; nil for a missing message.
     private var senderColor: IdentityColor? {
-        guard let linkedMessage, !linkedMessage.isSender else { return nil }
-        return IdentityColor(id: linkedMessage.senderID)
+        linkedMessage.map { IdentityColor(id: $0.senderID) }
     }
 
     private var accessibilityLabel: String {
-        return "Reply to \(senderName): \(linkedMessage?.displayText ?? "Original message")"
+        return "Reply to \(senderName): \(String(quotedText.characters))"
     }
 }

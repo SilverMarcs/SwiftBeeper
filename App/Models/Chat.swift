@@ -78,15 +78,9 @@ struct Chat: Identifiable, Codable, Equatable, Sendable {
         title.isEmpty ? "Untitled Chat" : title
     }
 
-    /// Preview source. Messages with mentions use the formatted body, so a
-    /// mention shows its name as in the timeline; everything else uses the
-    /// plain body. `previewAttributed` removes Markdown from either.
+    /// Preview source; see `Message.previewSource`.
     var previewText: String? {
-        guard let preview else { return nil }
-        if preview.hasText, let formattedText = preview.formattedText, formattedText.hasMentionLinks {
-            return formattedText
-        }
-        return preview.displayText
+        preview?.previewSource
     }
 
     /// SF Symbol for the preview's attachments, shown before the caption or
