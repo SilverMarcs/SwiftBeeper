@@ -11,9 +11,12 @@ struct TimelineScrollReader<Content: View>: View {
 
     var body: some View {
         #if os(macOS)
-        content(TimelineScrollProxy { rowID, anchor in
-            position.scrollTo(id: targetID(rowID), anchor: anchor)
-        })
+        content(TimelineScrollProxy(
+            scroll: { rowID, anchor in
+                position.scrollTo(id: targetID(rowID), anchor: anchor)
+            },
+            scrollToEdge: { edge in position.scrollTo(edge: edge) }
+        ))
         .scrollPosition($position)
         #else
         ScrollViewReader(content: content)
@@ -25,9 +28,14 @@ struct TimelineScrollReader<Content: View>: View {
 /// The shared timeline's navigation, backed by the platform's scroll API.
 struct TimelineScrollProxy {
     let scroll: (String, UnitPoint?) -> Void
+    let scrollToEdge: (Edge) -> Void
 
     func scrollTo(_ rowID: String, anchor: UnitPoint? = nil) {
         scroll(rowID, anchor)
+    }
+
+    func scrollTo(edge: Edge) {
+        scrollToEdge(edge)
     }
 }
 #else

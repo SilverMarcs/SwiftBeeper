@@ -281,9 +281,8 @@ struct ChatTimelineView<Source: TimelineSource>: View {
                 .onAppear {
                     // A viewport rebuilt mid-scroll never reports landing.
                     restingPosition.isScrolling = false
-                    // A chat opens at its newest messages. Going to the end
-                    // target, the lazy stack's own last row, lays the rows
-                    // out from there.
+                    // A chat opens at its newest messages; content shorter
+                    // than the view stays at its top.
                     guard source.hasLoadedTimeline, !source.hasMoreNewerTimeline,
                           source.messageRevealRequest == nil else { return }
                     scrollToLatest(with: proxy, animated: false)
@@ -733,7 +732,17 @@ struct ChatTimelineView<Source: TimelineSource>: View {
         if restingPosition.contentFits {
             proxy.scrollTo(topAnchorID, anchor: .top)
         } else {
+            #if os(macOS)
+            if rowID == bottomAnchorID {
+                // Keep the end pinned while lazy rows finish measuring and
+                // the bars settle. A row-ID target can drift above the end.
+                proxy.scrollTo(edge: .bottom)
+            } else {
+                proxy.scrollTo(rowID, anchor: .bottom)
+            }
+            #else
             proxy.scrollTo(rowID, anchor: .bottom)
+            #endif
         }
     }
 
