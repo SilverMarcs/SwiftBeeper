@@ -29,6 +29,9 @@ struct Message: Identifiable, Codable, Equatable, Sendable {
     let isUnread: Bool?
     /// Authored personal @mention, excluding a reply's notification fallback.
     var isPersonalMention: Bool? = nil
+    /// Notifies the whole chat, like Matrix's @room, Slack's @channel or
+    /// WhatsApp's @all. Never set on the user's own messages.
+    var isRoomMention: Bool? = nil
     let reactions: [Reaction]?
     let linkedMessageID: String?
     /// True when the homeserver has redacted this message. Its original content

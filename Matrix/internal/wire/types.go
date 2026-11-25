@@ -130,8 +130,11 @@ type Message struct {
 	// and opens every sender.
 	Sender *User `json:"sender,omitempty"`
 	// A visible personal mention, excluding reply fallback notifications.
-	IsPersonalMention bool   `json:"isPersonalMention,omitempty"`
-	Text              string `json:"text"`
+	IsPersonalMention bool `json:"isPersonalMention,omitempty"`
+	// IsRoomMention marks an incoming message that notifies the whole chat,
+	// like Matrix's @room, Slack's @channel or WhatsApp's @all.
+	IsRoomMention bool   `json:"isRoomMention,omitempty"`
+	Text          string `json:"text"`
 	// FormattedText is display Markdown converted from the HTML body, with
 	// links, lists, headings, code and Matrix user links preserved.
 	// Text remains the plain body for previews, copying and editing.

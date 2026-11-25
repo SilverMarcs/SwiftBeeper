@@ -16,10 +16,10 @@ struct MessageTextWithLinkPreview: View {
 
     var body: some View {
         if !Self.isEnabled || (message.linkPreview == nil && message.linkPreviewURL == nil) {
-            MessageTextView(text: text, isOutgoing: isOutgoing, expansionID: message.id)
+            MessageTextView(text: text, isOutgoing: isOutgoing, expansionID: message.id, isRoomMention: message.isRoomMention == true)
         } else {
             MessageLinkPreviewLayout {
-                MessageTextView(text: text, isOutgoing: isOutgoing, expansionID: message.id)
+                MessageTextView(text: text, isOutgoing: isOutgoing, expansionID: message.id, isRoomMention: message.isRoomMention == true)
                 if let preview = message.linkPreview {
                     MessageLinkPreviewCard(preview: preview, isOutgoing: isOutgoing)
                 } else if let url = message.linkPreviewURL {

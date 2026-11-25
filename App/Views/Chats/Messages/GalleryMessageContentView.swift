@@ -27,7 +27,7 @@ struct GalleryMessageContentView: View {
                 if let captionMessage, let caption = captionMessage.visibleText {
                     // The grid takes over the typing bubble; the caption has a
                     // separate background and must not match too.
-                    MessageTextView(text: captionMessage.formattedText ?? caption, isOutgoing: isOutgoing, expansionID: captionMessage.id)
+                    MessageTextView(text: captionMessage.formattedText ?? caption, isOutgoing: isOutgoing, expansionID: captionMessage.id, isRoomMention: captionMessage.isRoomMention == true)
                         .messageBubbleChrome(isOutgoing: isOutgoing)
                         .environment(\.typingBubbleNamespace, nil)
                         .environment(\.messageBubbleJoins, bubbleJoins.bubble(at: 1, of: bubbleCount))

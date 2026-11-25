@@ -9,19 +9,25 @@ struct MessageTextView: View {
     /// `SelectableMessages`. Nil always shows the whole text and never
     /// selects it.
     var expansionID: String?
+    /// The message notifies the whole chat, so its @room or equivalent is
+    /// highlighted like a mention of the user.
+    var isRoomMention = false
     @Environment(\.displayScale) private var displayScale
     @Environment(\.expandedMessages) private var expandedMessages
     @Environment(\.selfMentionUserID) private var selfMentionUserID
 
     var body: some View {
-        // The user's own messages don't need their mentions of themselves found.
-        let highlightedUserID = isOutgoing ? nil : selfMentionUserID
+        // The user's own messages don't need their mentions of themselves
+        // found. Room mentions follow, so they show wherever the user's do.
+        let highlight = isOutgoing || selfMentionUserID == nil
+            ? MessageMentionHighlight.none
+            : MessageMentionHighlight(userID: selfMentionUserID, room: isRoomMention)
         MessageTextLayout(displayScale: displayScale) {
-            if let expansionID, let expandedMessages, let preview = text.collapsedMessageBlocks(highlightingMentionOf: highlightedUserID) {
+            if let expansionID, let expandedMessages, let preview = text.collapsedMessageBlocks(highlighting: highlight) {
                 let isExpanded = expandedMessages.contains(expansionID)
                 VStack(alignment: .trailing, spacing: 3) {
                     MessageBlocksText(
-                        blocks: isExpanded ? text.messageBlocks(highlightingMentionOf: highlightedUserID) : preview,
+                        blocks: isExpanded ? text.messageBlocks(highlighting: highlight) : preview,
                         isOutgoing: isOutgoing,
                         selectionID: expansionID
                     )
@@ -34,7 +40,7 @@ struct MessageTextView: View {
                     .foregroundStyle(isOutgoing ? .white : .primary)
                 }
             } else {
-                MessageBlocksText(blocks: text.messageBlocks(highlightingMentionOf: highlightedUserID), isOutgoing: isOutgoing, selectionID: expansionID)
+                MessageBlocksText(blocks: text.messageBlocks(highlighting: highlight), isOutgoing: isOutgoing, selectionID: expansionID)
             }
         }
     }

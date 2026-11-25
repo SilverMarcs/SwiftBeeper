@@ -63,6 +63,7 @@ func applyStoredMessageContent(message *wire.Message, evt *database.Event, evtTy
 	content.RemoveReplyFallback()
 	content.RemovePerMessageProfileFallback()
 	message.IsPersonalMention = !message.IsSender && !message.IsDeleted && explicitlyMentions(&content, me)
+	message.IsRoomMention = !message.IsSender && !message.IsDeleted && content.Mentions != nil && content.Mentions.Room
 	message.IsForwarded = removeForwardedNotice(&content)
 	message.IsNotice = content.MsgType == event.MsgNotice
 	message.Mentions = messageMentions(content.Mentions)
