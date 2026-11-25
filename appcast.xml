@@ -8,6 +8,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/SilverMarcs/SwiftBeeper</link>
         <description>Signed macOS updates for Relay.</description>
         <item>
+            <title>0.2.5</title>
+            <pubDate>Wed, 25 Nov 2026 20:47:18 +0800</pubDate>
+            <link>https://github.com/SilverMarcs/SwiftBeeper</link>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>0.2.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.2</sparkle:minimumSystemVersion>
+            <description><![CDATA[<ul>
+<li>Highlights @room, @all, @here, @channel and @everyone when incoming messages notify the whole chat.</li>
+<li>Improves reply-quote previews by flattening blank lines and coloring your own name consistently.</li>
+</ul>
+]]></description>
+            <enclosure url="https://github.com/SilverMarcs/SwiftBeeper/releases/download/v0.2.5/RelayApp.dmg" length="19238904" type="application/octet-stream" sparkle:edSignature="D7B8cW2o/ZBQrCB0g+hdYwzR/VTK9bINbw9im3ZZDMDH0mY7ySHWrMDmKhcCWAy5zj8R8V0XSMEb4ml9V7Q+Bw=="/>
+        </item>
+        <item>
             <title>0.2.4</title>
             <pubDate>Wed, 25 Nov 2026 15:28:21 +0800</pubDate>
             <link>https://github.com/SilverMarcs/SwiftBeeper</link>
@@ -29,23 +43,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 ]]></description>
             <enclosure url="https://github.com/SilverMarcs/SwiftBeeper/releases/download/v0.2.3/RelayApp.dmg" length="19224281" type="application/octet-stream" sparkle:edSignature="T2Hk0rBxVVD0C3mZz8/WIfBlKA0YgS3cS81J5Rubwrrel1ID3xLjHzogq7PrG2uWVfRuKFd/PpBsVB33wnqNAQ=="/>
         </item>
-        <item>
-            <title>0.2.2</title>
-            <pubDate>Wed, 25 Nov 2026 11:27:41 +0800</pubDate>
-            <link>https://github.com/SilverMarcs/SwiftBeeper</link>
-            <sparkle:version>3</sparkle:version>
-            <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.2</sparkle:minimumSystemVersion>
-            <description><![CDATA[<ul>
-<li>Mac chats now open at the newest message, and Jump to Latest no longer stays visible when you are already at the end.</li>
-<li>Fixed the Sparkle dependency conflict that prevented iPhone and iPad builds.</li>
-</ul>
-]]></description>
-            <enclosure url="https://github.com/SilverMarcs/SwiftBeeper/releases/download/v0.2.2/RelayApp.dmg" length="19236193" type="application/octet-stream" sparkle:edSignature="y74q7BckKRVh4CKHdC5LY/rx+Fhk7RATMLWS4rDFae0X1Gf3gZ4b6M5O7Gy+5Thvs85hRxLY9LLDbqkZRPBnCA=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: drVbR6i2J+UKhS+WyIjsRzPWox4xI7S8LOVVg3YXWQ2T2GwRgLdsqLXM91XagovLXorjY4UU5r16fcr05Sl6Ag==
-length: 3225
+edSignature: e4+79i+DR0ErwmHZTGAdHHrHwWGjB2voNBBcuE7ylX49tzJTbVDGANSP87mbYVEDvRI/db/OskfAt3PgrjCoAg==
+length: 3227
 -->
