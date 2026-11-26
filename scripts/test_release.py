@@ -4,6 +4,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -37,6 +38,7 @@ class PublicationTests(unittest.TestCase):
         patch.object(release, "tools", return_value=Path("/tools")).start()
         self.fingerprint = patch.object(release, "source_fingerprint", return_value="prepared").start()
         patch.object(release, "run", side_effect=self.run_command).start()
+        self.existing = patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "")).start()
         patch.object(release.urllib.request, "urlopen", return_value=io.BytesIO(self.contents["appcast.xml"])).start()
 
     def run_command(self, args):
@@ -98,6 +100,62 @@ class PublicationTests(unittest.TestCase):
         self.assertIn("--draft", commands[0])
         self.assertIn("--draft=false", commands[-1])
         self.assertIn("--latest", commands[-1])
+
+    def test_retry_can_replace_only_its_own_draft(self):
+        self.existing.return_value = subprocess.CompletedProcess([], 0, json.dumps({"isDraft": True, "targetCommitish": "head"}), "")
+        release.publish(self.out)
+        commands = [command[2] for command in self.commands if command[:2] == ["gh", "release"]]
+        self.assertEqual(commands, ["upload", "download", "edit"])
+
+    def test_published_release_cannot_be_overwritten(self):
+        self.existing.return_value = subprocess.CompletedProcess([], 0, json.dumps({"isDraft": False, "targetCommitish": "head"}), "")
+        self.assert_blocked("Refusing to overwrite")
+
+    def test_another_commits_draft_cannot_be_overwritten(self):
+        self.existing.return_value = subprocess.CompletedProcess([], 0, json.dumps({"isDraft": True, "targetCommitish": "someone-else"}), "")
+        self.assert_blocked("Refusing to overwrite")
+
+    def test_ci_checks_main_ancestry_instead_of_requiring_latest_head(self):
+        self.remote = "newer-push"
+        with patch.dict(release.os.environ, {"GITHUB_SHA": "head", "GITHUB_REPOSITORY": release.REPO}):
+            release.publish(self.out, ci=True)
+        self.assertIn(["git", "merge-base", "--is-ancestor", "head", "FETCH_HEAD"], self.commands)
+
+    def test_ci_cannot_publish_a_different_commit(self):
+        with patch.dict(release.os.environ, {"GITHUB_SHA": "different", "GITHUB_REPOSITORY": release.REPO}):
+            with self.assertRaisesRegex(RuntimeError, "checked-out main commit"):
+                release.publish(self.out, ci=True)
+        self.assertFalse(any(command[:2] == ["gh", "release"] for command in self.commands))
+
+
+class VersionTests(unittest.TestCase):
+    def test_automatic_patch_follows_published_version(self):
+        self.assertEqual(release.next_version("0.2.6", "0.2.9"), "0.2.10")
+
+    def test_explicit_source_version_bump_is_respected(self):
+        self.assertEqual(release.next_version("0.3.0", "0.2.9"), "0.3.0")
+
+    def test_invalid_versions_are_rejected(self):
+        with self.assertRaises(RuntimeError):
+            release.next_version("0.3", "0.2.9")
+
+    def test_feed_build_uses_highest_build_not_item_order(self):
+        feed = '<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item><sparkle:version>7</sparkle:version></item><item><sparkle:version>12</sparkle:version></item></channel></rss>'
+        self.assertEqual(release.feed_build(feed.encode()), 12)
+
+    def test_already_published_commit_is_idempotent(self):
+        pages = [[{"draft": False, "target_commitish": "head"}]]
+        with patch.dict(release.os.environ, {"GITHUB_ACTIONS": "true", "GITHUB_REF": "refs/heads/main"}), \
+                patch.object(release, "run", side_effect=["head", json.dumps(pages)]), \
+                patch.object(release, "prepare") as prepare, patch.object(release, "publish") as publish:
+            release.automatic_release(Path("/unused"))
+        prepare.assert_not_called()
+        publish.assert_not_called()
+
+    def test_automatic_release_rejects_non_main_runs(self):
+        with patch.dict(release.os.environ, {"GITHUB_ACTIONS": "true", "GITHUB_REF": "refs/heads/feature"}):
+            with self.assertRaisesRegex(RuntimeError, "only from main"):
+                release.automatic_release(Path("/unused"))
 
 
 if __name__ == "__main__":

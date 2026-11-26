@@ -1,0 +1,4 @@
+# GitHub-hosted preview image documented by actions/runner-images#14404.
+self-hosted-runner:
+  labels:
+    - xcode-27

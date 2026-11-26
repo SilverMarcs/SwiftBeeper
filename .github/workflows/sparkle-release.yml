@@ -1,0 +1,63 @@
+name: Sparkle release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-sparkle-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: Matrix/go.sum
+
+      - name: Test release publication guards
+        run: python3 -m unittest discover -s scripts -p test_release.py -v
+
+      - name: Resolve pinned Swift packages
+        run: >-
+          xcodebuild -resolvePackageDependencies -project Relay.xcodeproj
+          -scheme Relay -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Install signing credentials
+        env:
+          RELAY_CERTIFICATE_P12: ${{ secrets.RELAY_CERTIFICATE_P12 }}
+          RELAY_CERTIFICATE_PASSWORD: ${{ secrets.RELAY_CERTIFICATE_PASSWORD }}
+          RELAY_MAIN_PROFILE: ${{ secrets.RELAY_MAIN_PROFILE }}
+          RELAY_NOTIFICATION_PROFILE: ${{ secrets.RELAY_NOTIFICATION_PROFILE }}
+          RELAY_NOTARY_API_KEY: ${{ secrets.RELAY_NOTARY_API_KEY }}
+          RELAY_NOTARY_KEY_ID: ${{ secrets.RELAY_NOTARY_KEY_ID }}
+          RELAY_NOTARY_ISSUER_ID: ${{ secrets.RELAY_NOTARY_ISSUER_ID }}
+          RELAY_SPARKLE_PRIVATE_KEY: ${{ secrets.RELAY_SPARKLE_PRIVATE_KEY }}
+          RELAY_PUSH_CONFIGURATION: ${{ secrets.RELAY_PUSH_CONFIGURATION }}
+        run: python3 scripts/ci_credentials.py install "$RUNNER_TEMP/relay-signing"
+
+      - name: Build, notarize and publish
+        run: python3 scripts/release.py --auto "$RUNNER_TEMP/relay-release"
+
+      - name: Remove signing credentials
+        if: always()
+        run: python3 scripts/ci_credentials.py cleanup "$RUNNER_TEMP/relay-signing"

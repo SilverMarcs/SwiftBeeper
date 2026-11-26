@@ -22,6 +22,45 @@ FEED_URL = f"https://github.com/{REPO}/releases/latest/download/appcast.xml"
 SPARKLE = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
 
 
+def xcode_command():
+    return ["/usr/bin/xcodebuild"] if os.environ.get("GITHUB_ACTIONS") == "true" else ["xcslot", "xcodebuild"]
+
+
+def signing_arguments():
+    key = os.environ.get("SPARKLE_PRIVATE_KEY_FILE")
+    return ["--ed-key-file", key] if key else ["--account", ACCOUNT]
+
+
+def version_tuple(version):
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise RuntimeError(f"Invalid release version: {version}")
+    return tuple(map(int, version.split(".")))
+
+
+def next_version(project, published):
+    """An explicit major/minor bump wins; otherwise increment the last release."""
+    if version_tuple(project) > version_tuple(published):
+        return project
+    major, minor, patch = version_tuple(published)
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def published_release():
+    return json.loads(run(["gh", "api", f"repos/{REPO}/releases/latest"]))
+
+
+def published_feed(release):
+    asset = next((asset for asset in release["assets"] if asset["name"] == "appcast.xml"), None)
+    if asset is None:
+        raise RuntimeError("The latest release has no Sparkle feed")
+    with urllib.request.urlopen(asset["browser_download_url"], timeout=60) as response:
+        return response.read()
+
+
+def feed_build(feed):
+    return max(int(item.findtext(SPARKLE + "version")) for item in ET.fromstring(feed).findall("channel/item"))
+
+
 def run(args, log=None):
     args = list(map(str, args))
     print("→", " ".join(args), flush=True)
@@ -63,8 +102,12 @@ def setting(name):
 
 
 def tools():
+    override = os.environ.get("SPARKLE_TOOLS_DIR")
+    if override:
+        return Path(override)
     home = Path.home()
     patterns = [
+        (home / "Library/Developer/xcslot", "Relay-*/*/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin"),
         (home / "Library/Caches/xcb/SourcePackages", "Relay-*/artifacts/sparkle/Sparkle/bin"),
         (home / "Library/Developer/Xcode/DerivedData", "*/SourcePackages/artifacts/sparkle/Sparkle/bin"),
         (home / "Library/Caches/xcb/SourcePackages", "*/artifacts/sparkle/Sparkle/bin"),
@@ -77,7 +120,7 @@ def tools():
 
 
 def check():
-    for name in ("xcb", "gh", "xcrun", "codesign", "hdiutil"):
+    for name in (xcode_command()[0], "gh", "xcrun", "codesign", "hdiutil"):
         if not shutil.which(name):
             raise RuntimeError(f"Missing required command: {name}")
     if IDENTITY not in run(["security", "find-identity", "-v", "-p", "codesigning"]):
@@ -85,7 +128,19 @@ def check():
     run(["xcrun", "notarytool", "history", "--keychain-profile", "swiftterminal-notary", "--output-format", "json"])
     if run(["gh", "api", f"repos/{REPO}", "--jq", ".permissions.push"]) != "true":
         raise RuntimeError("GitHub account cannot publish to the Relay repository")
-    public_key = run([tools() / "generate_keys", "--account", ACCOUNT, "-p"])
+    key = os.environ.get("SPARKLE_PRIVATE_KEY_FILE")
+    if key:
+        # Compare the exported seed with the public key embedded in Relay,
+        # without importing the private signing key into another Keychain.
+        public_key = subprocess.check_output(["swift", "-e", '''
+import Foundation
+import CryptoKit
+let data = Data(base64Encoded: readLine()!)!
+let key = try Curve25519.Signing.PrivateKey(rawRepresentation: data.prefix(32))
+print(key.publicKey.rawRepresentation.base64EncodedString())
+'''], input=Path(key).read_bytes()).decode().strip()
+    else:
+        public_key = run([tools() / "generate_keys", "--account", ACCOUNT, "-p"])
     if public_key != setting("RELAY_SPARKLE_PUBLIC_KEY"):
         raise RuntimeError("Relay's Sparkle public key does not match its Keychain account")
     print("Developer ID, notarization, GitHub and Relay's Sparkle signing key are ready.", flush=True)
@@ -101,14 +156,16 @@ def notarize(path, log):
     return result
 
 
-def prepare(version, output):
+def prepare(version, output, *, build=None, ci=False, previous_feed=None):
     check()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise RuntimeError("Use a release version such as 0.2.1")
     current = setting("MARKETING_VERSION")
     if tuple(map(int, version.split("."))) < tuple(map(int, current.split("."))):
         raise RuntimeError("Release versions must not go backwards")
-    build = int(setting("CURRENT_PROJECT_VERSION")) + 1
+    if previous_feed is None:
+        previous_feed = published_feed(published_release())
+    build = build or max(int(setting("CURRENT_PROJECT_VERSION")), feed_build(previous_feed)) + 1
     out = (output or ROOT / ".release" / f"{version}-{build}").resolve()
     out.mkdir(parents=True, exist_ok=False)
     work = out / "work"
@@ -118,13 +175,27 @@ def prepare(version, output):
     project = PROJECT.read_text()
     for key, value in (("MARKETING_VERSION", version), ("CURRENT_PROJECT_VERSION", str(build))):
         project = re.sub(r'("' + key + r'\[sdk=macosx\*\]" = )[^;]+;', lambda match: match[1] + value + ";", project)
-    PROJECT.write_text(project)
-    run(["xcb", "-project", "Relay.xcodeproj", "-scheme", "Relay", "-configuration", "Release",
+    if not ci:
+        PROJECT.write_text(project)
+    signing = []
+    export_options = ROOT / "Configuration/ExportOptions-macOS.plist"
+    if ci:
+        profiles = json.loads(Path(os.environ["RELAY_CI_PROFILES"]).read_text())
+        signing = ["CODE_SIGN_STYLE=Manual", f"CODE_SIGN_IDENTITY={IDENTITY}",
+                   "PROVISIONING_PROFILE_SPECIFIER=$(RELAY_PROFILE_$(TARGET_NAME))",
+                   *[f"RELAY_PROFILE_{name}={uuid}" for name, uuid in profiles["targets"].items()],
+                   f"MARKETING_VERSION={version}", f"CURRENT_PROJECT_VERSION={build}"]
+        options = plistlib.loads(export_options.read_bytes())
+        options.update(signingStyle="manual", provisioningProfiles=profiles["bundles"])
+        export_options = work / "ExportOptions.plist"
+        export_options.write_bytes(plistlib.dumps(options))
+    provisioning = [] if ci else ["-allowProvisioningUpdates"]
+    run([*xcode_command(), "-project", "Relay.xcodeproj", "-scheme", "Relay", "-configuration", "Release",
          "-destination", "generic/platform=macOS", "-archivePath", work / "Relay.xcarchive",
-         "-allowProvisioningUpdates", "-quiet", "archive"], out / "archive.log")
-    run(["xcb", "-exportArchive", "-archivePath", work / "Relay.xcarchive", "-exportPath", work / "export",
-         "-exportOptionsPlist", ROOT / "Configuration/ExportOptions-macOS.plist",
-         "-allowProvisioningUpdates", "-quiet"], out / "export.log")
+         *provisioning, *signing, "-quiet", "archive"], out / "archive.log")
+    run([*xcode_command(), "-exportArchive", "-archivePath", work / "Relay.xcarchive", "-exportPath", work / "export",
+         "-exportOptionsPlist", export_options,
+         *provisioning, "-quiet"], out / "export.log")
     app = work / "export/Relay.app"
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
     assert info["SUFeedURL"] == FEED_URL
@@ -168,19 +239,24 @@ def prepare(version, output):
     dmg_notary = notarize(dmg, out / "dmg-notary.log")
     run(["codesign", "--verify", "--strict", dmg])
     run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=2", dmg])
-    shutil.copy2(ROOT / "appcast.xml", assets / "appcast.xml")
+    (assets / "appcast.xml").write_bytes(previous_feed)
+    run([tools() / "sign_update", *signing_arguments(), "--verify", assets / "appcast.xml"])
+    notes = os.environ.get("RELAY_RELEASE_NOTES")
+    if notes:
+        shutil.copy2(notes, assets / "RelayApp.html")
     tag = f"v{version}"
-    run([tools() / "generate_appcast", "--account", ACCOUNT, "--maximum-deltas", "0",
+    run([tools() / "generate_appcast", *signing_arguments(), "--maximum-deltas", "0",
          "--download-url-prefix", f"https://github.com/{REPO}/releases/download/{tag}/",
          "--link", f"https://github.com/{REPO}", assets], out / "appcast.log")
-    run([tools() / "sign_update", "--account", ACCOUNT, "--verify", assets / "appcast.xml"])
+    run([tools() / "sign_update", *signing_arguments(), "--verify", assets / "appcast.xml"])
     feed = ET.parse(assets / "appcast.xml").getroot()
     item = next(item for item in feed.findall("channel/item") if item.findtext(SPARKLE + "version") == str(build))
     enclosure = item.find("enclosure")
     assert enclosure.attrib["url"] == f"https://github.com/{REPO}/releases/download/{tag}/RelayApp.dmg"
     assert int(enclosure.attrib["length"]) == dmg.stat().st_size
-    run([tools() / "sign_update", "--account", ACCOUNT, "--verify", dmg, enclosure.attrib[SPARKLE + "edSignature"]])
-    shutil.copy2(assets / "appcast.xml", ROOT / "appcast.xml")
+    run([tools() / "sign_update", *signing_arguments(), "--verify", dmg, enclosure.attrib[SPARKLE + "edSignature"]])
+    if not ci:
+        shutil.copy2(assets / "appcast.xml", ROOT / "appcast.xml")
     checksums = {name: sha(assets / name) for name in ("RelayApp.dmg", "appcast.xml")}
     (assets / "SHA256SUMS.txt").write_text("".join(f"{digest}  {name}\n" for name, digest in checksums.items()))
     report = {"version": version, "build": build, "tag": tag, "sourceFingerprint": source_fingerprint(),
@@ -195,27 +271,41 @@ def prepare(version, output):
     print(f"Prepared {version} ({build}) in {out}. Nothing was committed, pushed, installed or published.")
 
 
-def publish(out):
+def publish(out, *, ci=False):
     check()
     out = out.resolve()
     report = json.loads((out / "release.json").read_text())
     if run(["git", "status", "--porcelain=v1", "--untracked-files=all"]):
         raise RuntimeError("Commit the prepared source and appcast before publishing")
-    if run(["git", "branch", "--show-current"]) != "main":
+    if not ci and run(["git", "branch", "--show-current"]) != "main":
         raise RuntimeError("Merge the prepared source into main before publishing")
     if source_fingerprint() != report["sourceFingerprint"]:
         raise RuntimeError("The source has changed since this build; prepare a new build")
     head = run(["git", "rev-parse", "HEAD"])
-    remote = run(["git", "ls-remote", f"https://github.com/{REPO}.git", "refs/heads/main"]).split()[0]
-    if remote != head:
-        raise RuntimeError("Push the prepared main commit before publishing")
+    if ci:
+        if head != os.environ.get("GITHUB_SHA") or os.environ.get("GITHUB_REPOSITORY") != REPO:
+            raise RuntimeError("CI may only publish its checked-out main commit")
+        run(["git", "fetch", "--no-tags", "origin", "main"])
+        run(["git", "merge-base", "--is-ancestor", head, "FETCH_HEAD"])
+    else:
+        remote = run(["git", "ls-remote", f"https://github.com/{REPO}.git", "refs/heads/main"]).split()[0]
+        if remote != head:
+            raise RuntimeError("Push the prepared main commit before publishing")
     assets = out / "assets"
     for name, digest in report["checksums"].items():
         assert sha(assets / name) == digest, name
-    run([tools() / "sign_update", "--account", ACCOUNT, "--verify", assets / "appcast.xml"])
+    run([tools() / "sign_update", *signing_arguments(), "--verify", assets / "appcast.xml"])
     tag = report["tag"]
     files = [assets / name for name in (*report["checksums"], "SHA256SUMS.txt")]
-    run(["gh", "release", "create", tag, "--repo", REPO, "--target", head, "--draft",
+    existing = subprocess.run(["gh", "release", "view", tag, "--repo", REPO,
+                               "--json", "isDraft,targetCommitish"], capture_output=True, text=True)
+    if existing.returncode == 0:
+        draft = json.loads(existing.stdout)
+        if not draft["isDraft"] or draft["targetCommitish"] != head:
+            raise RuntimeError("Refusing to overwrite an existing release for another build")
+        run(["gh", "release", "upload", tag, "--repo", REPO, "--clobber", *files])
+    else:
+        run(["gh", "release", "create", tag, "--repo", REPO, "--target", head, "--draft",
          "--title", f"Relay {report['version']}", "--notes",
          f"Signed and notarized universal macOS build {report['build']}. Includes Sparkle updates.", *files])
     downloaded = out / "download-check"
@@ -231,12 +321,29 @@ def publish(out):
     print(f"Published https://github.com/{REPO}/releases/tag/{tag}")
 
 
+def automatic_release(out):
+    if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("GITHUB_REF") != "refs/heads/main":
+        raise RuntimeError("Automatic releases run only from main in GitHub Actions")
+    head = run(["git", "rev-parse", "HEAD"])
+    pages = json.loads(run(["gh", "api", f"repos/{REPO}/releases?per_page=100", "--paginate", "--slurp"]))
+    if any(not release["draft"] and release["target_commitish"] == head for page in pages for release in page):
+        print("This commit already has a published release; no duplicate created.")
+        return
+    latest = published_release()
+    feed = published_feed(latest)
+    version = next_version(setting("MARKETING_VERSION"), latest["tag_name"].removeprefix("v"))
+    build = max(int(setting("CURRENT_PROJECT_VERSION")), feed_build(feed)) + 1
+    prepare(version, out, build=build, ci=True, previous_feed=feed)
+    publish(out, ci=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--check", action="store_true", help="verify local signing and hosting prerequisites")
     action.add_argument("--prepare", metavar="VERSION", help="build locally and update macOS version/appcast")
     action.add_argument("--publish", type=Path, metavar="OUTPUT", help="publish a prepared build from clean, pushed main")
+    action.add_argument("--auto", type=Path, metavar="OUTPUT", help="release this main commit from GitHub Actions")
     parser.add_argument("--output", type=Path, help="new output directory for --prepare (default: .release/VERSION-BUILD)")
     args = parser.parse_args()
     if args.output and not args.prepare:
@@ -245,6 +352,8 @@ def main():
         check()
     elif args.prepare:
         prepare(args.prepare, args.output)
+    elif args.auto:
+        automatic_release(args.auto)
     else:
         publish(args.publish)
 
