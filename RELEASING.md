@@ -27,8 +27,8 @@ inputs are encrypted repository secrets, never files committed to Git:
 | --- | --- |
 | `RELAY_CERTIFICATE_P12` | Base64 of the Developer ID identity exported from the Mac |
 | `RELAY_CERTIFICATE_PASSWORD` | Random password protecting that export |
-| `RELAY_MAIN_PROFILE` | Base64 of Relay's all-device Mac provisioning profile |
-| `RELAY_NOTIFICATION_PROFILE` | Base64 of the notification extension's Mac profile |
+| `RELAY_MAIN_PROFILE` | Base64 of Relay CI Developer ID Relay (manually managed, all devices) |
+| `RELAY_NOTIFICATION_PROFILE` | Base64 of Relay CI Developer ID NotificationService (manually managed) |
 | `RELAY_NOTARY_API_KEY` | App Store Connect private API key used by notarization |
 | `RELAY_NOTARY_KEY_ID` | API key identifier |
 | `RELAY_NOTARY_ISSUER_ID` | API key issuer identifier |
@@ -36,7 +36,10 @@ inputs are encrypted repository secrets, never files committed to Git:
 | `RELAY_PUSH_CONFIGURATION` | Contents of the existing private push configuration |
 
 The runner imports the identity into a temporary Keychain, installs the two
-Developer ID profiles, and removes credentials in an `always()` cleanup step.
+manually managed Developer ID profiles, and removes credentials in an `always()`
+cleanup step. Xcode-managed Team Direct profiles cannot be used for CI manual
+signing. Renew the two CI profiles in Apple Developer and replace the two
+profile secrets before they expire.
 Sparkle signing reads a protected temporary key file. No App Store upload or
 iOS/Sqim build is performed by this workflow.
 

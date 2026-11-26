@@ -53,7 +53,7 @@ def install(root):
         write_private(temporary, data)
         profile = plistlib.loads(subprocess.check_output(["security", "cms", "-D", "-i", str(temporary)], stderr=subprocess.DEVNULL))
         identifier = profile["Entitlements"]["com.apple.application-identifier"]
-        if identifier != "J52QUTREBS." + bundle or not profile.get("ProvisionsAllDevices"):
+        if identifier != "J52QUTREBS." + bundle or not profile.get("ProvisionsAllDevices") or profile.get("IsXcodeManaged"):
             raise RuntimeError("Unexpected Developer ID provisioning profile")
         for directory in [Path.home() / "Library/Developer/Xcode/UserData/Provisioning Profiles",
                           Path.home() / "Library/MobileDevice/Provisioning Profiles"]:
