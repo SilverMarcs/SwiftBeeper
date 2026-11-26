@@ -187,9 +187,14 @@ func (s *Dispatcher) NotificationReply(ctx context.Context, roomID id.RoomID, ev
 	if eventID != "" {
 		content.RelatesTo = &event.RelatesTo{InReplyTo: &event.InReplyTo{EventID: eventID}}
 		// Answering a thread reply continues its thread, as it would in the
-		// network's own app.
+		// network's own app. Slack has no quotes, so its bridge makes a quote
+		// a thread reply anyway: start the thread, so Relay shows it as one.
 		if target, err := cli.DB.Event.GetByID(ctx, eventID); err == nil && target != nil {
-			if root := threadRootOf(target); root != "" {
+			root := threadRootOf(target)
+			if root == "" && s.repliesInThreads(ctx, roomID) {
+				root = eventID
+			}
+			if root != "" {
 				content.RelatesTo = (&event.RelatesTo{}).SetThread(root, eventID)
 			}
 		}

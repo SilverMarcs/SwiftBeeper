@@ -63,6 +63,21 @@ func (s *Dispatcher) loadRoomBridges(ctx context.Context, roomArgs []any) (map[i
 	return result, rows.Err()
 }
 
+// repliesInThreads reports whether the room's network replies in threads, as
+// Slack does in channels and DMs alike.
+func (s *Dispatcher) repliesInThreads(ctx context.Context, roomID id.RoomID) bool {
+	bridges, err := s.loadRoomBridges(ctx, []any{roomID})
+	if err != nil {
+		return false
+	}
+	for _, bridge := range bridges[roomID] {
+		if capabilitiesForBridge(bridge.protocolID).Threads {
+			return true
+		}
+	}
+	return false
+}
+
 // fillNetworkDetails adds the network logos and workspaces that bridges
 // publish in their rooms' m.bridge state: the protocol's avatar is the
 // network's logo, and on Slack the network section is the login's workspace.
