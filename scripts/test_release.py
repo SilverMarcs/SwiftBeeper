@@ -128,6 +128,24 @@ class PublicationTests(unittest.TestCase):
         self.assertFalse(any(command[:2] == ["gh", "release"] for command in self.commands))
 
 
+class CredentialCheckTests(unittest.TestCase):
+    def test_actions_token_does_not_require_user_permissions_metadata(self):
+        with patch.dict(release.os.environ, {"GITHUB_ACTIONS": "true", "SPARKLE_PRIVATE_KEY_FILE": ""}), \
+                patch.object(release.shutil, "which", return_value="/tool"), \
+                patch.object(release, "tools", return_value=Path("/tools")), \
+                patch.object(release, "setting", return_value="public-key"), \
+                patch.object(release, "run", side_effect=[release.IDENTITY, "{}", release.REPO, "public-key"]) as run:
+            release.check()
+        self.assertIn(["gh", "api", f"repos/{release.REPO}", "--jq", ".full_name"], [call.args[0] for call in run.call_args_list])
+
+    def test_local_token_still_requires_push_access(self):
+        with patch.dict(release.os.environ, {"GITHUB_ACTIONS": "false"}), \
+                patch.object(release.shutil, "which", return_value="/tool"), \
+                patch.object(release, "run", side_effect=[release.IDENTITY, "{}", "false"]):
+            with self.assertRaisesRegex(RuntimeError, "cannot publish"):
+                release.check()
+
+
 class VersionTests(unittest.TestCase):
     def test_automatic_patch_follows_published_version(self):
         self.assertEqual(release.next_version("0.2.6", "0.2.9"), "0.2.10")

@@ -126,7 +126,12 @@ def check():
     if IDENTITY not in run(["security", "find-identity", "-v", "-p", "codesigning"]):
         raise RuntimeError("Developer ID signing identity is unavailable")
     run(["xcrun", "notarytool", "history", "--keychain-profile", "swiftterminal-notary", "--output-format", "json"])
-    if run(["gh", "api", f"repos/{REPO}", "--jq", ".permissions.push"]) != "true":
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        # Installation tokens omit the user-specific permissions object. The
+        # workflow grants contents:write; verify its repository here instead.
+        if run(["gh", "api", f"repos/{REPO}", "--jq", ".full_name"]) != REPO:
+            raise RuntimeError("GitHub Actions token cannot access the Relay repository")
+    elif run(["gh", "api", f"repos/{REPO}", "--jq", ".permissions.push"]) != "true":
         raise RuntimeError("GitHub account cannot publish to the Relay repository")
     key = os.environ.get("SPARKLE_PRIVATE_KEY_FILE")
     if key:
