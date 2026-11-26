@@ -8,6 +8,17 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/SilverMarcs/SwiftBeeper</link>
         <description>Signed macOS updates for Relay.</description>
         <item>
+            <title>0.2.6</title>
+            <pubDate>Thu, 26 Nov 2026 13:44:40 +0800</pubDate>
+            <link>https://github.com/SilverMarcs/SwiftBeeper</link>
+            <sparkle:version>7</sparkle:version>
+            <sparkle:shortVersionString>0.2.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.2</sparkle:minimumSystemVersion>
+            <description><![CDATA[<p>Rich text pasted into the composer now retains formatting as Markdown, including bold, italic, strikethrough, code, links and lists.</p>
+]]></description>
+            <enclosure url="https://github.com/SilverMarcs/SwiftBeeper/releases/download/v0.2.6/RelayApp.dmg" length="19268733" type="application/octet-stream" sparkle:edSignature="Xwv1Gx4Lspgz/jgEQbE5m5RuenYFvoZ+X6GlUxKVx8CuDUW9glR7GR/fwyiBvZdwkR0JZZYqVl68dYH/FRk5Aw=="/>
+        </item>
+        <item>
             <title>0.2.5</title>
             <pubDate>Wed, 25 Nov 2026 20:47:18 +0800</pubDate>
             <link>https://github.com/SilverMarcs/SwiftBeeper</link>
@@ -32,20 +43,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 ]]></description>
             <enclosure url="https://github.com/SilverMarcs/SwiftBeeper/releases/download/v0.2.4/RelayApp.dmg" length="19229296" type="application/octet-stream" sparkle:edSignature="XMGt+XsEJwVKMaYLP6Xrm0JUe3m6bO5SudckDT6+0rJ2qjMYUdFv6fxJ4WNpVdp1mgDU8KXo02w7ZJYeK7BFBg=="/>
         </item>
-        <item>
-            <title>0.2.3</title>
-            <pubDate>Wed, 25 Nov 2026 13:20:46 +0800</pubDate>
-            <link>https://github.com/SilverMarcs/SwiftBeeper</link>
-            <sparkle:version>4</sparkle:version>
-            <sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.2</sparkle:minimumSystemVersion>
-            <description><![CDATA[<p>Preserves the macOS chat timeline position when resizing the inspector.</p>
-]]></description>
-            <enclosure url="https://github.com/SilverMarcs/SwiftBeeper/releases/download/v0.2.3/RelayApp.dmg" length="19224281" type="application/octet-stream" sparkle:edSignature="T2Hk0rBxVVD0C3mZz8/WIfBlKA0YgS3cS81J5Rubwrrel1ID3xLjHzogq7PrG2uWVfRuKFd/PpBsVB33wnqNAQ=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: e4+79i+DR0ErwmHZTGAdHHrHwWGjB2voNBBcuE7ylX49tzJTbVDGANSP87mbYVEDvRI/db/OskfAt3PgrjCoAg==
-length: 3227
+edSignature: sx3/bv3FKNK/Zx/quwR4vq0TRE49FEAf8a9+/XZiqoLsaE9zWCYHAf4U35W5Gzrj2zojV8BlZ+zli6ujdBYzAQ==
+length: 3288
 -->
