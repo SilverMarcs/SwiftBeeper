@@ -149,6 +149,15 @@ struct ComposerTextView: UIViewRepresentable {
             }
         }
 
+        /// Selected text gets a Format submenu after Cut, Copy and Paste.
+        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard range.length > 0, let editor = textView as? ComposerEditor else { return nil }
+            var actions = suggestedActions
+            let standardEdit = actions.firstIndex { ($0 as? UIMenu)?.identifier == .standardEdit }
+            actions.insert(editor.formatMenu, at: standardEdit.map { $0 + 1 } ?? actions.endIndex)
+            return UIMenu(children: actions)
+        }
+
         func textViewDidBeginEditing(_ textView: UITextView) {
             isEditing.wrappedValue = true
             if !isFocused.wrappedValue { isFocused.wrappedValue = true }

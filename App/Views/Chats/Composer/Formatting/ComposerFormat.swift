@@ -28,6 +28,20 @@ enum ComposerFormat: CaseIterable {
         }
     }
 
+    var systemImage: String {
+        switch self {
+        case .bold: "bold"
+        case .italic: "italic"
+        case .strikethrough: "strikethrough"
+        case .code: "chevron.left.forwardslash.chevron.right"
+        case .codeBlock: "curlybraces"
+        case .link: "link"
+        case .quote: "text.quote"
+        case .bulletedList: "list.bullet"
+        case .numberedList: "list.number"
+        }
+    }
+
     /// The key, as typed without Shift or Option.
     var key: Character {
         switch self {

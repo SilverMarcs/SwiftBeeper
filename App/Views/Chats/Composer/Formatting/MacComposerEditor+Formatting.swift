@@ -44,10 +44,19 @@ extension MacComposerEditor {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// Pasting a URL over selected text links the text, as in Slack.
+    /// Pasting a URL over selected text links the text, as in Slack. Rich
+    /// text pastes as Markdown, keeping its formatting; Paste and Match
+    /// Style still pastes it plain.
     override func paste(_ sender: Any?) {
-        if !hasMarkedText(), let pasted = NSPasteboard.general.string(forType: .string),
+        guard !hasMarkedText() else { return super.paste(sender) }
+        let pasteboard = NSPasteboard.general
+        if let pasted = pasteboard.string(forType: .string),
            let edit = ComposerMarkdownEdit.pastingLink(pasted, in: string, selection: selectedRange()) {
+            perform(edit)
+            return
+        }
+        if let markdown = PastedMarkdown.markdown(from: pasteboard),
+           let edit = ComposerMarkdownEdit.pasting(markdown, in: string, selection: selectedRange()) {
             perform(edit)
             return
         }

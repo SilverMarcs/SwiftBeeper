@@ -139,6 +139,27 @@ extension ComposerMarkdownEdit {
         )
     }
 
+    /// Markdown from pasted rich text in place of the selection, put on a
+    /// line of its own where it starts with a list item or code block, or
+    /// ends with a code block, which only count at the start of a line.
+    static func pasting(_ markdown: String, in text: String, selection: NSRange) -> ComposerMarkdownEdit? {
+        let chars = Array(text.utf16)
+        guard NSMaxRange(selection) <= chars.count else { return nil }
+        let pasted = Array(markdown.utf16)
+        let firstLine = ComposerMarkdownLine(chars: pasted, range: NSRange(location: 0, length: pasted.firstIndex(of: .newline) ?? pasted.count))
+        var insertion = markdown
+        if firstLine.marker != nil || markdown.hasPrefix("```"), selection.location > 0, chars[selection.location - 1] != .newline {
+            insertion = "\n" + insertion
+        }
+        if markdown.hasSuffix("```"), NSMaxRange(selection) < chars.count, chars[NSMaxRange(selection)] != .newline {
+            insertion += "\n"
+        }
+        return ComposerMarkdownEdit(
+            replacements: [Replacement(range: selection, text: insertion)],
+            selection: NSRange(location: selection.location + insertion.utf16.count, length: 0)
+        )
+    }
+
     /// A single web or mail address, with nothing around it.
     static func isURL(_ string: String) -> Bool {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
