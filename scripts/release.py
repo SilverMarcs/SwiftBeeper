@@ -185,13 +185,11 @@ def prepare(version, output, *, build=None, ci=False, previous_feed=None):
     signing = []
     export_options = ROOT / "Configuration/ExportOptions-macOS.plist"
     if ci:
-        profiles = json.loads(Path(os.environ["RELAY_CI_PROFILES"]).read_text())
-        signing = ["CODE_SIGN_STYLE=Manual", f"CODE_SIGN_IDENTITY={IDENTITY}",
-                   "PROVISIONING_PROFILE_SPECIFIER=$(RELAY_PROFILE_$(TARGET_NAME))",
-                   *[f"RELAY_PROFILE_{name}={uuid}" for name, uuid in profiles["targets"].items()],
+        # These are Xcode-managed all-device profiles. Automatic selection uses
+        # the installed profiles offline; manual signing rejects managed ones.
+        signing = ["CODE_SIGN_STYLE=Automatic", f"CODE_SIGN_IDENTITY={IDENTITY}",
                    f"MARKETING_VERSION={version}", f"CURRENT_PROJECT_VERSION={build}"]
         options = plistlib.loads(export_options.read_bytes())
-        options.update(signingStyle="manual", provisioningProfiles=profiles["bundles"])
         export_options = work / "ExportOptions.plist"
         export_options.write_bytes(plistlib.dumps(options))
     provisioning = [] if ci else ["-allowProvisioningUpdates"]
