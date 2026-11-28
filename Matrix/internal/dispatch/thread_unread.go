@@ -37,12 +37,6 @@ const (
 	unreadThreadLimit   = 20
 )
 
-// Earlier builds counted a thread read up to your read receipt for the whole
-// chat, which moves with every message you send. That receipt still reads
-// replies from before this time, so threads read that way stay read, but
-// never newer ones. Delete it once it falls outside threadUnreadWindow.
-var roomReceiptReadThreadsUntil = time.Date(2026, time.November, 28, 1, 0, 0, 0, time.UTC).UnixMilli()
-
 type threadSeenContent struct {
 	// When you last marked each thread as read, by root event ID, in Unix milliseconds.
 	Roots map[id.EventID]int64 `json:"roots"`
@@ -78,13 +72,7 @@ func (s *Dispatcher) unreadThreads(ctx context.Context, roomID id.RoomID, roots 
 	if err != nil {
 		return nil, err
 	}
-	var readAt int64
-	err = cli.DB.QueryRow(ctx, `SELECT COALESCE(MAX(timestamp),0) FROM receipt
-		WHERE room_id=? AND user_id=? AND receipt_type IN ('m.read','m.read.private')`, roomID, cli.Account.UserID).Scan(&readAt)
-	if err != nil {
-		return nil, err
-	}
-	since := max(time.Now().Add(-threadUnreadWindow).UnixMilli(), min(readAt, roomReceiptReadThreadsUntil), seen.All)
+	since := max(time.Now().Add(-threadUnreadWindow).UnixMilli(), seen.All)
 	query := `SELECT relates_to, MAX(timestamp) FROM event reply
 		WHERE room_id=? AND relation_type='m.thread' AND sender<>? AND unread_type & 2 <> 0
 		AND redacted_by IS NULL AND timestamp>?
