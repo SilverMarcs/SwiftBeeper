@@ -13,7 +13,8 @@ import (
 	"relay/core/internal/wire"
 )
 
-// markChatRead sends a read receipt for the latest event in the room.
+// markChatRead sends a read receipt for the latest event in the room and
+// marks its threads as read.
 func (s *Dispatcher) markChatRead(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
 		ChatID string `json:"chatID,omitempty"`
@@ -26,8 +27,12 @@ func (s *Dispatcher) markChatRead(ctx context.Context, input json.RawMessage) (a
 		return nil, err
 	}
 
-	cli := s.rt.Client()
 	roomID := id.RoomID(chatID)
+	// Before the receipt, so a failure leaves the chat unread as the app shows it.
+	if err = s.markAllThreadsSeen(ctx, roomID); err != nil {
+		return nil, fmt.Errorf("failed to mark threads as read: %w", err)
+	}
+	cli := s.rt.Client()
 	var latestEventID id.EventID
 	err = cli.DB.QueryRow(ctx, `SELECT event.event_id FROM timeline
 		JOIN event ON event.rowid = timeline.event_rowid

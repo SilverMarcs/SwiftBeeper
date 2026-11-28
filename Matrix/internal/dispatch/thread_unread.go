@@ -18,9 +18,12 @@ import (
 )
 
 // A thread is unread while it has a reply that notified you, one in a thread
-// you started or follow or that mentions you, newer than both your read
-// receipt for the chat and when you last marked the thread as read. When you
-// last read each thread lives in room account data, so every device clears the
+// you started or follow or that mentions you, newer than your read receipt in
+// that thread and than when you last marked it as read. Replying in a thread
+// reads it, since the server moves your receipt there to your reply. What you
+// send or read in the main conversation leaves threads as they were, as in
+// Slack; only marking the whole chat as read clears them all. When you last
+// read each thread lives in room account data, so every device clears the
 // same threads, and nothing reaches the network bridged behind the chat the
 // way a read receipt would.
 
@@ -34,9 +37,17 @@ const (
 	unreadThreadLimit   = 20
 )
 
+// Earlier builds counted a thread read up to your read receipt for the whole
+// chat, which moves with every message you send. That receipt still reads
+// replies from before this time, so threads read that way stay read, but
+// never newer ones. Delete it once it falls outside threadUnreadWindow.
+var roomReceiptReadThreadsUntil = time.Date(2026, time.November, 28, 1, 0, 0, 0, time.UTC).UnixMilli()
+
 type threadSeenContent struct {
 	// When you last marked each thread as read, by root event ID, in Unix milliseconds.
 	Roots map[id.EventID]int64 `json:"roots"`
+	// When you last marked the whole chat as read, which reads every thread.
+	All int64 `json:"all,omitempty"`
 }
 
 // isAlertingThreadReply reports whether evt is someone else's thread reply
@@ -73,11 +84,15 @@ func (s *Dispatcher) unreadThreads(ctx context.Context, roomID id.RoomID, roots 
 	if err != nil {
 		return nil, err
 	}
-	since := max(readAt, time.Now().Add(-threadUnreadWindow).UnixMilli())
-	query := `SELECT relates_to, MAX(timestamp) FROM event
+	since := max(time.Now().Add(-threadUnreadWindow).UnixMilli(), min(readAt, roomReceiptReadThreadsUntil), seen.All)
+	query := `SELECT relates_to, MAX(timestamp) FROM event reply
 		WHERE room_id=? AND relation_type='m.thread' AND sender<>? AND unread_type & 2 <> 0
-		AND redacted_by IS NULL AND timestamp>? AND COALESCE(json_extract(COALESCE(decrypted,content),'$."` + broadcastOutsideThreadKey + `"'),0)<>1`
-	args := []any{roomID, cli.Account.UserID, since}
+		AND redacted_by IS NULL AND timestamp>?
+		AND COALESCE(json_extract(COALESCE(decrypted,content),'$."` + broadcastOutsideThreadKey + `"'),0)<>1
+		AND timestamp>COALESCE((SELECT MAX(receipt.timestamp) FROM receipt
+			WHERE receipt.room_id=reply.room_id AND receipt.user_id=? AND receipt.thread_id=reply.relates_to
+			AND receipt.receipt_type IN ('m.read','m.read.private')),0)`
+	args := []any{roomID, cli.Account.UserID, since, cli.Account.UserID}
 	if len(roots) > 0 {
 		query += ` AND relates_to IN (` + sqlSlots(len(roots)) + `)`
 		args = append(args, roots...)
@@ -160,30 +175,41 @@ func (s *Dispatcher) markThreadSeen(ctx context.Context, input json.RawMessage) 
 	if err != nil || unread[rootID] == 0 {
 		return wire.Success, err
 	}
-	seen, err := s.loadThreadSeen(ctx, roomID)
-	if err != nil {
-		return nil, err
-	}
-	now := time.Now()
-	cutoff := now.Add(-threadSeenRetention).UnixMilli()
-	roots := make(map[id.EventID]int64, len(seen.Roots)+1)
-	for root, at := range seen.Roots {
-		if at >= cutoff {
-			roots[root] = at
-		}
-	}
-	roots[rootID] = now.UnixMilli()
-	content, err := json.Marshal(threadSeenContent{Roots: roots})
-	if err != nil {
-		return nil, err
-	}
-	cli := s.rt.Client()
-	if err = cli.Client.SetRoomAccountData(ctx, roomID, threadSeenType.Type, json.RawMessage(content)); err != nil {
-		return nil, err
-	}
-	// Sync echoes the write later; store it now so the next read sees it.
-	if _, err = cli.DB.AccountData.PutRoom(ctx, cli.Account.UserID, roomID, threadSeenType, content); err != nil {
+	if err = s.saveThreadSeen(ctx, roomID, func(seen *threadSeenContent, now int64) { seen.Roots[rootID] = now }); err != nil {
 		return nil, err
 	}
 	return wire.Success, nil
+}
+
+// markAllThreadsSeen marks every thread in the room as read, as marking the
+// chat as read does.
+func (s *Dispatcher) markAllThreadsSeen(ctx context.Context, roomID id.RoomID) error {
+	return s.saveThreadSeen(ctx, roomID, func(seen *threadSeenContent, now int64) { seen.All = now })
+}
+
+// saveThreadSeen applies mark to when threads were last read, dropping any
+// thread read before the whole chat or longer ago than a reply can count.
+func (s *Dispatcher) saveThreadSeen(ctx context.Context, roomID id.RoomID, mark func(seen *threadSeenContent, now int64)) error {
+	seen, err := s.loadThreadSeen(ctx, roomID)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if seen.Roots == nil {
+		seen.Roots = make(map[id.EventID]int64, 1)
+	}
+	mark(&seen, now.UnixMilli())
+	cutoff := max(now.Add(-threadSeenRetention).UnixMilli(), seen.All+1)
+	maps.DeleteFunc(seen.Roots, func(_ id.EventID, at int64) bool { return at < cutoff })
+	content, err := json.Marshal(seen)
+	if err != nil {
+		return err
+	}
+	cli := s.rt.Client()
+	if err = cli.Client.SetRoomAccountData(ctx, roomID, threadSeenType.Type, json.RawMessage(content)); err != nil {
+		return err
+	}
+	// Sync echoes the write later; store it now so the next read sees it.
+	_, err = cli.DB.AccountData.PutRoom(ctx, cli.Account.UserID, roomID, threadSeenType, content)
+	return err
 }
